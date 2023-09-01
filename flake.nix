@@ -49,13 +49,13 @@
           ];
         };
         hixFlake = hixProject.flake {};
-        serve-docs = import ./nix/serve-docs.nix inputs context {
-          inherit hixProject;
-          # TODO transform additionalPkgs in excludePkgs to reduce boilerplate
-          #  we could collect all entries from cabal build-depends
-          #  (maybe through hixProject.hsPkgs)
-          additionalPkgs = ["cardano-api"];
-        };
+        # serve-docs = import ./nix/serve-docs.nix inputs context {
+        #   inherit hixProject;
+        #   # TODO transform additionalPkgs in excludePkgs to reduce boilerplate
+        #   #  we could collect all entries from cabal build-depends
+        #   #  (maybe through hixProject.hsPkgs)
+        #   additionalPkgs = ["cardano-api"];
+        # };
       in
         /*
            # Flake definition follows hello.cabal
@@ -71,7 +71,7 @@
           packages =
             hixFlake.packages
             // {
-              inherit serve-docs;
+              # inherit serve-docs;
             };
 
           devShell = pkgs.mkShell {
@@ -79,7 +79,7 @@
               hixFlake.devShell
             ];
             buildInputs = [
-              self.packages.${system}.serve-docs
+              # self.packages.${system}.serve-docs
             ];
           };
         });
