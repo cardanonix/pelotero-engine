@@ -22,6 +22,7 @@
     utils.apply-systems
     {
       inherit inputs;
+      name = "scraperProto";
       systems = ["x86_64-linux"];
       overlays = [
         inputs.haskell-nix.overlay
@@ -75,6 +76,7 @@
             };
 
           devShell = pkgs.mkShell {
+            inherit name;
             inputsFrom = [
               hixFlake.devShell
             ];
