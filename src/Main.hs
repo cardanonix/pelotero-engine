@@ -6,9 +6,11 @@ import Scraper
 
 main :: IO ()
 main = do
-    -- Test the initial function:
-    gameSchedule <- fetchGameScheduleForDate "2021-08-22" "2021-08-23"
+    gameSchedule <- fetchGameScheduleForDate "2021-08-22"
     print gameSchedule
+
+    let hasGames = hasGamesForDate gameSchedule
+    print hasGames
 
     -- Test other parts:
     -- let gameIds = getGameIds gameSchedule

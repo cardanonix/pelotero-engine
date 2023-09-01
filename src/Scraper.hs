@@ -1,38 +1,54 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 module Scraper
     ( fetchGameScheduleForDate
-    , dateToEpoch
+    -- , dateToEpoch
+    , hasGamesForDate
     ) where
-
--- import System.Environment
--- import System.Process
--- import Control.Monad (when, forM)
--- import Data.Aeson
--- -- import Data.Aeson.Lens (_Object, key, _Array, _String, _Bool)
--- import Data.Time
--- import Data.Time.Clock.POSIX
--- import qualified Data.HashMap.Strict as HM
--- import Network.HTTP.Simple    
--- -- import Network.HTTP.Client
--- -- import Network.HTTP.Client.TLS (tlsManagerSettings)
 
 import Network.HTTP.Simple
 import Data.Time
 import Data.Time.Clock.POSIX
-import Data.ByteString (ByteString) -- <-- Add this line
+import Data.ByteString (ByteString)
+import Data.Aeson
+import qualified Data.Vector as V
+import Data.Maybe (isJust)
 
-dateToEpoch :: String -> IO Integer
-dateToEpoch date = do
-    day <- parseTimeM True defaultTimeLocale "%F" date :: IO Day
-    return $ floor $ utcTimeToPOSIXSeconds (UTCTime day 0)
+data GameSchedule = GameSchedule {
+    dates :: [DateEntry]
+} deriving (Show, Eq)
 
-fetchGameScheduleForDate :: String -> String -> IO ByteString
-fetchGameScheduleForDate startDate endDate = do
-    let apiUrl = "https://statsapi.mlb.com/api/v1/schedule/games/?language=en&sportId=1&startDate=" ++ startDate ++ "&endDate=" ++ endDate
+data DateEntry = DateEntry {
+    games :: Maybe (V.Vector Game)
+} deriving (Show, Eq)
+
+data Game = Game {
+    -- Define any fields you need from the 'game' object
+} deriving (Show, Eq)
+
+instance FromJSON GameSchedule where
+    parseJSON = withObject "GameSchedule" $ \v -> GameSchedule
+        <$> v .: "dates"
+
+instance FromJSON DateEntry where
+    parseJSON = withObject "DateEntry" $ \v -> DateEntry
+        <$> v .:? "games"
+
+instance FromJSON Game where
+    parseJSON = withObject "Game" $ \_ -> pure Game
+
+fetchGameScheduleForDate :: String -> IO ByteString
+fetchGameScheduleForDate date = do
+    let apiUrl = "https://statsapi.mlb.com/api/v1/schedule/games/?language=en&sportId=1&startDate=" ++ date ++ "&endDate=" ++ date
     response <- httpBS (parseRequest_ apiUrl)
     return $ getResponseBody response
-    
 
+hasGamesForDate :: ByteString -> Maybe Bool
+hasGamesForDate jsonData =
+    case eitherDecodeStrict jsonData :: Either String GameSchedule of
+        Right schedule -> Just $ any (isJust . games) (dates schedule)
+        Left _ -> Nothing
+    
 -- getGameIds :: Aeson.Value -> [Text]
 -- getGameIds json = json ^.. key "dates" . values . key "games" . values . key "gamePk" . _Array
 
