@@ -1,29 +1,87 @@
 {
-  # This is a template created by `hix init`
-  inputs.haskell-nix.url = "github:input-output-hk/haskell.nix";
-  inputs.nixpkgs.follows = "haskell-nix/nixpkgs-unstable";
-  inputs.utils.url = "github:ursi/flake-utils";
-  outputs = { self, utils, ... }@inputs:
+  # Haskell Hix dApp Dev Environment
+  inputs = {
+    utils.url = "github:ursi/flake-utils";
+    haskell-nix.url = "github:input-output-hk/haskell.nix";
+    nixpkgs.follows = "haskell-nix/nixpkgs-unstable";
+    utils.url = "github:ursi/flake-utils";
+
+    iohk-nix.url = "github:input-output-hk/iohk-nix";
+    CHaP.url = "github:input-output-hk/cardano-haskell-packages?ref=repo";
+    CHaP.flake = false;
+
+    plutus.url = "github:input-output-hk/plutus";
+  };
+
+  outputs = {
+    self,
+    utils,
+    ...
+  } @ inputs:
     utils.apply-systems
+    {
+      inherit inputs;
+      systems = ["x86_64-linux" "aarch64-linux"];
+      overlays = [
+        inputs.haskell-nix.overlay
+        # plutus runtime dependency
+        inputs.iohk-nix.overlays.crypto
+      ];
+    }
+    ({
+      pkgs,
+      system,
+      ...
+    }: let
+      hixProject = pkgs.haskell-nix.hix.project {
+        src = ./.;
+        evalSystem = "x86_64-linux";
+        inputMap = {"https://input-output-hk.github.io/cardano-haskell-packages" = inputs.CHaP;};
+        modules = [
+          (_: {
+            # See input-output-hk/iohk-nix#488
+            packages.cardano-crypto-praos.components.library.pkgconfig =
+              pkgs.lib.mkForce [[pkgs.libsodium-vrf]];
+            packages.cardano-crypto-class.components.library.pkgconfig =
+              pkgs.lib.mkForce [[pkgs.libsodium-vrf pkgs.secp256k1]];
+          })
+        ];
+      };
+      hixFlake = hixProject.flake {};
+      serve-docs = import ./nix/serve-docs.nix inputs context {
+        inherit hixProject;
+        # TODO transform additionalPkgs in excludePkgs to reduce boilerplate
+        #  we could collect all entries from cabal build-depends
+        #  (maybe through hixProject.hsPkgs)
+        additionalPkgs = ["cardano-api"];
+      };
+    in
+      /*
+         # Flake definition follows hello.cabal
+      flake
+      // {
+        legacyPackages = pkgs;
+      });
+      */
       {
-        inherit inputs;
-        # TODO support additional systems
-        #  right now we can't afford to test every other system
-        systems = [ "x86_64-linux" "aarch64-linux" ];
-        overlays = [ inputs.haskell-nix.overlay ];
-      }
-      ({ pkgs, system, ... }:
-        let
-          hixProject = pkgs.haskell-nix.hix.project {
-            src = ./.;
-            evalSystem = "x86_64-linux";
+        inherit (hixFlake) apps checks;
+        legacyPackages = pkgs;
+
+        packages =
+          hixFlake.packages
+          // {
+            inherit serve-docs;
           };
-          flake = hixProject.flake { };
-        in
-        # Flake definition follows hello.cabal
-        flake // {
-          legacyPackages = pkgs;
-        });
+
+        devShell = pkgs.mkShell {
+          inputsFrom = [
+            hixFlake.devShell
+          ];
+          buildInputs = [
+            self.packages.${system}.serve-docs
+          ];
+        };
+      });
 
   # --- Flake Local Nix Configuration ----------------------------
   nixConfig = {
@@ -47,5 +105,4 @@
       "hercules-ci.cachix.org-1:ZZeDl9Va+xe9j+KqdzoBZMFJHVQ42Uu/c/1/KMC5Lw0="
     ];
   };
-
 }

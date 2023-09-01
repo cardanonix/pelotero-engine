@@ -1,8 +1,9 @@
 {pkgs, ...}: {
-  # name = "project-name";
+  name = "scraperProto";
 
   # We use the latest supported and cached version
   # from github:input-output-hk/haskell.nix
+
   compiler-nix-name = "ghc925";
 
   # Enable for cross-platform build
