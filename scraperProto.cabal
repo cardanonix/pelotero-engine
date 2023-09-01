@@ -10,13 +10,13 @@ executable scraperProto
   hs-source-dirs: src
   main-is: Main.hs
   other-modules:  Scraper
-  build-depends:  base
+  build-depends:  base >=4.11 && <4.18
                 , http-conduit 
+                , time
+                , bytestring
                 , http-client-tls
                 , http-client
-                , time
                 , zlib
                 , process
                 , aeson
-                , aeson-lens
                 , unordered-containers

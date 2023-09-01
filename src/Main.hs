@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
-import Scraper
 
 module Main (main) where
+
+import Scraper
 
 main :: IO ()
 main = do
