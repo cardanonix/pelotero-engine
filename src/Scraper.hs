@@ -4,6 +4,7 @@ module Scraper
     ( fetchGameScheduleForDate
     -- , dateToEpoch
     , hasGamesForDate
+    , extractGameIds
     ) where
 
 import Network.HTTP.Simple
@@ -23,7 +24,7 @@ data DateEntry = DateEntry {
 } deriving (Show, Eq)
 
 data Game = Game {
-    -- Define any fields you need from the 'game' object
+    gamePk :: Int
 } deriving (Show, Eq)
 
 instance FromJSON GameSchedule where
@@ -35,7 +36,8 @@ instance FromJSON DateEntry where
         <$> v .:? "games"
 
 instance FromJSON Game where
-    parseJSON = withObject "Game" $ \_ -> pure Game
+    parseJSON = withObject "Game" $ \v -> Game
+        <$> v .: "gamePk"
 
 fetchGameScheduleForDate :: String -> IO ByteString
 fetchGameScheduleForDate date = do
@@ -48,6 +50,12 @@ hasGamesForDate jsonData =
     case eitherDecodeStrict jsonData :: Either String GameSchedule of
         Right schedule -> Just $ any (isJust . games) (dates schedule)
         Left _ -> Nothing
+
+extractGameIds :: ByteString -> Either String [Int]
+extractGameIds jsonData = 
+    case eitherDecodeStrict jsonData :: Either String GameSchedule of
+        Right gameData -> Right $ concatMap (maybe [] (V.toList . fmap gamePk) . games) (dates gameData)
+        Left e -> Left e
     
 -- getGameIds :: Aeson.Value -> [Text]
 -- getGameIds json = json ^.. key "dates" . values . key "games" . values . key "gamePk" . _Array
