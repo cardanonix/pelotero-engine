@@ -9,8 +9,14 @@ version: 1.0.0.2
 executable scraperProto
   hs-source-dirs: src
   main-is: Main.hs
+  other-modules:  Scraper
   build-depends:  base
                 , http-conduit 
+                , http-client-tls
+                , http-client
                 , time
                 , zlib
                 , process
+                , aeson
+                , aeson-lens
+                , unordered-containers
