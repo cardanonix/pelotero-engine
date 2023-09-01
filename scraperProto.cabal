@@ -1,12 +1,16 @@
-cabal-version: 3.0
+cabal-version: 3.6
 -- Instructions on how to write this file are in the Cabal
 -- documentation, which can be found here:
 --   http://haskell.org/cabal/release/cabal-latest/doc/users-guide/
 
-name: hix
+name: scraperProto
 version: 1.0.0.2
 
-executable hix
+executable scraperProto
   hs-source-dirs: src
   main-is: Main.hs
-  build-depends: base
+  build-depends:  base
+                , http-conduit 
+                , time
+                , zlib
+                , process

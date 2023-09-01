@@ -1,5 +1,5 @@
 {pkgs, ...}: {
-  name = "scraperProto";
+  # name = "scraperProto";
 
   # We use the latest supported and cached version
   # from github:input-output-hk/haskell.nix

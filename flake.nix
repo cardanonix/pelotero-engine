@@ -22,7 +22,7 @@
     utils.apply-systems
     {
       inherit inputs;
-      systems = ["x86_64-linux" "aarch64-linux"];
+      systems = ["x86_64-linux"];
       overlays = [
         inputs.haskell-nix.overlay
         # plutus runtime dependency
@@ -81,6 +81,17 @@
             buildInputs = [
               # self.packages.${system}.serve-docs
             ];
+            shellHook = ''
+              export NIX_SHELL_NAME="scraperProto"
+              echo "Welcome to the development shell!"
+              echo
+              echo grabbing the Current Complete MLB roster right quick....
+              cabal build
+              cabal run scraperProto 2021-08-22 2021-08-23
+              echo .
+              echo ..
+              echo ...
+            '';
           };
         });
 
