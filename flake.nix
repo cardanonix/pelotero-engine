@@ -1,15 +1,16 @@
 {
   # Haskell Hix dApp Dev Environment
   inputs = {
-    utils.url = "github:ursi/flake-utils";
-    haskell-nix.url = "github:input-output-hk/haskell.nix";
     nixpkgs.follows = "haskell-nix/nixpkgs-unstable";
     utils.url = "github:ursi/flake-utils";
 
+    #Haskell/Plutus
+    haskell-nix.url = "github:input-output-hk/haskell.nix";
     iohk-nix.url = "github:input-output-hk/iohk-nix";
-    CHaP.url = "github:input-output-hk/cardano-haskell-packages?ref=repo";
-    CHaP.flake = false;
-
+    CHaP = {
+      url = "github:input-output-hk/cardano-haskell-packages?ref=repo";
+      flake = false;
+    };
     plutus.url = "github:input-output-hk/plutus";
   };
 
@@ -29,59 +30,59 @@
       ];
     }
     ({
-      pkgs,
-      system,
-      ...
-    }: let
-      hixProject = pkgs.haskell-nix.hix.project {
-        src = ./.;
-        evalSystem = "x86_64-linux";
-        inputMap = {"https://input-output-hk.github.io/cardano-haskell-packages" = inputs.CHaP;};
-        modules = [
-          (_: {
-            # See input-output-hk/iohk-nix#488
-            packages.cardano-crypto-praos.components.library.pkgconfig =
-              pkgs.lib.mkForce [[pkgs.libsodium-vrf]];
-            packages.cardano-crypto-class.components.library.pkgconfig =
-              pkgs.lib.mkForce [[pkgs.libsodium-vrf pkgs.secp256k1]];
-          })
-        ];
-      };
-      hixFlake = hixProject.flake {};
-      serve-docs = import ./nix/serve-docs.nix inputs context {
-        inherit hixProject;
-        # TODO transform additionalPkgs in excludePkgs to reduce boilerplate
-        #  we could collect all entries from cabal build-depends
-        #  (maybe through hixProject.hsPkgs)
-        additionalPkgs = ["cardano-api"];
-      };
-    in
-      /*
-         # Flake definition follows hello.cabal
-      flake
-      // {
-        legacyPackages = pkgs;
-      });
-      */
-      {
-        inherit (hixFlake) apps checks;
-        legacyPackages = pkgs;
-
-        packages =
-          hixFlake.packages
-          // {
-            inherit serve-docs;
-          };
-
-        devShell = pkgs.mkShell {
-          inputsFrom = [
-            hixFlake.devShell
-          ];
-          buildInputs = [
-            self.packages.${system}.serve-docs
+        pkgs,
+        system,
+        ...
+      } @ context: let
+        hixProject = pkgs.haskell-nix.hix.project {
+          src = ./.;
+          evalSystem = "x86_64-linux";
+          inputMap = {"https://input-output-hk.github.io/cardano-haskell-packages" = inputs.CHaP;};
+          modules = [
+            (_: {
+              # See input-output-hk/iohk-nix#488
+              packages.cardano-crypto-praos.components.library.pkgconfig =
+                pkgs.lib.mkForce [[pkgs.libsodium-vrf]];
+              packages.cardano-crypto-class.components.library.pkgconfig =
+                pkgs.lib.mkForce [[pkgs.libsodium-vrf pkgs.secp256k1]];
+            })
           ];
         };
-      });
+        hixFlake = hixProject.flake {};
+        serve-docs = import ./nix/serve-docs.nix inputs context {
+          inherit hixProject;
+          # TODO transform additionalPkgs in excludePkgs to reduce boilerplate
+          #  we could collect all entries from cabal build-depends
+          #  (maybe through hixProject.hsPkgs)
+          additionalPkgs = ["cardano-api"];
+        };
+      in
+        /*
+           # Flake definition follows hello.cabal
+        flake
+        // {
+          legacyPackages = pkgs;
+        });
+        */
+        {
+          inherit (hixFlake) apps checks;
+          legacyPackages = pkgs;
+
+          packages =
+            hixFlake.packages
+            // {
+              inherit serve-docs;
+            };
+
+          devShell = pkgs.mkShell {
+            inputsFrom = [
+              hixFlake.devShell
+            ];
+            buildInputs = [
+              self.packages.${system}.serve-docs
+            ];
+          };
+        });
 
   # --- Flake Local Nix Configuration ----------------------------
   nixConfig = {
