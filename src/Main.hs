@@ -12,14 +12,5 @@ main = do
     let hasGames = hasGamesForDate gameSchedule
     print hasGames
 
-    let gameIds = extractGameIds gameSchedule
-    print gameIds
-
-    
-
-    -- Test other parts:
-    -- let gameIds = getGameIds gameSchedule
-    -- statuses <- processGames gameIds
-    -- print statuses
-
+    processAndPrintGames gameSchedule
 

@@ -4,7 +4,7 @@ cabal-version: 3.6
 --   http://haskell.org/cabal/release/cabal-latest/doc/users-guide/
 
 name: scraperProto
-version: 1.0.0.2
+version: 1.0.0.3
 
 executable scraperProto
   hs-source-dirs: src
@@ -22,3 +22,5 @@ executable scraperProto
                 , lens
                 , vector
                 , unordered-containers
+                , text
+                , containers
