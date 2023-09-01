@@ -1,6 +1,6 @@
-module Scraper where
 {-# LANGUAGE OverloadedStrings #-}
-
+module Scraper where
+    
 import Control.Monad (when, forM)
 import Data.Aeson
 import Data.Aeson.Lens (_Object, key, _Array, _String, _Bool)
