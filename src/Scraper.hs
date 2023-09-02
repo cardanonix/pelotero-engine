@@ -225,7 +225,7 @@ data PlayerStats = PlayerStats {
     playerbatting :: Maybe Batting,
     playerpitching :: Maybe Pitching
 }
-
+--good stuff
 instance FromJSON PlayerStats where
     parseJSON = genericParseJSON defaultOptions { 
         fieldLabelModifier = \str -> if take 6 str == "player" then drop 6 str else str
