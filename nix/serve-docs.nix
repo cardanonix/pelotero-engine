@@ -43,7 +43,7 @@ in
         inherit (pkgs) ghc;
         hspkgs = b.attrValues toHaddock;
         prologue = pkgs.writeTextFile {
-          name = "prologue";
+          name = "scraper";
           text = "Combined documentation for the project and plutus dependencies";
         };
       };

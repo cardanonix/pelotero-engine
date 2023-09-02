@@ -34,7 +34,7 @@
         system,
         ...
       } @ context: let
-        name = "scraperProto";
+        name = "scraper";
         hixProject = pkgs.haskell-nix.hix.project {
           src = ./.;
           evalSystem = "x86_64-linux";
@@ -84,12 +84,12 @@
               # self.packages.${system}.serve-docs
             ];
             shellHook = ''
-              export NIX_SHELL_NAME="scraperProto"
+              export NIX_SHELL_NAME="scraper"
               echo "Welcome to the development shell!"
               echo
               echo grabbing the Current Complete MLB roster right quick....
               cabal build
-              cabal run scraperProto 2021-08-22 2021-08-23
+              cabal run scraper 2021-08-22 2021-08-23
               echo .
               echo ..
               echo ...

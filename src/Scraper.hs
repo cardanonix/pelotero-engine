@@ -15,12 +15,12 @@ import Network.HTTP.Simple
 import Data.Time
 import Data.Time.Clock.POSIX
 import Data.ByteString (ByteString)
-import Data.Aeson
 import qualified Data.Vector as V
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, fromMaybe, maybeToList)
 import qualified Data.Map as M
 import Data.Text (Text)
 import Data.Aeson ((.:?))
+import Data.Aeson
 import GHC.Generics
 import qualified Data.ByteString.Lazy as BL
 import Prelude hiding (id)
@@ -90,10 +90,10 @@ data Batting = Batting {
           , bat_catchersInterference :: Int --0,
           , bat_pickoffs :: Int --0
           -- The following are meant to be discarded
-          , bat_note :: String
-          , bat_summary :: String
-          , bat_stolenBasePercentage :: String
-          , bat_atBatsPerHomeRun :: String
+          , bat_note :: Maybe String
+          , bat_summary :: Maybe String
+          , bat_stolenBasePercentage :: Maybe String
+          , bat_atBatsPerHomeRun :: Maybe String
 } deriving Generic
 
 
@@ -151,12 +151,12 @@ data Pitching = Pitching {
           , pit_sacFlies :: Int --1,
           , pit_passedBall :: Int --0
           -- The following are meant to be discarded
-          , pit_note :: String
-          , pit_summary :: String
-          , pit_stolenBasePercentage :: String
-          , pit_strikePercentage :: String
-          , pit_homeRunsPer9 :: String
-          , pit_runsScoredPer9 :: String
+          , pit_note :: Maybe String
+          , pit_summary :: Maybe String
+          , pit_stolenBasePercentage :: Maybe String
+          , pit_strikePercentage :: Maybe String
+          , pit_homeRunsPer9 :: Maybe String
+          , pit_runsScoredPer9 :: Maybe String
 } deriving Generic
 
 instance FromJSON Pitching where
@@ -210,16 +210,26 @@ data PlayerInfo = PlayerInfo {
     pInfoId :: Int,
     pInfoFullName :: String,
     pInfoStats :: PlayerStats
-} deriving (Show, Eq)
+}
+
+instance FromJSON PlayerInfo where
+    parseJSON = genericParseJSON defaultOptions { 
+        fieldLabelModifier = \str -> if take 1 str == "p" then drop 1 str else str
+    }
 
 data PlayerStats = PlayerStats {
-    gameId :: Int,
+    playergameId :: Int,
     playerparentTeamId :: Int,
     playerallPositions :: [Int],
     playerstatus :: String,
-    playerBatting :: Maybe Batting,
-    playerPitching :: Maybe Pitching
-} deriving (Show, Eq)
+    playerbatting :: Maybe Batting,
+    playerpitching :: Maybe Pitching
+}
+
+instance FromJSON PlayerStats where
+    parseJSON = genericParseJSON defaultOptions { 
+        fieldLabelModifier = \str -> if take 6 str == "player" then drop 6 str else str
+    }
 
 instance FromJSON GameStatus where
     parseJSON = withObject "GameStatus" $ \v -> GameStatus
@@ -236,7 +246,33 @@ fetchGameStatus gameId = do
     response <- httpBS (parseRequest_ apiUrl)
     return $ eitherDecodeStrict $ getResponseBody response
 
--- simply created to print the bytestring
+-- takes a game id and outputs a box score bytestring
+fetchFinishedBxScore :: Int -> IO ByteString
+fetchFinishedBxScore gameId = do
+    gameStatusJson <- httpBS (parseRequest_ $ "https://statsapi.mlb.com//api/v1.1/game/" ++ show gameId ++ "/feed/live")
+    let gameStatus = eitherDecodeStrict (getResponseBody gameStatusJson) :: Either String GameDataWrapper
+    case gameStatus of
+        Right gameDataWrapper -> 
+            if codedGameState (gameData gameDataWrapper) == "F"
+            then do
+                -- this is where the box score gets imported
+                fullGameData <- httpBS (parseRequest_ $ "http://statsapi.mlb.com/api/v1/game/" ++ show gameId ++ "/boxscore")
+                return $ getResponseBody fullGameData
+            else return BL.empty
+        Left _ -> return empty
+
+--maps fetchFinishedBxScore over an array of game id's and returns IO (M.Map Int ByteString)
+processGameIds :: [Int] -> IO (M.Map Int ByteString)
+processGameIds gameIds = do
+    gameDataResponses <- mapM fetchFinishedBxScore gameIds
+    return $ M.fromList $ zip gameIds gameDataResponses
+
+-- 
+printProcessedGameData :: M.Map Int ByteString -> IO ()
+printProcessedGameData gameDataMap =
+    mapM_ (\(gameId, gameData) -> putStrLn $ show gameId ++ show gameData) (M.toList gameDataMap)
+
+-- print the schedule bytestring
 processAndPrintGames :: ByteString -> IO ()
 processAndPrintGames gameSchedule = do
     let gameIdsResult = extractGameIds gameSchedule
@@ -246,37 +282,12 @@ processAndPrintGames gameSchedule = do
             gameDataMap <- processGameIds gameIds
             printProcessedGameData gameDataMap
 
--- 
-printProcessedGameData :: M.Map Int ByteString -> IO ()
-printProcessedGameData gameDataMap =
-    mapM_ (\(gameId, gameData) -> putStrLn $ show gameId ++ show gameData) (M.toList gameDataMap)
-
-
-processGameIds :: [Int] -> IO (M.Map Int ByteString)
-processGameIds gameIds = do
-    gameDataResponses <- mapM fetchGameDataForFinishedGame gameIds
-    return $ M.fromList $ zip gameIds gameDataResponses
-
-fetchGameDataForFinishedGame :: Int -> IO ByteString
-fetchGameDataForFinishedGame gameId = do
-    gameStatusJson <- httpBS (parseRequest_ $ "https://statsapi.mlb.com//api/v1.1/game/" ++ show gameId ++ "/feed/live")
-    let gameStatus = eitherDecodeStrict (getResponseBody gameStatusJson) :: Either String GameDataWrapper
-    case gameStatus of
-        Right gameDataWrapper -> 
-            if codedGameState (gameData gameDataWrapper) == "F"
-            then do
-                fullGameData <- httpBS (parseRequest_ $ "http://statsapi.mlb.com/api/v1/game/" ++ show gameId ++ "/boxscore")
-                return $ getResponseBody fullGameData
-            else return BL.empty
-        Left _ -> return BL.empty
-
-
 type GameData = BL.ByteString
 
 flattenGameData :: BL.ByteString -> Int -> Either String BL.ByteString
 flattenGameData gameData gameId = do
     -- Step 1: Decode the gameData
-    decodedData <- eitherDecode gameData :: Either String GameData
+    decodedData <- eitherDecodeStrict gameData :: Either String GameData
 
     -- Step 2: Transform this data structure.
     let teams = [teamPlayers | team <- [awayTeam decodedData, homeTeam decodedData],
@@ -290,12 +301,12 @@ flattenGameData gameData gameId = do
     transformPlayer gid player = 
         let personId = show $ id $ person player
             newStats = PlayerStats {
-                gameId = gid,
-                parentTeamId = parentTeamId player,
-                allPositions = map posCode $ fromMaybe [] (allPositions player),
-                status = statusCode $ status player,
-                batting = removeUnwantedBattingFields <$> batting (stats player),
-                pitching = removeUnwantedPitchingFields <$> pitching (stats player)
+                playergameId = gid,
+                playerparentTeamId = parentTeamId player,
+                playerallPositions = map posCode $ fromMaybe [] (allPositions player),
+                playerstatus = statusCode $ status player,
+                playerbatting = removeUnwantedBattingFields <$> batting (stats player),
+                playerpitching = removeUnwantedPitchingFields <$> pitching (stats player)
             }
         in M.singleton personId (PlayerInfo (id $ person player) (fullName $ person player) newStats)
 

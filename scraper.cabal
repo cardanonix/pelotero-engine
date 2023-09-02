@@ -3,10 +3,10 @@ cabal-version: 3.6
 -- documentation, which can be found here:
 --   http://haskell.org/cabal/release/cabal-latest/doc/users-guide/
 
-name: scraperProto
-version: 1.0.0.3
+name: scraper
+version: 0.0.1.0
 
-executable scraperProto
+executable scraper
   hs-source-dirs: src
   main-is: Main.hs
   other-modules:  Scraper
