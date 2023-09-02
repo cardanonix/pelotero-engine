@@ -90,10 +90,10 @@ data Batting = Batting {
           , bat_catchersInterference :: Int --0,
           , bat_pickoffs :: Int --0
           -- The following are meant to be discarded
-          , bat_note :: Nothing
-          , bat_summary :: Nothing
-          , bat_stolenBasePercentage :: Nothing
-          , bat_atBatsPerHomeRun :: Nothing
+          , bat_note :: String
+          , bat_summary :: String
+          , bat_stolenBasePercentage :: String
+          , bat_atBatsPerHomeRun :: String
 } deriving Generic
 
 
@@ -122,7 +122,7 @@ data Pitching = Pitching {
           , pit_caughtStealing :: Int --0,
           , pit_stolenBases :: Int --0,
           , pit_numberOfPitches :: Int --82,
-          , pit_inningsPitched :: Double --"3.2",
+          , pit_inningsPitched :: String --"3.2",
           , pit_wins :: Int --0,
           , pit_losses :: Int --1,
           , pit_saves :: Int --0,
@@ -151,12 +151,12 @@ data Pitching = Pitching {
           , pit_sacFlies :: Int --1,
           , pit_passedBall :: Int --0
           -- The following are meant to be discarded
-          , pit_note :: Nothing
-          , pit_summary :: Nothing
-          , pit_stolenBasePercentage :: Nothing
-          , pit_strikePercentage :: Nothing
-          , pit_homeRunsPer9 :: Nothing
-          , pit_runsScoredPer9 :: Nothing
+          , pit_note :: String
+          , pit_summary :: String
+          , pit_stolenBasePercentage :: String
+          , pit_strikePercentage :: String
+          , pit_homeRunsPer9 :: String
+          , pit_runsScoredPer9 :: String
 } deriving Generic
 
 instance FromJSON Pitching where
@@ -206,8 +206,6 @@ data GameDataWrapper = GameDataWrapper {
     gameData :: GameStatus
 } deriving (Show, Eq)
 
-data GameData :: ByteString
-
 data PlayerInfo = PlayerInfo {
     pInfoId :: Int,
     pInfoFullName :: String,
@@ -231,13 +229,14 @@ instance FromJSON GameDataWrapper where
     parseJSON = withObject "GameDataWrapper" $ \v -> GameDataWrapper
         <$> v .: "gameData"
 
--- takes a game ID and outputs the 
+-- takes a game ID and outputs the live coded status of that game
 fetchGameStatus :: Int -> IO (Either String GameDataWrapper)
 fetchGameStatus gameId = do
     let apiUrl = "https://statsapi.mlb.com//api/v1.1/game/" ++ show gameId ++ "/feed/live"
     response <- httpBS (parseRequest_ apiUrl)
     return $ eitherDecodeStrict $ getResponseBody response
 
+-- simply created to print the bytestring
 processAndPrintGames :: ByteString -> IO ()
 processAndPrintGames gameSchedule = do
     let gameIdsResult = extractGameIds gameSchedule
@@ -247,9 +246,11 @@ processAndPrintGames gameSchedule = do
             gameDataMap <- processGameIds gameIds
             printProcessedGameData gameDataMap
 
+-- 
 printProcessedGameData :: M.Map Int ByteString -> IO ()
 printProcessedGameData gameDataMap =
     mapM_ (\(gameId, gameData) -> putStrLn $ show gameId ++ show gameData) (M.toList gameDataMap)
+
 
 processGameIds :: [Int] -> IO (M.Map Int ByteString)
 processGameIds gameIds = do
@@ -266,9 +267,11 @@ fetchGameDataForFinishedGame gameId = do
             then do
                 fullGameData <- httpBS (parseRequest_ $ "http://statsapi.mlb.com/api/v1/game/" ++ show gameId ++ "/boxscore")
                 return $ getResponseBody fullGameData
-            else return BS.empty
-        Left _ -> return BS.empty
+            else return BL.empty
+        Left _ -> return BL.empty
 
+
+type GameData = BL.ByteString
 
 flattenGameData :: BL.ByteString -> Int -> Either String BL.ByteString
 flattenGameData gameData gameId = do
