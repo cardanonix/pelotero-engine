@@ -14,7 +14,7 @@ module Scraper
 import Network.HTTP.Simple
 import Data.Time
 import Data.Time.Clock.POSIX
-import Data.ByteString (ByteString)
+import Data.ByteString (ByteString, empty)
 import qualified Data.Vector as V
 import Data.Maybe (isJust, fromMaybe, maybeToList)
 import qualified Data.Map as M
@@ -258,8 +258,8 @@ fetchFinishedBxScore gameId = do
                 -- this is where the box score gets imported
                 fullGameData <- httpBS (parseRequest_ $ "http://statsapi.mlb.com/api/v1/game/" ++ show gameId ++ "/boxscore")
                 return $ getResponseBody fullGameData
-            else return BL.empty
-        Left _ -> return BL.empty
+            else return empty
+        Left _ -> return empty
 
 --maps fetchFinishedBxScore over an array of game id's and returns IO (M.Map Int ByteString)
 processGameIds :: [Int] -> IO (M.Map Int ByteString)
@@ -282,12 +282,18 @@ processAndPrintGames gameSchedule = do
             gameDataMap <- processGameIds gameIds
             printProcessedGameData gameDataMap
 
-type GameData = BL.ByteString
+type GameData = ByteString
+
+data GameData = GameData
+    { awayTeam :: Team,
+      homeTeam :: Team,
+      ...
+    }
 
 flattenGameData :: BL.ByteString -> Int -> Either String BL.ByteString
 flattenGameData gameData gameId = do
     -- Step 1: Decode the gameData
-    decodedData <- eitherDecodeStrict gameData :: Either String GameData
+    decodedData <- eitherDecode gameData :: Either String GameData
 
     -- Step 2: Transform this data structure.
     let teams = [teamPlayers | team <- [awayTeam decodedData, homeTeam decodedData],
