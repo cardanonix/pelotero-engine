@@ -1372,11 +1372,11 @@
         "std": "std"
       },
       "locked": {
-        "lastModified": 1693562808,
-        "narHash": "sha256-kr+NGgP08I5TgTn8Jr3YkrP+qUhe/yvkwc6CZApIGUY=",
+        "lastModified": 1693600664,
+        "narHash": "sha256-9Cge8ArTT0mAsU7Yg2CUplp3cxZamX/3I6i3dbsOXZM=",
         "owner": "input-output-hk",
         "repo": "plutus",
-        "rev": "3ff3901e7766647a135fa8442aaeec6d98a8b4c5",
+        "rev": "47b6b7eb9496f791958c7079743091621349fb8b",
         "type": "github"
       },
       "original": {

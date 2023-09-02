@@ -6,7 +6,7 @@ import Scraper
 
 main :: IO ()
 main = do
-    gameSchedule <- fetchGameScheduleForDate "2021-08-22"
+    gameSchedule <- fetchGameScheduleForDate "2023-08-22"
     print gameSchedule
 
     let hasGames = hasGamesForDate gameSchedule

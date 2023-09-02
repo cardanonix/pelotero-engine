@@ -22,7 +22,6 @@
     utils.apply-systems
     {
       inherit inputs;
-      name = "scraperProto";
       systems = ["x86_64-linux"];
       overlays = [
         inputs.haskell-nix.overlay
@@ -35,6 +34,7 @@
         system,
         ...
       } @ context: let
+        name = "scraperProto";
         hixProject = pkgs.haskell-nix.hix.project {
           src = ./.;
           evalSystem = "x86_64-linux";

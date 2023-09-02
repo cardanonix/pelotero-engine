@@ -89,12 +89,19 @@ data Batting = Batting {
           , bat_sacFlies :: Int --0,
           , bat_catchersInterference :: Int --0,
           , bat_pickoffs :: Int --0
+          -- The following are meant to be discarded
+          , bat_note :: Nothing
+          , bat_summary :: Nothing
+          , bat_stolenBasePercentage :: Nothing
+          , bat_atBatsPerHomeRun :: Nothing
+} deriving Generic
 
-          , bat_note :: String
-          , bat_summary :: String
-          , bat_stolenBasePercentage :: Double
-          , bat_atBatsPerHomeRun :: Double
-} deriving (Generic, FromJSON)
+
+instance FromJSON Batting where
+    parseJSON = genericParseJSON defaultOptions { 
+        fieldLabelModifier = \str -> if take 4 str == "bat_" then drop 4 str else str
+    }
+
 
 data Pitching = Pitching {
             pit_gamesPlayed :: Int --1,
@@ -143,14 +150,19 @@ data Pitching = Pitching {
           , pit_sacBunts :: Int --0,
           , pit_sacFlies :: Int --1,
           , pit_passedBall :: Int --0
+          -- The following are meant to be discarded
+          , pit_note :: Nothing
+          , pit_summary :: Nothing
+          , pit_stolenBasePercentage :: Nothing
+          , pit_strikePercentage :: Nothing
+          , pit_homeRunsPer9 :: Nothing
+          , pit_runsScoredPer9 :: Nothing
+} deriving Generic
 
-          , pit_note :: String
-          , pit_summary :: String
-          , pit_stolenBasePercentage :: Double
-          , pit_strikePercentage :: Double
-          , pit_homeRunsPer9 :: Double
-          , pit_runsScoredPer9 :: Double
-} deriving (Generic, FromJSON)
+instance FromJSON Pitching where
+    parseJSON = genericParseJSON defaultOptions { 
+        fieldLabelModifier = \str -> if take 4 str == "pit_" then drop 4 str else str
+    }
 
 instance FromJSON GameSchedule where
     parseJSON = withObject "GameSchedule" $ \v -> GameSchedule
@@ -164,30 +176,51 @@ instance FromJSON Game where
     parseJSON = withObject "Game" $ \v -> Game
         <$> v .: "gamePk"
 
+-- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule
 fetchGameScheduleForDate :: String -> IO ByteString
 fetchGameScheduleForDate date = do
     let apiUrl = "https://statsapi.mlb.com/api/v1/schedule/games/?language=en&sportId=1&startDate=" ++ date ++ "&endDate=" ++ date
     response <- httpBS (parseRequest_ apiUrl)
     return $ getResponseBody response
 
+-- takes a schedule bytestring and outputs true if games are happening or Nothing is not
 hasGamesForDate :: ByteString -> Maybe Bool
 hasGamesForDate jsonData =
     case eitherDecodeStrict jsonData :: Either String GameSchedule of
         Right schedule -> Just $ any (isJust . games) (dates schedule)
         Left _ -> Nothing
 
+-- takes a schedule bytestring and outputs an array of gameId's or errors
 extractGameIds :: ByteString -> Either String [Int]
 extractGameIds jsonData = 
     case eitherDecodeStrict jsonData :: Either String GameSchedule of
         Right gameData -> Right $ concatMap (maybe [] (V.toList . fmap gamePk) . games) (dates gameData)
         Left e -> Left e
- 
+
+-- string that indicates the status of the game
 data GameStatus = GameStatus {
     codedGameState :: Text
 } deriving (Show, Eq)
 
 data GameDataWrapper = GameDataWrapper {
     gameData :: GameStatus
+} deriving (Show, Eq)
+
+data GameData :: ByteString
+
+data PlayerInfo = PlayerInfo {
+    pInfoId :: Int,
+    pInfoFullName :: String,
+    pInfoStats :: PlayerStats
+} deriving (Show, Eq)
+
+data PlayerStats = PlayerStats {
+    gameId :: Int,
+    playerparentTeamId :: Int,
+    playerallPositions :: [Int],
+    playerstatus :: String,
+    playerBatting :: Maybe Batting,
+    playerPitching :: Maybe Pitching
 } deriving (Show, Eq)
 
 instance FromJSON GameStatus where
@@ -198,16 +231,7 @@ instance FromJSON GameDataWrapper where
     parseJSON = withObject "GameDataWrapper" $ \v -> GameDataWrapper
         <$> v .: "gameData"
 
-instance FromJSON Batting where
-    parseJSON = genericParseJSON defaultOptions { 
-        fieldLabelModifier = \str -> if take 4 str == "bat_" then drop 4 str else str
-    }
-
-instance FromJSON Pitching where
-    parseJSON = genericParseJSON defaultOptions { 
-        fieldLabelModifier = \str -> if take 4 str == "pit_" then drop 4 str else str
-    }
-
+-- takes a game ID and outputs the 
 fetchGameStatus :: Int -> IO (Either String GameDataWrapper)
 fetchGameStatus gameId = do
     let apiUrl = "https://statsapi.mlb.com//api/v1.1/game/" ++ show gameId ++ "/feed/live"
@@ -235,15 +259,16 @@ processGameIds gameIds = do
 fetchGameDataForFinishedGame :: Int -> IO ByteString
 fetchGameDataForFinishedGame gameId = do
     gameStatusJson <- httpBS (parseRequest_ $ "https://statsapi.mlb.com//api/v1.1/game/" ++ show gameId ++ "/feed/live")
-    let gameStatus = decodeStrict (getResponseBody gameStatusJson) :: Maybe Value
-    -- Here, you should extract the game status from the JSON, but for brevity, we'll assume every game has status "F"
-    -- TODO: Use appropriate library function to extract 'codedGameState' from 'gameStatusJson'
+    let gameStatus = eitherDecodeStrict (getResponseBody gameStatusJson) :: Either String GameDataWrapper
     case gameStatus of
-        Just (String status) -> 
-            if status == "F"
-            then httpBS (parseRequest_ $ "http://statsapi.mlb.com/api/v1/game/" ++ show gameId ++ "/boxscore") >>= return . getResponseBody
-            else return ""
-        _ -> return ""
+        Right gameDataWrapper -> 
+            if codedGameState (gameData gameDataWrapper) == "F"
+            then do
+                fullGameData <- httpBS (parseRequest_ $ "http://statsapi.mlb.com/api/v1/game/" ++ show gameId ++ "/boxscore")
+                return $ getResponseBody fullGameData
+            else return BS.empty
+        Left _ -> return BS.empty
+
 
 flattenGameData :: BL.ByteString -> Int -> Either String BL.ByteString
 flattenGameData gameData gameId = do
