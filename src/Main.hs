@@ -3,6 +3,7 @@
 module Main (main) where
 
 import Scraper
+    ( fetchGameScheduleForDate, hasGamesForDate, processAndPrintGames )
 
 main :: IO ()
 main = do
