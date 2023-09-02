@@ -259,7 +259,7 @@ fetchFinishedBxScore gameId = do
                 fullGameData <- httpBS (parseRequest_ $ "http://statsapi.mlb.com/api/v1/game/" ++ show gameId ++ "/boxscore")
                 return $ getResponseBody fullGameData
             else return BL.empty
-        Left _ -> return empty
+        Left _ -> return BL.empty
 
 --maps fetchFinishedBxScore over an array of game id's and returns IO (M.Map Int ByteString)
 processGameIds :: [Int] -> IO (M.Map Int ByteString)
