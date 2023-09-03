@@ -9,7 +9,7 @@ version: 0.0.1.0
 executable scraper
   hs-source-dirs: src
   main-is: Main.hs
-  other-modules:  Scraper
+  other-modules:  Scraper, OutputSchemas, InputSchemas 
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
