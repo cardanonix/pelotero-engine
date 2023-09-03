@@ -3,7 +3,9 @@
 module Main (main) where
 
 import Scraper
-    ( fetchGameScheduleForDate, hasGamesForDate, processAndPrintGames )
+    ( fetchGameScheduleForDate, hasGamesForDate)
+import InputSchemas
+import OutputSchemas
 
 main :: IO ()
 main = do
@@ -13,5 +15,5 @@ main = do
     let hasGames = hasGamesForDate gameSchedule
     print hasGames
 
-    processAndPrintGames gameSchedule
+    -- processAndPrintGames gameSchedule
 

@@ -12,7 +12,7 @@ module Scraper
     , hasGamesForDate
     , extractGameIds
     , processAndPrintGames
-    , flattenGameData
+    -- , flattenGameData
     ) where
 
 import Network.HTTP.Simple
@@ -226,10 +226,10 @@ data PlayerInfo where
                    pInfoStats :: PlayerStats}
                   -> PlayerInfo
 
-instance Data.Aeson.FromJSON PlayerInfo where
-    parseJSON = Data.Aeson.genericParseJSON Data.Aeson.defaultOptions {
-        fieldLabelModifier = \str -> if take 1 str == "p" then drop 1 str else str
-    }
+-- instance Data.Aeson.FromJSON PlayerInfo where
+--     parseJSON = Data.Aeson.genericParseJSON Data.Aeson.defaultOptions {
+--         fieldLabelModifier = \str -> if take 1 str == "p" then drop 1 str else str
+--     }
 
 data PlayerStats = PlayerStats {
     playergameId :: Int,
@@ -240,10 +240,10 @@ data PlayerStats = PlayerStats {
     playerpitching :: Maybe Pitching
 }
 --good stuff
-instance Data.Aeson.FromJSON PlayerStats where
-    parseJSON = Data.Aeson.genericParseJSON Data.Aeson.defaultOptions {
-        fieldLabelModifier = \str -> if take 6 str == "player" then drop 6 str else str
-    }
+-- instance Data.Aeson.FromJSON PlayerStats where
+--     parseJSON = Data.Aeson.genericParseJSON Data.Aeson.defaultOptions {
+--         fieldLabelModifier = \str -> if take 6 str == "player" then drop 6 str else str
+--     }
 
 instance Data.Aeson.FromJSON GameStatus where
     parseJSON = Data.Aeson.withObject "GameStatus" $ \v -> GameStatus
@@ -296,49 +296,49 @@ processAndPrintGames gameSchedule = do
             gameDataMap <- processGameIds gameIds
             printProcessedGameData gameDataMap
 
-type GameData = ByteString
+-- type GameData = ByteString
 
-flattenGameData :: BL.ByteString -> Int -> Either String BL.ByteString
-flattenGameData gameData gameId = do
-    -- Step 1: Decode the gameData
-    decodedData <- Data.Aeson.eitherDecode gameData :: Either String GameData
+-- flattenGameData :: BL.ByteString -> Int -> Either String BL.ByteString
+-- flattenGameData gameData gameId = do
+--     -- Step 1: Decode the gameData
+--     decodedData <- Data.Aeson.eitherDecode gameData :: Either String GameData
 
-    -- Step 2: Transform this data structure.
-    let teams = [teamPlayers | team <- [awayTeam decodedData, homeTeam decodedData],
-                              teamPlayers <- maybeToList (players team)]
-        transformed = map (transformPlayer gameId) teams
+--     -- Step 2: Transform this data structure.
+--     let teams = [teamPlayers | team <- [awayTeam decodedData, homeTeam decodedData],
+--                               teamPlayers <- maybeToList (players team)]
+--         transformed = map (transformPlayer gameId) teams
 
-    -- Step 3: Encode the new representation back to JSON.
-    return $ Data.Aeson.encode transformed
-  where
-    transformPlayer :: Int -> Player -> M.Map String PlayerInfo
-    transformPlayer gid player =
-        let personId = show $ id $ person player
-            newStats = PlayerStats {
-                playergameId = gid,
-                playerparentTeamId = parentTeamId player,
-                playerallPositions = maybe [] (map posCode) (allPositions player),
-                playerstatus = statusCode $ status player,
-                playerbatting = removeUnwantedBattingFields <$> batting (stats player),
-                playerpitching = removeUnwantedPitchingFields <$> pitching (stats player)
-            }
-        in M.singleton personId (PlayerInfo (id $ person player) (fullName $ person player) newStats)
+--     -- Step 3: Encode the new representation back to JSON.
+--     return $ Data.Aeson.encode transformed
+--   where
+--     transformPlayer :: Int -> Player -> M.Map String PlayerInfo
+--     transformPlayer gid player =
+--         let personId = show $ id $ person player
+--             newStats = PlayerStats {
+--                 playergameId = gid,
+--                 playerparentTeamId = parentTeamId player,
+--                 playerallPositions = maybe [] (map posCode) (allPositions player),
+--                 playerstatus = statusCode $ status player,
+--                 playerbatting = removeUnwantedBattingFields <$> batting (stats player),
+--                 playerpitching = removeUnwantedPitchingFields <$> pitching (stats player)
+--             }
+--         in M.singleton personId (PlayerInfo (id $ person player) (fullName $ person player) newStats)
 
-    removeUnwantedBattingFields :: Batting -> Batting
-    removeUnwantedBattingFields bat =
-        bat { bat_note = Nothing
-            , bat_summary = Nothing
-            , bat_stolenBasePercentage = Nothing
-            , bat_atBatsPerHomeRun = Nothing
-            }
+--     removeUnwantedBattingFields :: Batting -> Batting
+--     removeUnwantedBattingFields bat =
+--         bat { bat_note = Nothing
+--             , bat_summary = Nothing
+--             , bat_stolenBasePercentage = Nothing
+--             , bat_atBatsPerHomeRun = Nothing
+--             }
 
-    removeUnwantedPitchingFields :: Pitching -> Pitching
-    removeUnwantedPitchingFields pitch =
-        pitch { pit_note = Nothing
-            , pit_summary = Nothing
-            , pit_stolenBasePercentage = Nothing
-            , pit_strikePercentage = Nothing
-            , pit_homeRunsPer9 = Nothing
-            , pit_runsScoredPer9 = Nothing
-            }
+--     removeUnwantedPitchingFields :: Pitching -> Pitching
+--     removeUnwantedPitchingFields pitch =
+--         pitch { pit_note = Nothing
+--             , pit_summary = Nothing
+--             , pit_stolenBasePercentage = Nothing
+--             , pit_strikePercentage = Nothing
+--             , pit_homeRunsPer9 = Nothing
+--             , pit_runsScoredPer9 = Nothing
+--             }
 

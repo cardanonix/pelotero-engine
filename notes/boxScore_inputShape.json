@@ -1,0 +1,100 @@
+{
+    "teams": {
+      "away": {
+        "players": [
+          {
+            "person": {
+              "id": 12345,
+              "fullName": "Player Name"
+            },
+            "parentTeamId": 7890,
+            "allPositions": [
+              {
+                "code": "1"
+              }
+            ],
+            "status": {
+              "code": "A"
+            },
+            "stats": {
+              "batting": {
+                "note": "Note content",
+                "summary": "Summary content",
+                "stolenBasePercentage": 0.5,
+                "atBatsPerHomeRun": 12.5
+              },
+              "pitching": {
+                "note": "Note content",
+                "summary": "Summary content",
+                "stolenBasePercentage": 0.5,
+                "strikePercentage": 0.6,
+                "homeRunsPer9": 2.5,
+                "runsScoredPer9": 3.0
+              }
+            }
+          }
+        ]
+      },
+      "home": {
+        "players": [
+          {
+            "person": {
+              "id": 67890,
+              "fullName": "Another Player Name"
+            },
+            "parentTeamId": 1234,
+            "allPositions": [
+              {
+                "code": "2"
+              }
+            ],
+            "status": {
+              "code": "I"
+            },
+            "stats": {
+              "batting": {
+                "gamesPlayed": 1,
+                "flyOuts": 0,
+                "groundOuts": 0,
+                "runs": 1,
+                "doubles": 0,
+                "triples": 0,
+                "homeRuns": 0,
+                "strikeOuts": 2,
+                "baseOnBalls": 0,
+                "intentionalWalks": 0,
+                "hits": 2,
+                "hitByPitch": 0,
+                "atBats": 5,
+                "caughtStealing": 0,
+                "stolenBases": 0,
+                "groundIntoDoublePlay": 0,
+                "groundIntoTriplePlay": 0,
+                "plateAppearances": 5,
+                "totalBases": 2,
+                "rbi": 0,
+                "leftOnBase": 1,
+                "sacBunts": 0,
+                "sacFlies": 0,
+                "catchersInterference": 0,
+                "pickoffs": 0,
+                "note": "Note content",
+                "summary": "Summary content",
+                "stolenBasePercentage": 0.4,
+                "atBatsPerHomeRun": 10.5
+              },
+              "pitching": {
+                "note": "Note content",
+                "summary": "Summary content",
+                "stolenBasePercentage": 0.6,
+                "strikePercentage": 0.65,
+                "homeRunsPer9": 1.5,
+                "runsScoredPer9": 2.0
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+  
