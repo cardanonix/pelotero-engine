@@ -48,7 +48,7 @@ type DailyStats = [schema|
           sacBunts: Int,
           sacFlies: Int,
           catchersInterference: Int,
-          pickoffs: Int,,
+          pickoffs: Int,
         },
         pitching:   {
           gamesPlayed: Int,
@@ -68,7 +68,7 @@ type DailyStats = [schema|
           caughtStealing: Int,
           stolenBases: Int,
           numberOfPitches: Int,
-          inningsPitched: Float,
+          inningsPitched: Text,
           wins: Int,
           losses: Int,
           saves: Int,
