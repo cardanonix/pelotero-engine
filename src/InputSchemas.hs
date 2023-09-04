@@ -1,20 +1,19 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE QuasiQuotes #-}
-
+{-# LANGUAGE OverloadedStrings #-}
 
 module InputSchemas
-    ( -- DailyStats
-    -- , GamesStatus
-    -- , PlayerData
-    -- , Batting
-    -- , Pitching
-    -- , GamesStatus
-    , 
+    ( flattenGameData
     ) where
-
-import Prelude hiding (id)
 import Data.Aeson (eitherDecodeFileStrict)
 import Data.Aeson.Schema
+import Data.HashMap.Strict (union, fromList)
+import qualified Data.Text as T
+import qualified Data.Map as Map
+import Data.Maybe (fromMaybe, catMaybes)
+import Data.Text (Text)
+
+
 
 type GameStats = [schema|
   {
@@ -31,7 +30,7 @@ type Teams = [schema|
 
 type TeamDetails = [schema|
   {
-    players: Map Text PlayerDetails
+    players: List PlayerDetails
   }
 |]
 
@@ -42,24 +41,21 @@ type PlayerDetails = [schema|
       fullName: Text
     },
     parentTeamId: Int,
-    allPositions: Map Text Position
+    allPositions: List {
+      code: Text
+    },
     status: {
       code: Text
     },
-    stats: {
-      batting: Maybe BattingStats,
-      pitching: Maybe PitchingStats
-    }, 
-    seasonStats: {
-      batting: Maybe SeasonBattingStats,
-      pitching: Maybe SeasonPitchingStats
-    }
+    stats: StatsType,
+    seasonStats: SeasonStatsType
   }
 |]
 
-type Position = [schema|
+type StatsType = [schema|
   {
-    code: Text
+    batting: Maybe BattingStats,
+    pitching: Maybe PitchingStats
   }
 |]
 
@@ -149,6 +145,13 @@ type PitchingStats = [schema|
     strikePercentage: Float,
     homeRunsPer9: Float,
     runsScoredPer9: Float
+  }
+|]
+
+type SeasonStatsType = [schema|
+  {
+    batting: Maybe SeasonBattingStats,
+    pitching: Maybe SeasonPitchingStats
   }
 |]
 
@@ -253,3 +256,38 @@ type SeasonPitchingStats = [schema|
     passedBall: Int
   }
 |]
+
+flattenGameData :: Object GameStats -> Int -> Map.Map Int PlayerDetails
+flattenGameData gameData gameId = 
+  let
+    awayPlayers = [get| gameData.teams.away.players[] |]
+    homePlayers = [get| gameData.teams.home.players[] |]
+    allPlayers = awayPlayers ++ homePlayers
+
+    transformPlayer :: PlayerDetails -> Maybe (Int, PlayerDetails)
+    transformPlayer player 
+      | null (fromMaybe [] $ playerDetailsAllPositions player) = Nothing
+      | otherwise = 
+        let
+            playerId = playerDetailsPersonId $ playerDetailsPerson player
+            positions = map ((read . T.unpack) . allPositionsCode) (playerDetailsAllPositions player)
+            battingStats = fmap delFieldsBatting (playerDetailsStatsBatting $ playerDetailsStats player)
+            pitchingStats = fmap delFieldsPitching (playerDetailsStatsPitching $ playerDetailsStats player)
+            statsForGame = StatsType battingStats pitchingStats
+            newPlayerDetails = PlayerDetails { 
+                playerDetailsPerson = playerDetailsPerson player,
+                playerDetailsParentTeamId = playerDetailsParentTeamId player,
+                playerDetailsAllPositions = transformedPositions,
+                playerDetailsStatus = playerDetailsStatus player,
+                playerDetailsStats = statsForGame,
+                playerDetailsSeasonStats = playerDetailsSeasonStats player
+            }
+        in Just (playerId, newPlayerDetails)
+
+    delFieldsBatting :: BattingStats -> BattingStats
+    delFieldsBatting stats = stats { note = "", summary = "", stolenBasePercentage = 0.0, atBatsPerHomeRun = 0.0 }
+
+    delFieldsPitching :: PitchingStats -> PitchingStats
+    delFieldsPitching stats = stats { note = "", summary = "", stolenBasePercentage = 0.0, strikePercentage = 0.0, homeRunsPer9 = 0.0, runsScoredPer9 = 0.0 }
+  in
+    Map.fromList $ catMaybes $ map transformPlayer allPlayers
