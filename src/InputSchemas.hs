@@ -6,7 +6,6 @@ module InputSchemas
     ( Boxscore
     ) where
 
-
 import Data.Aeson (eitherDecodeFileStrict, toJSON)
 import Data.Aeson.Schema
 import Data.HashMap.Strict (union, fromList)

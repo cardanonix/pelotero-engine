@@ -3,7 +3,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module OutputSchemas
-    ( --flattenGameData
+    ( DailyStats
+    , RosterList
     ) where
 import Data.Aeson (eitherDecodeFileStrict)
 import Data.Aeson.Schema
