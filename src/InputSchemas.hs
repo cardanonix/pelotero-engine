@@ -13,28 +13,20 @@ import qualified Data.Map as Map
 import Data.Maybe (fromMaybe, catMaybes)
 import Data.Text (Text)
 
-
-
 type GameStats = [schema|
   {
-    teams: Teams
+    teams:   {
+      away:   {
+        players: List Player
+      },
+      home:   {
+        players: List Player
+      } 
+    } 
   }
 |]
 
-type Teams = [schema|
-  {
-    away: TeamDetails,
-    home: TeamDetails
-  }
-|]
-
-type TeamDetails = [schema|
-  {
-    players: List PlayerDetails
-  }
-|]
-
-type PlayerDetails = [schema|
+type Player = [schema|
   {
     person: {
       id: Int,
@@ -47,15 +39,14 @@ type PlayerDetails = [schema|
     status: {
       code: Text
     },
-    stats: StatsType,
-    seasonStats: SeasonStatsType
-  }
-|]
-
-type StatsType = [schema|
-  {
-    batting: Maybe BattingStats,
-    pitching: Maybe PitchingStats
+    stats:   {
+      batting: Maybe BattingStats,
+      pitching: Maybe PitchingStats
+    },
+    seasonStats:   {
+      batting: Maybe SeasonBattingStats,
+      pitching: Maybe SeasonPitchingStats
+    }
   }
 |]
 
@@ -88,8 +79,8 @@ type BattingStats = [schema|
     pickoffs: Int,
     note: Text,
     summary: Text,
-    stolenBasePercentage: Float,
-    atBatsPerHomeRun: Float
+    stolenBasePercentage: Text,
+    atBatsPerHomeRun: Text
   }
 |]
 
@@ -141,17 +132,10 @@ type PitchingStats = [schema|
     passedBall: Int,
     note: Text,
     summary: Text,
-    stolenBasePercentage: Float,
-    strikePercentage: Float,
-    homeRunsPer9: Float,
-    runsScoredPer9: Float
-  }
-|]
-
-type SeasonStatsType = [schema|
-  {
-    batting: Maybe SeasonBattingStats,
-    pitching: Maybe SeasonPitchingStats
+    stolenBasePercentage: Text,
+    strikePercentage: Text,
+    homeRunsPer9: Text,
+    runsScoredPer9: Text
   }
 |]
 
@@ -257,37 +241,50 @@ type SeasonPitchingStats = [schema|
   }
 |]
 
-flattenGameData :: Object GameStats -> Int -> Map.Map Int PlayerDetails
+flattenGameData :: Object GameStats -> Int -> Map.Map Int Player
 flattenGameData gameData gameId = 
   let
     awayPlayers = [get| gameData.teams.away.players[] |]
     homePlayers = [get| gameData.teams.home.players[] |]
     allPlayers = awayPlayers ++ homePlayers
 
-    transformPlayer :: PlayerDetails -> Maybe (Int, PlayerDetails)
+    transformPlayer :: Player -> Maybe (Int, Player)
     transformPlayer player 
-      | null (fromMaybe [] $ playerDetailsAllPositions player) = Nothing
+      | null (fromMaybe [] $ playerAllPositions player) = Nothing
       | otherwise = 
         let
-            playerId = playerDetailsPersonId $ playerDetailsPerson player
-            positions = map ((read . T.unpack) . allPositionsCode) (playerDetailsAllPositions player)
-            battingStats = fmap delFieldsBatting (playerDetailsStatsBatting $ playerDetailsStats player)
-            pitchingStats = fmap delFieldsPitching (playerDetailsStatsPitching $ playerDetailsStats player)
+            playerId = playerPersonId $ playerPerson player
+            positions = map ((read . T.unpack) . allPositionsCode) (playerAllPositions player)
+            battingStats = fmap delFieldsBatting (playerStatsBatting $ playerStats player)
+            pitchingStats = fmap delFieldsPitching (playerStatsPitching $ playerStats player)
             statsForGame = StatsType battingStats pitchingStats
-            newPlayerDetails = PlayerDetails { 
-                playerDetailsPerson = playerDetailsPerson player,
-                playerDetailsParentTeamId = playerDetailsParentTeamId player,
-                playerDetailsAllPositions = transformedPositions,
-                playerDetailsStatus = playerDetailsStatus player,
-                playerDetailsStats = statsForGame,
-                playerDetailsSeasonStats = playerDetailsSeasonStats player
+            newPlayer = [put|
+            {
+                person: {
+                    id: ${playerPersonId $ playerPerson player},
+                    fullName: ${playerPersonFullName $ playerPerson player}
+                },
+                parentTeamId: ${playerParentTeamId player},
+                allPositions: ${map (\pos -> [put| { code: ${allPositionsCode pos} } |]) (playerAllPositions player)},
+                status: {
+                    code: ${statusCode $ playerStatus player}
+                },
+                stats: {
+                    batting: ${fmap delFieldsBatting (playerStatsBatting $ playerStats player)},
+                    pitching: ${fmap delFieldsPitching (playerStatsPitching $ playerStats player)}
+                },
+                seasonStats: {
+                    batting: ${playerSeasonStatsBatting $ playerSeasonStats player},
+                    pitching: ${playerSeasonStatsPitching $ playerSeasonStats player}
+                }
             }
-        in Just (playerId, newPlayerDetails)
+            |]
+        in Just (playerId, newPlayer)
 
     delFieldsBatting :: BattingStats -> BattingStats
-    delFieldsBatting stats = stats { note = "", summary = "", stolenBasePercentage = 0.0, atBatsPerHomeRun = 0.0 }
+    delFieldsBatting stats = stats { note = "", summary = "", stolenBasePercentage = "", atBatsPerHomeRun = "" }
 
     delFieldsPitching :: PitchingStats -> PitchingStats
-    delFieldsPitching stats = stats { note = "", summary = "", stolenBasePercentage = 0.0, strikePercentage = 0.0, homeRunsPer9 = 0.0, runsScoredPer9 = 0.0 }
+    delFieldsPitching stats = stats { note = "", summary = "", stolenBasePercentage = "", strikePercentage = "", homeRunsPer9 = "", runsScoredPer9 = "" }
   in
-    Map.fromList $ catMaybes $ map transformPlayer allPlayers
+    Map.fromList $ catMaybes $ mapMaybe transformPlayer allPlayers
