@@ -1,20 +1,17 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE QuasiQuotes #-}
-
+{-# LANGUAGE OverloadedStrings #-}
 
 module OutputSchemas
-    ( -- DailyStats
-    -- , GamesStatus
-    -- , PlayerData
-    -- , Batting
-    -- , Pitching
-    -- , GamesStatus
-    , 
+    ( --flattenGameData
     ) where
-
-import Prelude hiding (id)
 import Data.Aeson (eitherDecodeFileStrict)
 import Data.Aeson.Schema
+import Data.HashMap.Strict (union, fromList)
+import qualified Data.Text as T
+import qualified Data.Map as Map
+import Data.Maybe (fromMaybe, catMaybes)
+import Data.Text (Text)
 
 -- Schema Describing Transformed Daily Stats
 type DailyStats = [schema|
