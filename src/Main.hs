@@ -28,6 +28,5 @@ main = do
        
   -- print all the users' ids
   
-  print [get| obj.teams.away.players[] |]
-  print [get| obj.teams.home.players[] |]
-
+  print [get| obj.teams.away.players.value.person.fullName |]
+  print [get| obj.teams.home.players.value.person.fullName |]
