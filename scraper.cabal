@@ -49,6 +49,25 @@ executable test
 executable dynamic-keys-test
   hs-source-dirs: src
   main-is: DK_Test.hs
+  build-depends:  base >=4.11 && <4.18
+                , http-conduit 
+                , time
+                , bytestring
+                , http-client-tls
+                , http-client
+                , zlib
+                , process
+                , aeson
+                , aeson-schemas
+                , lens
+                , vector
+                , unordered-containers
+                , text
+                , containers
+
+executable dynamic-keys
+  hs-source-dirs: src
+  main-is: DynamicKeys.hs
   -- other-modules:  Scraper, InputSchemas, OutputSchemas
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
