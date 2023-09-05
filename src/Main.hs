@@ -13,10 +13,10 @@ main :: IO ()
 main = do
   -- Then, load data from a file
   obj <- either fail return =<<
-    eitherDecodeFileStrict "testFiles/testfile.json" :: IO (Object Boxscore)
+    eitherDecodeFileStrict "testFiles/716896_boxscore.json" :: IO (Object Boxscore)
 
   -- print all the users' ids
-  print [get| obj.teams.away.players.values.allPositions[] |]
+  print [get| obj.teams.away[] |]
 
 
   -- flip mapM_ [get| obj.teams.away.players.values |] $ \value -> do
