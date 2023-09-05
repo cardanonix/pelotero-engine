@@ -18,7 +18,7 @@ type Boxscore = [schema|
     teams: {
       away: {
         players: { 
-          value: List {
+          values: List {
             person: List {
               id: Int,
               fullName: Text,

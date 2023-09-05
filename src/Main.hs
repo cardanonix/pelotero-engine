@@ -1,32 +1,29 @@
-{-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DataKinds #-}
-
+{-# LANGUAGE QuasiQuotes #-}
 
 module Main (main) where
 
-
-import Data.Aeson (eitherDecodeFileStrict, toJSON)
+import Data.Aeson (eitherDecodeFileStrict)
 import Data.Aeson.Schema
-import Data.HashMap.Strict (union, fromList)
 import qualified Data.Text as T
-import Scraper
-    ( fetchGameScheduleForDate, hasGamesForDate)
 import InputSchemas
-import OutputSchemas
 
 
 main :: IO ()
 main = do
-    -- gameSchedule <- fetchGameScheduleForDate "2023-08-22"
-    -- print gameSchedule
-
+  -- Then, load data from a file
   obj <- either fail return =<<
-    eitherDecodeFileStrict "testFiles/716896_boxscore.json" :: IO (Object Boxscore)
-  
-  print obj
-       
+    eitherDecodeFileStrict "testFiles/testfile.json" :: IO (Object Boxscore)
+
   -- print all the users' ids
-  
-  print [get| obj.teams.away.players.value.person.fullName |]
-  print [get| obj.teams.home.players.value.person.fullName |]
+  print [get| obj.teams.away.players.values.allPositions[] |]
+
+
+  -- flip mapM_ [get| obj.teams.away.players.values |] $ \value -> do
+  --   -- for each player, print out some information
+  --   putStrLn $ "Details for user #" ++ show [get| user.id |] ++ ":"
+  --   putStrLn $ "* Name: " ++ T.unpack [get| user.name |]
+  --   putStrLn $ "* Age: " ++ maybe "N/A" show [get| user.age |]
+  --   case [get| user.groups |] of
+  --     Nothing -> putStrLn "* No groups"
+  --     Just groups -> putStrLn $ "* Groups: " ++ show groups

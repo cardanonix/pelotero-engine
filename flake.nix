@@ -73,7 +73,6 @@
             hixFlake.packages
             // {
               # inherit serve-docs;
-              # hello
             };
 
           devShell = pkgs.mkShell {
