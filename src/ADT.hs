@@ -36,8 +36,8 @@ data TeamData = TeamData
 instance FromJSON TeamData where
     parseJSON = withObject "TeamData" $ \v -> do
         allPlayers <- v .: "players"
-        let filteredPlayers = M.filter (not . null . allPositions) allPlayers
-        return $ TeamData filteredPlayers
+        let validPlayers = M.filter (not . null . allPositions) allPlayers
+        return $ TeamData validPlayers
 
 type Players = [(Text, Player)]
 
@@ -51,12 +51,16 @@ data Player = Player
     } deriving (Show, Eq)
 
 instance FromJSON Player where
-    parseJSON = withObject "Player" $ \v -> Player
-        <$> v .: "person"
-        <*> v .: "parentTeamId"
-        <*> v .:? "allPositions"
-        <*> v .: "status"
-        <*> v .: "stats"
+    parseJSON = withObject "Player" $ \v -> do
+        positions <- v .:? "allPositions" .!= []
+        if null positions 
+            then fail "No positions available" 
+            else do
+                person <- v .: "person"
+                teamId <- v .: "parentTeamId"
+                status <- v .: "status"
+                stats <- v .: "stats"
+                return $ Player person teamId (Just positions) status stats
 
 data Person = Person
     { personId   :: Int
