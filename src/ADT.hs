@@ -274,7 +274,11 @@ sampleJSON = "{ \"teams\": { \"away\": { \"players\": {} }, \"home\": { \"player
 
 main :: IO ()
 main = do
-    let parsedResult = eitherDecodeStrict sampleJSON :: Either String GameData
+    jsonData <- B.readFile "testFiles/716896_boxscore.json"
+    let parsedResult = eitherDecodeStrict jsonData :: Either String GameData
     case parsedResult of
         Left err -> putStrLn $ "Failed to parse JSON: " ++ err
         Right gameData -> print gameData
+
+
+        
