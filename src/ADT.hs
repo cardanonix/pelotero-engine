@@ -46,12 +46,20 @@ instance FromJSON Person where
                <*> v .: "fullName"
 
 data Position = Position
-    { code :: Text
+    { pos_code :: Text
     } deriving (Show, Eq)
 
+instance FromJSON Position where
+    parseJSON = withObject "Position" $ \v -> Position
+        <$> v .: "code"
+
 data Status = Status
-    { code :: Text
+    { status_code :: Text
     } deriving (Show, Eq)
+
+instance FromJSON Status where
+    parseJSON = withObject "Status" $ \v -> Status
+        <$> v .: "code"
 
 data PlayerStats = PlayerStats
     { batting  :: Maybe BattingStats
