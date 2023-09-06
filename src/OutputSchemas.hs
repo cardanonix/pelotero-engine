@@ -1,21 +1,24 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
 
 module OutputSchemas
-    ( DailyStats
-    , RosterList
-    ) where
+  ( DailyStats,
+    RosterList,
+  )
+where
+
 import Data.Aeson (eitherDecodeFileStrict)
 import Data.Aeson.Schema
-import Data.HashMap.Strict (union, fromList)
-import qualified Data.Text as T
+import Data.HashMap.Strict (fromList, union)
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe, catMaybes)
+import Data.Maybe (catMaybes, fromMaybe)
 import Data.Text (Text)
+import qualified Data.Text as T
 
 -- Schema Describing Transformed Daily Stats
-type DailyStats = [schema|
+type DailyStats =
+  [schema|
   {
     playerData: List {
       id: Int,
@@ -108,7 +111,8 @@ type DailyStats = [schema|
 |]
 
 -- Schema Describing Transformed Roster List
-type RosterList = [schema|
+type RosterList =
+  [schema|
   {
     playerInfo: List   {
       id: Int,

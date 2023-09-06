@@ -1,19 +1,22 @@
-{-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
 
 module InputSchemas
-    ( Boxscore
-    ) where
+  ( Boxscore,
+    Player,
+  )
+where
 
 import Data.Aeson (eitherDecodeFileStrict, toJSON)
 import Data.Aeson.Schema
-import Data.HashMap.Strict (union, fromList)
-import qualified Data.Text as T
-import Data.Maybe (fromMaybe, catMaybes)
+import Data.HashMap.Strict (fromList, union)
 import qualified Data.Map as Map
+import Data.Maybe (catMaybes, fromMaybe)
+import qualified Data.Text as T
 
-type Boxscore = [schema|
+type Boxscore =
+  [schema|
   {
     teams: {
       away: {
@@ -26,7 +29,8 @@ type Boxscore = [schema|
   }
 |]
 
-type Player = [schema|
+type Player =
+  [schema|
   {
     person: List {
         id: Int,
@@ -118,16 +122,16 @@ type Player = [schema|
 |]
 
 -- flattenGameData :: Object GameStats -> Int -> Map.Map Int Player
--- flattenGameData gameData gameId = 
+-- flattenGameData gameData gameId =
 --   let
 --     awayPlayers = [get| gameData.teams.away.players[] |]
 --     homePlayers = [get| gameData.teams.home.players[] |]
 --     allPlayers = awayPlayers ++ homePlayers
 
 --     transformPlayer :: Player -> Maybe (Int, Player)
---     transformPlayer player 
+--     transformPlayer player
 --       | null (fromMaybe [] $ playerAllPositions player) = Nothing
---       | otherwise = 
+--       | otherwise =
 --         let
 --             playerId = playerPersonId $ playerPerson player
 --             positions = map ((read . T.unpack) . allPositionsCode) (playerAllPositions player)

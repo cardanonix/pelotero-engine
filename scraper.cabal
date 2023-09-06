@@ -46,9 +46,9 @@ executable test
                 , text
                 , containers
 
-executable dynamic-keys-test
+executable test2
   hs-source-dirs: src
-  main-is: DK_Test.hs
+  main-is: Test2.hs
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -81,6 +81,26 @@ executable dynamic-keys
                 , aeson-schemas
                 , lens
                 , vector
+                , unordered-containers
+                , text
+                , containers
+
+executable brute
+  hs-source-dirs: src
+  main-is: BruteForce.hs
+  -- other-modules:  Scraper, InputSchemas, OutputSchemas
+  build-depends:  base >=4.11 && <4.18
+                , http-conduit 
+                , time
+                , bytestring
+                , http-client-tls
+                , http-client
+                , zlib
+                , process
+                , aeson
+                , lens
+                , vector
+                , scientific
                 , unordered-containers
                 , text
                 , containers
