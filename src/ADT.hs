@@ -1,9 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+module Main (main) where
+
 import Data.Aeson
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Map.Strict as M
+import Data.Aeson (decode, FromJSON(..))
+import qualified Data.ByteString as B (readFile)
+import Data.ByteString.Lazy.Char8 (pack)
+import Data.ByteString (ByteString)
+import qualified Data.Aeson as Aeson (eitherDecodeStrict)
+
 
 -- Top level data type
 data GameData = GameData
@@ -15,6 +23,11 @@ data Teams = Teams
     { away :: TeamData
     , home :: TeamData
     } deriving (Show, Eq)
+
+instance FromJSON Teams where
+    parseJSON = withObject "Teams" $ \v -> Teams
+        <$> v .: "away"
+        <*> v .: "home"
 
 data TeamData = TeamData
     { players :: M.Map Text Player
@@ -34,6 +47,14 @@ data Player = Player
     , status          :: Status
     , stats           :: PlayerStats
     } deriving (Show, Eq)
+
+instance FromJSON Player where
+    parseJSON = withObject "Player" $ \v -> Player
+        <$> v .: "person"
+        <*> v .: "parentTeamId"
+        <*> v .: "allPositions"
+        <*> v .: "status"
+        <*> v .: "stats"
 
 data Person = Person
     { personId   :: Int
@@ -65,6 +86,11 @@ data PlayerStats = PlayerStats
     { batting  :: Maybe BattingStats
     , pitching :: Maybe PitchingStats
     } deriving (Show, Eq)
+
+instance FromJSON PlayerStats where
+    parseJSON = withObject "PlayerStats" $ \v -> PlayerStats
+        <$> v .:? "batting"
+        <*> v .:? "pitching"
 
 data BattingStats = BattingStats
     { bat_gamesPlayed           :: Int
@@ -243,3 +269,12 @@ instance FromJSON GameData where
     parseJSON = withObject "GameData" $ \v ->
         GameData <$> v .: "teams"
 
+sampleJSON :: ByteString
+sampleJSON = "{ \"teams\": { \"away\": { \"players\": {} }, \"home\": { \"players\": {} } } }"
+
+main :: IO ()
+main = do
+    let parsedResult = eitherDecodeStrict sampleJSON :: Either String GameData
+    case parsedResult of
+        Left err -> putStrLn $ "Failed to parse JSON: " ++ err
+        Right gameData -> print gameData
