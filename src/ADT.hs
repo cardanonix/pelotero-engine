@@ -279,6 +279,3 @@ main = do
     case parsedResult of
         Left err -> putStrLn $ "Failed to parse JSON: " ++ err
         Right gameData -> print gameData
-
-
-        
