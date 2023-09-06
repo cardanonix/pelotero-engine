@@ -33,10 +33,15 @@ data TeamData = TeamData
     { players :: M.Map Text Player
     } deriving (Show, Eq)
 
+hasValidPositions :: Player -> Bool
+hasValidPositions player = case allPositions player of
+    Just positions -> not (null positions)
+    Nothing        -> False
+
 instance FromJSON TeamData where
     parseJSON = withObject "TeamData" $ \v -> do
-        allPlayers <- v .: "players"
-        let validPlayers = M.filter (not . null . allPositions) allPlayers
+        rawPlayers <- v .: "players"
+        let validPlayers = M.filter hasValidPositions rawPlayers
         return $ TeamData validPlayers
 
 type Players = [(Text, Player)]
@@ -52,15 +57,12 @@ data Player = Player
 
 instance FromJSON Player where
     parseJSON = withObject "Player" $ \v -> do
-        positions <- v .:? "allPositions" .!= []
-        if null positions 
-            then fail "No positions available" 
-            else do
-                person <- v .: "person"
-                teamId <- v .: "parentTeamId"
-                status <- v .: "status"
-                stats <- v .: "stats"
-                return $ Player person teamId (Just positions) status stats
+        person <- v .: "person"
+        teamId <- v .: "parentTeamId"
+        positions <- v .:? "allPositions" -- use .:? for optional fields
+        status <- v .: "status"
+        stats <- v .: "stats"
+        return $ Player person teamId positions status stats
 
 data Person = Person
     { personId   :: Int
