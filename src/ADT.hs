@@ -53,7 +53,6 @@ data Status = Status
     { code :: Text
     } deriving (Show, Eq)
 
-
 data PlayerStats = PlayerStats
     { batting  :: Maybe BattingStats
     , pitching :: Maybe PitchingStats
