@@ -8,27 +8,7 @@ version: 0.0.1.0
 
 executable scraper
   hs-source-dirs: src
-  main-is: Main.hs
-  other-modules:  Scraper, InputSchemas, OutputSchemas
-  build-depends:  base >=4.11 && <4.18
-                , http-conduit 
-                , time
-                , bytestring
-                , http-client-tls
-                , http-client
-                , zlib
-                , process
-                , aeson
-                , aeson-schemas
-                , lens
-                , vector
-                , unordered-containers
-                , text
-                , containers
-
-executable hybrid
-  hs-source-dirs: src
-  main-is: Hybrid.hs
+  main-is: ADT.hs
   -- other-modules:  Scraper, InputSchemas, OutputSchemas
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
@@ -42,85 +22,6 @@ executable hybrid
                 , aeson-schemas
                 , lens
                 , vector
-                , unordered-containers
-                , text
-                , containers
-
-executable test
-  hs-source-dirs: src
-  main-is: Test.hs
-  -- other-modules:  Scraper, InputSchemas, OutputSchemas
-  build-depends:  base >=4.11 && <4.18
-                , http-conduit 
-                , time
-                , bytestring
-                , http-client-tls
-                , http-client
-                , zlib
-                , process
-                , aeson
-                , aeson-schemas
-                , lens
-                , vector
-                , unordered-containers
-                , text
-                , containers
-
-executable test2
-  hs-source-dirs: src
-  main-is: Test2.hs
-  build-depends:  base >=4.11 && <4.18
-                , http-conduit 
-                , time
-                , bytestring
-                , http-client-tls
-                , http-client
-                , zlib
-                , process
-                , aeson
-                , aeson-schemas
-                , lens
-                , vector
-                , unordered-containers
-                , text
-                , containers
-
-executable dynamic-keys
-  hs-source-dirs: src
-  main-is: DynamicKeys.hs
-  -- other-modules:  Scraper, InputSchemas, OutputSchemas
-  build-depends:  base >=4.11 && <4.18
-                , http-conduit 
-                , time
-                , bytestring
-                , http-client-tls
-                , http-client
-                , zlib
-                , process
-                , aeson
-                , aeson-schemas
-                , lens
-                , vector
-                , unordered-containers
-                , text
-                , containers
-
-executable brute
-  hs-source-dirs: src
-  main-is: BruteForce.hs
-  -- other-modules:  Scraper, InputSchemas, OutputSchemas
-  build-depends:  base >=4.11 && <4.18
-                , http-conduit 
-                , time
-                , bytestring
-                , http-client-tls
-                , http-client
-                , zlib
-                , process
-                , aeson
-                , lens
-                , vector
-                , scientific
                 , unordered-containers
                 , text
                 , containers
