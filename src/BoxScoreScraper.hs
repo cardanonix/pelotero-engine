@@ -10,6 +10,7 @@ module BoxScoreScraper
     , extractGameIds
     , processAndPrintGames
     , fetchFinishedBxScore
+    , fetchGameStatus
     ) where
 
 import Network.HTTP.Simple
@@ -98,32 +99,46 @@ instance Data.Aeson.FromJSON GameDataWrapper where
         <$> v Data.Aeson..: "gameData"
 
 -- takes a game ID and outputs the live coded status of that game
+-- fetchGameStatus :: Int -> IO (Either String GameDataWrapper)
+-- fetchGameStatus gameId = do
+--     let apiUrl = "https://statsapi.mlb.com//api/v1.1/game/" ++ show gameId ++ "/feed/live"
+--     response <- httpBS (parseRequest_ apiUrl)
+--     return $ Data.Aeson.eitherDecodeStrict $ getResponseBody response
+
+-- takes a game ID and outputs the live coded status of that game
 fetchGameStatus :: Int -> IO (Either String GameDataWrapper)
 fetchGameStatus gameId = do
-    let apiUrl = "https://statsapi.mlb.com//api/v1.1/game/" ++ show gameId ++ "/feed/live"
+    let apiUrl = "https://statsapi.mlb.com/api/v1.1/game/" ++ show gameId ++ "/feed/live"
     response <- httpBS (parseRequest_ apiUrl)
-    return $ Data.Aeson.eitherDecodeStrict $ getResponseBody response
+    
+    -- Printing the raw response for debugging
+    let responseBody = getResponseBody response
+    putStrLn "Raw response from the API:"
+    putStrLn $ show responseBody
 
--- takes a game id and outputs a box score bytestring
-fetchFinishedBxScore :: Int -> IO ByteString
+    return $ Data.Aeson.eitherDecodeStrict responseBody
+
+-- takes a game ID and outputs the unfiltered full box score of that game if the game is finished
+fetchFinishedBxScore :: Int -> IO (Maybe ByteString)
 fetchFinishedBxScore gameId = do
-    gameStatusJson <- httpBS (parseRequest_ $ "https://statsapi.mlb.com//api/v1.1/game/" ++ show gameId ++ "/feed/live")
-    let gameStatus = Data.Aeson.eitherDecodeStrict (getResponseBody gameStatusJson) :: Either String GameDataWrapper
+    gameStatusResponse <- httpBS (parseRequest_ $ "https://statsapi.mlb.com//api/v1.1/game/" ++ show gameId ++ "/feed/live")
+    let gameStatus = Data.Aeson.eitherDecodeStrict (getResponseBody gameStatusResponse) :: Either String GameDataWrapper
     case gameStatus of
-        Right gameDataWrapper ->
+        Right gameDataWrapper -> 
             if codedGameState (gameData gameDataWrapper) == "F"
             then do
-                -- this is where the box score gets imported
-                fullGameData <- httpBS (parseRequest_ $ "http://statsapi.mlb.com/api/v1/game/" ++ show gameId ++ "/boxscore")
-                return $ getResponseBody fullGameData
-            else return empty
-        Left _ -> return empty
+                boxScoreResponse <- httpBS (parseRequest_ $ "http://statsapi.mlb.com/api/v1/game/" ++ show gameId ++ "/boxscore")
+                return $ Just $ getResponseBody boxScoreResponse
+            else return Nothing
+        Left _ -> return Nothing
+
 
 --maps fetchFinishedBxScore over an array of game id's and returns IO (M.Map Int ByteString)
 processGameIds :: [Int] -> IO (M.Map Int ByteString)
 processGameIds gameIds = do
     gameDataResponses <- mapM fetchFinishedBxScore gameIds
-    return $ M.fromList $ zip gameIds gameDataResponses
+    let validResults = [(gameId, bs) | (gameId, Just bs) <- zip gameIds gameDataResponses]
+    return $ M.fromList validResults
 
 -- 
 printProcessedGameData :: M.Map Int ByteString -> IO ()

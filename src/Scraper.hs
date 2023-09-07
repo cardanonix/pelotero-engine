@@ -2,7 +2,6 @@
 
 module Main (main) where
 
-
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Map.Strict as M
@@ -21,6 +20,7 @@ import BoxScoreScraper  ( fetchGameScheduleForDate
                         , extractGameIds
                         , processAndPrintGames
                         , fetchFinishedBxScore
+                        , fetchGameStatus
                         )
 
 main :: IO ()
@@ -50,11 +50,34 @@ main = do
         Just False -> putStrLn "No games for the specified date."
         Nothing   -> putStrLn "Error checking games for the date."
     
-        -- Testing fetchFinishedBxScore
-    putStrLn "\nFetching finished box score for game ID 716896..."
-    fetchedBoxScore <- fetchFinishedBxScore 716896
+    _ <- fetchGameStatus 716896 
 
-    -- Compare fetchedBoxScore with the jsonData loaded from "testFiles/716896_boxscore.json"
-    if fetchedBoxScore == jsonData
-        then putStrLn "The fetched box score matches the local JSON!"
-        else putStrLn "The fetched box score does not match the local JSON."
+    -- Load and parse local JSON
+    jsonData <- B.readFile "testFiles/716896_boxscore.json"
+    let parsedLocal = eitherDecodeStrict jsonData :: Either String GameData
+
+    -- Fetch and parse fetched JSON
+    putStrLn "\nFetching finished box score for game ID 716896..."
+    fetchedBoxScoreMaybe <- fetchFinishedBxScore 716896
+
+    let fetchedBoxScoreEither :: Either String ByteString
+        fetchedBoxScoreEither = case fetchedBoxScoreMaybe of
+            Nothing -> Left "No box score fetched for the game or the game hasn't finished yet."
+            Just boxScore -> Right boxScore
+
+    case fetchedBoxScoreEither of
+        Left errMsg -> putStrLn errMsg
+        Right fetchedBoxScore -> do
+            let parsedFetched = eitherDecodeStrict fetchedBoxScore :: Either String GameData
+            case (parsedLocal, parsedFetched) of
+                (Left localError, Left fetchedError) -> do
+                    putStrLn $ "Error decoding local JSON: " ++ localError
+                    putStrLn $ "Error decoding fetched JSON: " ++ fetchedError
+                (Left localError, _) -> 
+                    putStrLn $ "Error decoding local JSON: " ++ localError
+                (_, Left fetchedError) -> 
+                    putStrLn $ "Error decoding fetched JSON: " ++ fetchedError
+                (Right localData, Right fetchedData) -> 
+                    if localData == fetchedData
+                        then putStrLn "The fetched game data matches the local data!"
+                        else putStrLn "The fetched game data does not match the local data."
