@@ -51,6 +51,7 @@ main = do
         Nothing   -> putStrLn "Error checking games for the date."
     
     _ <- fetchGameStatus 716896 
+    putStrLn "That file is huge!"
 
     -- Load and parse local JSON
     jsonData <- B.readFile "testFiles/716896_boxscore.json"

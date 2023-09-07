@@ -74,49 +74,36 @@ hasGamesForDate jsonData =
         Right schedule -> Just $ any (isJust . games) (dates schedule)
         Left _ -> Nothing
 
--- takes a schedule bytestring and outputs an array of gameId's or errors
+-- takes a schedule bytestring and outputs an array of gameId's or a generic error
 extractGameIds :: ByteString -> Either String [Int]
 extractGameIds jsonData =
     case Data.Aeson.eitherDecodeStrict jsonData :: Either String GameSchedule of
         Right gameData -> Right $ concatMap (maybe [] (V.toList . fmap gamePk) . games) (dates gameData)
-        Left e -> Left e
+        Left _ -> Left "Error decoding game schedule data."
 
 -- string that indicates the status of the game
 data GameStatus where
   GameStatus :: {codedGameState :: Text} -> GameStatus
   deriving (Show, Eq)
 
-data GameDataWrapper where
-  GameDataWrapper :: {gameData :: GameStatus} -> GameDataWrapper
-  deriving (Show, Eq)
-
 instance Data.Aeson.FromJSON GameStatus where
     parseJSON = Data.Aeson.withObject "GameStatus" $ \v -> GameStatus
         <$> v Data.Aeson..: "codedGameState"
+
+data GameDataWrapper where
+  GameDataWrapper :: {gameData :: GameStatus} -> GameDataWrapper
+  deriving (Show, Eq)
 
 instance Data.Aeson.FromJSON GameDataWrapper where
     parseJSON = Data.Aeson.withObject "GameDataWrapper" $ \v -> GameDataWrapper
         <$> v Data.Aeson..: "gameData"
 
 -- takes a game ID and outputs the live coded status of that game
--- fetchGameStatus :: Int -> IO (Either String GameDataWrapper)
--- fetchGameStatus gameId = do
---     let apiUrl = "https://statsapi.mlb.com//api/v1.1/game/" ++ show gameId ++ "/feed/live"
---     response <- httpBS (parseRequest_ apiUrl)
---     return $ Data.Aeson.eitherDecodeStrict $ getResponseBody response
-
--- takes a game ID and outputs the live coded status of that game
 fetchGameStatus :: Int -> IO (Either String GameDataWrapper)
 fetchGameStatus gameId = do
-    let apiUrl = "https://statsapi.mlb.com/api/v1.1/game/" ++ show gameId ++ "/feed/live"
+    let apiUrl = "https://statsapi.mlb.com//api/v1.1/game/" ++ show gameId ++ "/feed/live"
     response <- httpBS (parseRequest_ apiUrl)
-    
-    -- Printing the raw response for debugging
-    let responseBody = getResponseBody response
-    putStrLn "Raw response from the API:"
-    putStrLn $ show responseBody
-
-    return $ Data.Aeson.eitherDecodeStrict responseBody
+    return $ Data.Aeson.eitherDecodeStrict $ getResponseBody response
 
 -- takes a game ID and outputs the unfiltered full box score of that game if the game is finished
 fetchFinishedBxScore :: Int -> IO (Maybe ByteString)
