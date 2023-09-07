@@ -125,158 +125,158 @@ instance FromJSON PlayerStats where
         <*> v .:? "pitching"
 
 data BattingStats = BattingStats
-    { bat_gamesPlayed           :: Int
-    , bat_flyOuts               :: Int
-    , bat_groundOuts            :: Int
-    , bat_runs                  :: Int
-    , bat_doubles               :: Int
-    , bat_triples               :: Int
-    , bat_homeRuns              :: Int
-    , bat_strikeOuts            :: Int
-    , bat_baseOnBalls           :: Int
-    , bat_intentionalWalks      :: Int
-    , bat_hits                  :: Int
-    , bat_hitByPitch            :: Int
-    , bat_atBats                :: Int
-    , bat_caughtStealing        :: Int
-    , bat_stolenBases           :: Int
-    , bat_groundIntoDoublePlay  :: Int
-    , bat_groundIntoTriplePlay  :: Int
-    , bat_plateAppearances      :: Int
-    , bat_totalBases            :: Int
-    , bat_rbi                   :: Int
-    , bat_leftOnBase            :: Int
-    , bat_sacBunts              :: Int
-    , bat_sacFlies              :: Int
-    , bat_catchersInterference  :: Int
-    , bat_pickoffs              :: Int
+    { bat_gamesPlayed           :: Maybe Int
+    , bat_flyOuts               :: Maybe Int
+    , bat_groundOuts            :: Maybe Int
+    , bat_runs                  :: Maybe Int
+    , bat_doubles               :: Maybe Int
+    , bat_triples               :: Maybe Int
+    , bat_homeRuns              :: Maybe Int
+    , bat_strikeOuts            :: Maybe Int
+    , bat_baseOnBalls           :: Maybe Int
+    , bat_intentionalWalks      :: Maybe Int
+    , bat_hits                  :: Maybe Int
+    , bat_hitByPitch            :: Maybe Int
+    , bat_atBats                :: Maybe Int
+    , bat_caughtStealing        :: Maybe Int
+    , bat_stolenBases           :: Maybe Int
+    , bat_groundIntoDoublePlay  :: Maybe Int
+    , bat_groundIntoTriplePlay  :: Maybe Int
+    , bat_plateAppearances      :: Maybe Int
+    , bat_totalBases            :: Maybe Int
+    , bat_rbi                   :: Maybe Int
+    , bat_leftOnBase            :: Maybe Int
+    , bat_sacBunts              :: Maybe Int
+    , bat_sacFlies              :: Maybe Int
+    , bat_catchersInterference  :: Maybe Int
+    , bat_pickoffs              :: Maybe Int
     } deriving (Show, Eq)
 
 instance FromJSON BattingStats where
     parseJSON = withObject "BattingStats" $ \v -> BattingStats
-        <$> v .: "gamesPlayed"
-        <*> v .: "flyOuts"
-        <*> v .: "groundOuts"
-        <*> v .: "runs"
-        <*> v .: "doubles"
-        <*> v .: "triples"
-        <*> v .: "homeRuns"
-        <*> v .: "strikeOuts"
-        <*> v .: "baseOnBalls"
-        <*> v .: "intentionalWalks"
-        <*> v .: "hits"
-        <*> v .: "hitByPitch"
-        <*> v .: "atBats"
-        <*> v .: "caughtStealing"
-        <*> v .: "stolenBases"
-        <*> v .: "groundIntoDoublePlay"
-        <*> v .: "groundIntoTriplePlay"
-        <*> v .: "plateAppearances"
-        <*> v .: "totalBases"
-        <*> v .: "rbi"
-        <*> v .: "leftOnBase"
-        <*> v .: "sacBunts"
-        <*> v .: "sacFlies"
-        <*> v .: "catchersInterference"
-        <*> v .: "pickoffs"
+        <$> v .:? "gamesPlayed"
+        <*> v .:? "flyOuts"
+        <*> v .:? "groundOuts"
+        <*> v .:? "runs"
+        <*> v .:? "doubles"
+        <*> v .:? "triples"
+        <*> v .:? "homeRuns"
+        <*> v .:? "strikeOuts"
+        <*> v .:? "baseOnBalls"
+        <*> v .:? "intentionalWalks"
+        <*> v .:? "hits"
+        <*> v .:? "hitByPitch"
+        <*> v .:? "atBats"
+        <*> v .:? "caughtStealing"
+        <*> v .:? "stolenBases"
+        <*> v .:? "groundIntoDoublePlay"
+        <*> v .:? "groundIntoTriplePlay"
+        <*> v .:? "plateAppearances"
+        <*> v .:? "totalBases"
+        <*> v .:? "rbi"
+        <*> v .:? "leftOnBase"
+        <*> v .:? "sacBunts"
+        <*> v .:? "sacFlies"
+        <*> v .:? "catchersInterference"
+        <*> v .:? "pickoffs"
 
 data PitchingStats = PitchingStats
-    { pit_gamesPlayed           :: Int
-    , pit_gamesStarted          :: Int
-    , pit_flyOuts               :: Int
-    , pit_groundOuts            :: Int
-    , pit_airOuts               :: Int
-    , pit_runs                  :: Int
-    , pit_doubles               :: Int
-    , pit_triples               :: Int
-    , pit_homeRuns              :: Int
-    , pit_strikeOuts            :: Int
-    , pit_baseOnBalls           :: Int
-    , pit_intentionalWalks      :: Int
-    , pit_hits                  :: Int
-    , pit_hitByPitch            :: Int
-    , pit_atBats                :: Int
-    , pit_caughtStealing        :: Int
-    , pit_stolenBases           :: Int
-    , pit_numberOfPitches       :: Int
-    , pit_inningsPitched        :: Text
-    , pit_wins                  :: Int
-    , pit_losses                :: Int
-    , pit_saves                 :: Int
-    , pit_saveOpportunities     :: Int
-    , pit_holds                 :: Int
-    , pit_blownSaves            :: Int
-    , pit_earnedRuns            :: Int
-    , pit_battersFaced          :: Int
-    , pit_outs                  :: Int
-    , pit_gamesPitched          :: Int
-    , pit_completeGames         :: Int
-    , pit_shutouts              :: Int
-    , pit_pitchesThrown         :: Int
-    , pit_balls                 :: Int
-    , pit_strikes               :: Int
-    , pit_hitBatsmen            :: Int
-    , pit_balks                 :: Int
-    , pit_wildPitches           :: Int
-    , pit_pickoffs              :: Int
-    , pit_rbi                   :: Int
-    , pit_gamesFinished         :: Int
-    , pit_inheritedRunners      :: Int
-    , pit_inheritedRunnersScored:: Int
-    , pit_catchersInterference  :: Int
-    , pit_sacBunts              :: Int
-    , pit_sacFlies              :: Int
-    , pit_passedBall            :: Int
+    { pit_gamesPlayed           :: Maybe Int
+    , pit_gamesStarted          :: Maybe Int
+    , pit_flyOuts               :: Maybe Int
+    , pit_groundOuts            :: Maybe Int
+    , pit_airOuts               :: Maybe Int
+    , pit_runs                  :: Maybe Int
+    , pit_doubles               :: Maybe Int
+    , pit_triples               :: Maybe Int
+    , pit_homeRuns              :: Maybe Int
+    , pit_strikeOuts            :: Maybe Int
+    , pit_baseOnBalls           :: Maybe Int
+    , pit_intentionalWalks      :: Maybe Int
+    , pit_hits                  :: Maybe Int
+    , pit_hitByPitch            :: Maybe Int
+    , pit_atBats                :: Maybe Int
+    , pit_caughtStealing        :: Maybe Int
+    , pit_stolenBases           :: Maybe Int
+    , pit_numberOfPitches       :: Maybe Int
+    , pit_inningsPitched        :: Maybe Text
+    , pit_wins                  :: Maybe Int
+    , pit_losses                :: Maybe Int
+    , pit_saves                 :: Maybe Int
+    , pit_saveOpportunities     :: Maybe Int
+    , pit_holds                 :: Maybe Int
+    , pit_blownSaves            :: Maybe Int
+    , pit_earnedRuns            :: Maybe Int
+    , pit_battersFaced          :: Maybe Int
+    , pit_outs                  :: Maybe Int
+    , pit_gamesPitched          :: Maybe Int
+    , pit_completeGames         :: Maybe Int
+    , pit_shutouts              :: Maybe Int
+    , pit_pitchesThrown         :: Maybe Int
+    , pit_balls                 :: Maybe Int
+    , pit_strikes               :: Maybe Int
+    , pit_hitBatsmen            :: Maybe Int
+    , pit_balks                 :: Maybe Int
+    , pit_wildPitches           :: Maybe Int
+    , pit_pickoffs              :: Maybe Int
+    , pit_rbi                   :: Maybe Int
+    , pit_gamesFinished         :: Maybe Int
+    , pit_inheritedRunners      :: Maybe Int
+    , pit_inheritedRunnersScored:: Maybe Int
+    , pit_catchersInterference  :: Maybe Int
+    , pit_sacBunts              :: Maybe Int
+    , pit_sacFlies              :: Maybe Int
+    , pit_passedBall            :: Maybe Int
     } deriving (Show, Eq)
 
 instance FromJSON PitchingStats where
     parseJSON = withObject "PitchingStats" $ \v -> PitchingStats
-        <$> v .: "gamesPlayed"
-        <*> v .: "gamesStarted"
-        <*> v .: "flyOuts"
-        <*> v .: "groundOuts"
-        <*> v .: "airOuts"
-        <*> v .: "runs"
-        <*> v .: "doubles"
-        <*> v .: "triples"
-        <*> v .: "homeRuns"
-        <*> v .: "strikeOuts"
-        <*> v .: "baseOnBalls"
-        <*> v .: "intentionalWalks"
-        <*> v .: "hits"
-        <*> v .: "hitByPitch"
-        <*> v .: "atBats"
-        <*> v .: "caughtStealing"
-        <*> v .: "stolenBases"
-        <*> v .: "numberOfPitches"
-        <*> v .: "inningsPitched"
-        <*> v .: "wins"
-        <*> v .: "losses"
-        <*> v .: "saves"
-        <*> v .: "saveOpportunities"
-        <*> v .: "holds"
-        <*> v .: "blownSaves"
-        <*> v .: "earnedRuns"
-        <*> v .: "battersFaced"
-        <*> v .: "outs"
-        <*> v .: "gamesPitched"
-        <*> v .: "completeGames"
-        <*> v .: "shutouts"
-        <*> v .: "pitchesThrown"
-        <*> v .: "balls"
-        <*> v .: "strikes"
-        <*> v .: "hitBatsmen"
-        <*> v .: "balks"
-        <*> v .: "wildPitches"
-        <*> v .: "pickoffs"
-        <*> v .: "rbi"
-        <*> v .: "gamesFinished"
-        <*> v .: "inheritedRunners"
-        <*> v .: "inheritedRunnersScored"
-        <*> v .: "catchersInterference"
-        <*> v .: "sacBunts"
-        <*> v .: "sacFlies"
-        <*> v .: "passedBall"
+        <$> v .:? "gamesPlayed"
+        <*> v .:? "gamesStarted"
+        <*> v .:? "flyOuts"
+        <*> v .:? "groundOuts"
+        <*> v .:? "airOuts"
+        <*> v .:? "runs"
+        <*> v .:? "doubles"
+        <*> v .:? "triples"
+        <*> v .:? "homeRuns"
+        <*> v .:? "strikeOuts"
+        <*> v .:? "baseOnBalls"
+        <*> v .:? "intentionalWalks"
+        <*> v .:? "hits"
+        <*> v .:? "hitByPitch"
+        <*> v .:? "atBats"
+        <*> v .:? "caughtStealing"
+        <*> v .:? "stolenBases"
+        <*> v .:? "numberOfPitches"
+        <*> v .:? "inningsPitched"
+        <*> v .:? "wins"
+        <*> v .:? "losses"
+        <*> v .:? "saves"
+        <*> v .:? "saveOpportunities"
+        <*> v .:? "holds"
+        <*> v .:? "blownSaves"
+        <*> v .:? "earnedRuns"
+        <*> v .:? "battersFaced"
+        <*> v .:? "outs"
+        <*> v .:? "gamesPitched"
+        <*> v .:? "completeGames"
+        <*> v .:? "shutouts"
+        <*> v .:? "pitchesThrown"
+        <*> v .:? "balls"
+        <*> v .:? "strikes"
+        <*> v .:? "hitBatsmen"
+        <*> v .:? "balks"
+        <*> v .:? "wildPitches"
+        <*> v .:? "pickoffs"
+        <*> v .:? "rbi"
+        <*> v .:? "gamesFinished"
+        <*> v .:? "inheritedRunners"
+        <*> v .:? "inheritedRunnersScored"
+        <*> v .:? "catchersInterference"
+        <*> v .:? "sacBunts"
+        <*> v .:? "sacFlies"
+        <*> v .:? "passedBall"
 
 main :: IO ()
 main = do
