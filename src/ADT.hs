@@ -52,16 +52,12 @@ hasValidPositions val = case fromJSON val :: Result Player of
 instance FromJSON TeamData where
     parseJSON = withObject "TeamData" $ \v -> do
         playersMap <- v .: "players" :: Parser (M.Map Text Value)
-
-        -- Print out the parsed players before filtering
-        let parsedPlayers = map (\(k, v) -> (k, fromJSON v :: Result Player)) (M.toList playersMap)
-        traceShowM parsedPlayers
-        
         let maybePlayersList = map (\(k, v) -> 
-                case fromJSON v of
-                    Success player -> 
-                        if hasValidPositions v then Just (k, player) else Nothing
-                    _ -> Nothing) (M.toList playersMap)
+                if hasValidPositions v 
+                then case fromJSON v of
+                        Success player -> Just (k, player)
+                        _ -> Nothing
+                else Nothing) (M.toList playersMap)
 
         let validPlayers = M.fromList $ catMaybes maybePlayersList
         pure TeamData { players = validPlayers }
@@ -81,11 +77,14 @@ instance FromJSON Player where
     parseJSON = withObject "Player" $ \v -> do
         person <- v .: "person"
         teamId <- v .: "parentTeamId"
-        positions <- v .:? "allPositions" .!= []
-        -- Since we're filtering at TeamData level, we don't need the condition here
+        positions <- v .:? "allPositions"
+        let validPositions = case positions of
+                Just ps -> if null ps then Nothing else Just ps
+                Nothing -> Nothing
         status <- v .: "status"
         stats <- v .: "stats"
-        return $ Player person teamId (Just positions) status stats
+        return $ Player person teamId validPositions status stats
+
 
 
 data Person = Person
