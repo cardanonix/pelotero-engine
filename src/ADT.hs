@@ -47,12 +47,12 @@ instance FromJSON TeamData where
     parseJSON = withObject "TeamData" $ \v -> do
         playersMap <- v .: "players" :: Parser (M.Map Text Value)
         -- Filter valid players
-        validPlayersList <- traverse (\(k, v) -> 
-            case fromJSON v of
-                Success player -> 
-                    if hasValidPositions v then pure (Just (k, player)) else pure Nothing
-                Error _ -> pure Nothing) (M.toList playersMap)
-        let validPlayers = M.fromList $ catMaybes validPlayersList
+        let maybePlayersList = map (\(k, v) -> 
+                case fromJSON v of
+                    Success player -> 
+                        if hasValidPositions v then Just (k, player) else Nothing
+                    _ -> Nothing) (M.toList playersMap)
+        let validPlayers = M.fromList $ catMaybes maybePlayersList
         pure TeamData { players = validPlayers }
 
 type Players = [(Text, Player)]
