@@ -14,6 +14,7 @@ import Data.Aeson (decode, Result(Success), FromJSON(..), Value, (.:), (.:?), (.
 import Data.Aeson.Types (Parser, Result(..))
 import Control.Monad (filterM)
 import Data.Maybe (catMaybes)
+import Debug.Trace (traceShowM)
 
 
 -- Top level data type
@@ -46,12 +47,17 @@ hasValidPositions val = case fromJSON val :: Result Player of
 instance FromJSON TeamData where
     parseJSON = withObject "TeamData" $ \v -> do
         playersMap <- v .: "players" :: Parser (M.Map Text Value)
-        -- Filter valid players
+
+        -- Print out the parsed players before filtering
+        let parsedPlayers = map (\(k, v) -> (k, fromJSON v :: Result Player)) (M.toList playersMap)
+        traceShowM parsedPlayers
+        
         let maybePlayersList = map (\(k, v) -> 
                 case fromJSON v of
                     Success player -> 
                         if hasValidPositions v then Just (k, player) else Nothing
                     _ -> Nothing) (M.toList playersMap)
+
         let validPlayers = M.fromList $ catMaybes maybePlayersList
         pure TeamData { players = validPlayers }
 
@@ -295,8 +301,13 @@ sampleJSON = "{ \"teams\": { \"away\": { \"players\": {} }, \"home\": { \"player
 
 main :: IO ()
 main = do
-    jsonData <- B.readFile "testFiles/shortened.json"
+    jsonData <- B.readFile "testFiles/716896_boxscore.json"
     let parsedResult = eitherDecodeStrict jsonData :: Either String GameData
+    case parsedResult of
+        Left err -> putStrLn $ "Failed to parse JSON: " ++ err
+        Right gameData -> print gameData
+    handPicked <- B.readFile "testFiles/shortened.json"
+    let parsedResult = eitherDecodeStrict handPicked :: Either String GameData
     case parsedResult of
         Left err -> putStrLn $ "Failed to parse JSON: " ++ err
         Right gameData -> print gameData
