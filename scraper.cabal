@@ -9,7 +9,7 @@ version: 0.0.1.0
 executable scraper
   hs-source-dirs: src
   main-is: Scraper.hs
-  other-modules:  InputADT
+  other-modules:  InputADT, BoxScoreScraper
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
