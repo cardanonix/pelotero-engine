@@ -30,7 +30,7 @@ executable scraper
 executable test_adt
   hs-source-dirs: src
   main-is: Test_ADT.hs
-  -- other-modules:  Scraper, InputSchemas, OutputSchemas
+  other-modules:  InputADT_trace
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
