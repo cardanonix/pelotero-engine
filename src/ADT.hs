@@ -2,15 +2,18 @@
 
 module Main (main) where
 
-import Data.Aeson
+
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Map.Strict as M
-import Data.Aeson (decode, FromJSON(..))
-import qualified Data.ByteString as B (readFile)
+import qualified Data.ByteString as B
+import Data.ByteString ( ByteString)
 import Data.ByteString.Lazy.Char8 (pack)
-import Data.ByteString (ByteString)
-import qualified Data.Aeson as Aeson (eitherDecodeStrict)
+import qualified Data.ByteString as B (readFile)
+import Data.Aeson (decode, Result(Success), FromJSON(..), Value, (.:), (.:?), (.!=), fromJSON, withObject, eitherDecodeStrict)
+import Data.Aeson.Types (Parser, Result(..))
+import Control.Monad (filterM)
+import Data.Maybe (catMaybes)
 
 
 -- Top level data type
@@ -33,16 +36,24 @@ data TeamData = TeamData
     { players :: M.Map Text Player
     } deriving (Show, Eq)
 
-hasValidPositions :: Player -> Bool
-hasValidPositions player = case allPositions player of
-    Just positions -> not (null positions)
-    Nothing        -> False
+hasValidPositions :: Value -> Bool
+hasValidPositions val = case fromJSON val :: Result Player of
+    Success player -> case allPositions player of
+                        Just positions -> not (null positions)
+                        Nothing -> False
+    _ -> False
 
 instance FromJSON TeamData where
     parseJSON = withObject "TeamData" $ \v -> do
-        rawPlayers <- v .: "players"
-        let validPlayers = M.filter hasValidPositions rawPlayers
-        return $ TeamData validPlayers
+        playersMap <- v .: "players" :: Parser (M.Map Text Value)
+        -- Filter valid players
+        validPlayersList <- traverse (\(k, v) -> 
+            case fromJSON v of
+                Success player -> 
+                    if hasValidPositions v then pure (Just (k, player)) else pure Nothing
+                Error _ -> pure Nothing) (M.toList playersMap)
+        let validPlayers = M.fromList $ catMaybes validPlayersList
+        pure TeamData { players = validPlayers }
 
 type Players = [(Text, Player)]
 
@@ -59,10 +70,12 @@ instance FromJSON Player where
     parseJSON = withObject "Player" $ \v -> do
         person <- v .: "person"
         teamId <- v .: "parentTeamId"
-        positions <- v .:? "allPositions" -- use .:? for optional fields
+        positions <- v .:? "allPositions" .!= []
+        -- Since we're filtering at TeamData level, we don't need the condition here
         status <- v .: "status"
         stats <- v .: "stats"
-        return $ Player person teamId positions status stats
+        return $ Player person teamId (Just positions) status stats
+
 
 data Person = Person
     { personId   :: Int
