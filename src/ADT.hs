@@ -22,6 +22,11 @@ data GameData = GameData
     { teams :: Teams
     } deriving (Show, Eq)
 
+-- JSON instances
+instance FromJSON GameData where
+    parseJSON = withObject "GameData" $ \v ->
+        GameData <$> v .: "teams"
+
 -- Teams data type
 data Teams = Teams
     { away :: TeamData
@@ -145,10 +150,6 @@ data BattingStats = BattingStats
     , bat_sacFlies              :: Int
     , bat_catchersInterference  :: Int
     , bat_pickoffs              :: Int
-    , bat_note                  :: Text
-    , bat_summary               :: Text
-    , bat_stolenBasePercentage  :: Double
-    , bat_atBatsPerHomeRun      :: Double
     } deriving (Show, Eq)
 
 instance FromJSON BattingStats where
@@ -178,14 +179,9 @@ instance FromJSON BattingStats where
         <*> v .: "sacFlies"
         <*> v .: "catchersInterference"
         <*> v .: "pickoffs"
-        <*> v .: "note"
-        <*> v .: "summary"
-        <*> v .: "stolenBasePercentage"
-        <*> v .: "atBatsPerHomeRun"
 
 data PitchingStats = PitchingStats
-    { pit_summary               :: Text
-    , pit_gamesPlayed           :: Int
+    { pit_gamesPlayed           :: Int
     , pit_gamesStarted          :: Int
     , pit_flyOuts               :: Int
     , pit_groundOuts            :: Int
@@ -202,7 +198,6 @@ data PitchingStats = PitchingStats
     , pit_atBats                :: Int
     , pit_caughtStealing        :: Int
     , pit_stolenBases           :: Int
-    , pit_stolenBasePercentage  :: Text
     , pit_numberOfPitches       :: Int
     , pit_inningsPitched        :: Text
     , pit_wins                  :: Int
@@ -220,15 +215,12 @@ data PitchingStats = PitchingStats
     , pit_pitchesThrown         :: Int
     , pit_balls                 :: Int
     , pit_strikes               :: Int
-    , pit_strikePercentage      :: Text
     , pit_hitBatsmen            :: Int
     , pit_balks                 :: Int
     , pit_wildPitches           :: Int
     , pit_pickoffs              :: Int
     , pit_rbi                   :: Int
     , pit_gamesFinished         :: Int
-    , pit_runsScoredPer9        :: Text
-    , pit_homeRunsPer9          :: Text
     , pit_inheritedRunners      :: Int
     , pit_inheritedRunnersScored:: Int
     , pit_catchersInterference  :: Int
@@ -239,8 +231,7 @@ data PitchingStats = PitchingStats
 
 instance FromJSON PitchingStats where
     parseJSON = withObject "PitchingStats" $ \v -> PitchingStats
-        <$> v .: "summary"
-        <*> v .: "gamesPlayed"
+        <$> v .: "gamesPlayed"
         <*> v .: "gamesStarted"
         <*> v .: "flyOuts"
         <*> v .: "groundOuts"
@@ -257,7 +248,6 @@ instance FromJSON PitchingStats where
         <*> v .: "atBats"
         <*> v .: "caughtStealing"
         <*> v .: "stolenBases"
-        <*> v .: "stolenBasePercentage"
         <*> v .: "numberOfPitches"
         <*> v .: "inningsPitched"
         <*> v .: "wins"
@@ -275,29 +265,18 @@ instance FromJSON PitchingStats where
         <*> v .: "pitchesThrown"
         <*> v .: "balls"
         <*> v .: "strikes"
-        <*> v .: "strikePercentage"
         <*> v .: "hitBatsmen"
         <*> v .: "balks"
         <*> v .: "wildPitches"
         <*> v .: "pickoffs"
         <*> v .: "rbi"
         <*> v .: "gamesFinished"
-        <*> v .: "runsScoredPer9"
-        <*> v .: "homeRunsPer9"
         <*> v .: "inheritedRunners"
         <*> v .: "inheritedRunnersScored"
         <*> v .: "catchersInterference"
         <*> v .: "sacBunts"
         <*> v .: "sacFlies"
         <*> v .: "passedBall"
-
--- JSON instances
-instance FromJSON GameData where
-    parseJSON = withObject "GameData" $ \v ->
-        GameData <$> v .: "teams"
-
-sampleJSON :: ByteString
-sampleJSON = "{ \"teams\": { \"away\": { \"players\": {} }, \"home\": { \"players\": {} } } }"
 
 main :: IO ()
 main = do

@@ -24,5 +24,6 @@ executable scraper
                 , vector
                 , unordered-containers
                 , text
+                , debug-trace-var
                 , containers
 
