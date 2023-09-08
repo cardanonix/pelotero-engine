@@ -11,6 +11,11 @@ module BoxScoreScraper
     , processAndPrintGames
     , fetchFinishedBxScore
     , fetchGameStatus
+    , GameSchedule
+    , DateEntry
+    , Game
+    , GameStatus
+    , GameDataWrapper
     ) where
 
 import Network.HTTP.Simple
@@ -60,6 +65,23 @@ instance Data.Aeson.FromJSON Game where
     parseJSON = Data.Aeson.withObject "Game" $ \v -> Game
         <$> v Data.Aeson..: "gamePk"
 
+-- string that indicates the status of the game
+data GameStatus where
+  GameStatus :: {codedGameState :: Text} -> GameStatus
+  deriving (Show, Eq)
+
+instance FromJSON GameStatus where
+    parseJSON = withObject "GameStatus" $ \v -> GameStatus
+        <$> v .: "codedGameState"
+
+data GameDataWrapper where
+  GameDataWrapper :: {gameData :: GameStatus} -> GameDataWrapper
+  deriving (Show, Eq)
+
+instance FromJSON GameDataWrapper where
+    parseJSON = withObject "GameDataWrapper" $ \v -> GameDataWrapper
+        <$> v .: "gameData"
+
 -- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule
 fetchGameScheduleForDate :: String -> IO (Maybe ByteString)
 fetchGameScheduleForDate date = do
@@ -74,30 +96,12 @@ hasGamesForDate jsonData =
         Right schedule -> Just $ any (isJust . games) (dates schedule)
         Left _         -> Nothing
 
--- takes a schedule bytestring and outputs an array of gameId's or errors
 -- Takes a schedule bytestring and outputs an array of gameId's or errors
 extractGameIds :: ByteString -> Either String [Int]
 extractGameIds jsonData =
     case eitherDecodeStrict jsonData :: Either String GameSchedule of
         Right gameData -> Right $ concatMap (maybe [] (V.toList . fmap gamePk) . games) (dates gameData)
         Left e -> Left e
-
--- string that indicates the status of the game
-data GameStatus where
-  GameStatus :: {codedGameState :: Text} -> GameStatus
-  deriving (Show, Eq)
-
-data GameDataWrapper where
-  GameDataWrapper :: {gameData :: GameStatus} -> GameDataWrapper
-  deriving (Show, Eq)
-
-instance FromJSON GameStatus where
-    parseJSON = withObject "GameStatus" $ \v -> GameStatus
-        <$> v .: "codedGameState"
-
-instance FromJSON GameDataWrapper where
-    parseJSON = withObject "GameDataWrapper" $ \v -> GameDataWrapper
-        <$> v .: "gameData"
 
 fetchGameStatus :: Int -> IO (Maybe GameDataWrapper)
 fetchGameStatus gameId = do
