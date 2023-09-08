@@ -61,83 +61,86 @@ instance Data.Aeson.FromJSON Game where
         <$> v Data.Aeson..: "gamePk"
 
 -- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule
-fetchGameScheduleForDate :: String -> IO ByteString
+fetchGameScheduleForDate :: String -> IO (Maybe ByteString)
 fetchGameScheduleForDate date = do
     let apiUrl = "https://statsapi.mlb.com/api/v1/schedule/games/?language=en&sportId=1&startDate=" ++ date ++ "&endDate=" ++ date
     response <- httpBS (parseRequest_ apiUrl)
-    return $ getResponseBody response
+    return $ Just (getResponseBody response)
 
--- takes a schedule bytestring and outputs true if games are happening or Nothing is not
+-- Takes a schedule bytestring and outputs true if games are happening, false otherwise.
 hasGamesForDate :: ByteString -> Maybe Bool
 hasGamesForDate jsonData =
-    case Data.Aeson.eitherDecodeStrict jsonData :: Either String GameSchedule of
+    case eitherDecodeStrict jsonData :: Either String GameSchedule of
         Right schedule -> Just $ any (isJust . games) (dates schedule)
-        Left _ -> Nothing
+        Left _         -> Nothing
 
--- takes a schedule bytestring and outputs an array of gameId's or a generic error
+-- takes a schedule bytestring and outputs an array of gameId's or errors
+-- Takes a schedule bytestring and outputs an array of gameId's or errors
 extractGameIds :: ByteString -> Either String [Int]
 extractGameIds jsonData =
-    case Data.Aeson.eitherDecodeStrict jsonData :: Either String GameSchedule of
+    case eitherDecodeStrict jsonData :: Either String GameSchedule of
         Right gameData -> Right $ concatMap (maybe [] (V.toList . fmap gamePk) . games) (dates gameData)
-        Left _ -> Left "Error decoding game schedule data."
+        Left e -> Left e
 
 -- string that indicates the status of the game
 data GameStatus where
   GameStatus :: {codedGameState :: Text} -> GameStatus
   deriving (Show, Eq)
 
-instance Data.Aeson.FromJSON GameStatus where
-    parseJSON = Data.Aeson.withObject "GameStatus" $ \v -> GameStatus
-        <$> v Data.Aeson..: "codedGameState"
-
 data GameDataWrapper where
   GameDataWrapper :: {gameData :: GameStatus} -> GameDataWrapper
   deriving (Show, Eq)
 
-instance Data.Aeson.FromJSON GameDataWrapper where
-    parseJSON = Data.Aeson.withObject "GameDataWrapper" $ \v -> GameDataWrapper
-        <$> v Data.Aeson..: "gameData"
+instance FromJSON GameStatus where
+    parseJSON = withObject "GameStatus" $ \v -> GameStatus
+        <$> v .: "codedGameState"
 
--- takes a game ID and outputs the live coded status of that game
-fetchGameStatus :: Int -> IO (Either String GameDataWrapper)
+instance FromJSON GameDataWrapper where
+    parseJSON = withObject "GameDataWrapper" $ \v -> GameDataWrapper
+        <$> v .: "gameData"
+
+fetchGameStatus :: Int -> IO (Maybe GameDataWrapper)
 fetchGameStatus gameId = do
     let apiUrl = "https://statsapi.mlb.com//api/v1.1/game/" ++ show gameId ++ "/feed/live"
     response <- httpBS (parseRequest_ apiUrl)
-    return $ Data.Aeson.eitherDecodeStrict $ getResponseBody response
-
--- takes a game ID and outputs the unfiltered full box score of that game if the game is finished
-fetchFinishedBxScore :: Int -> IO (Maybe ByteString)
-fetchFinishedBxScore gameId = do
-    gameStatusResponse <- httpBS (parseRequest_ $ "https://statsapi.mlb.com//api/v1.1/game/" ++ show gameId ++ "/feed/live")
-    let gameStatus = Data.Aeson.eitherDecodeStrict (getResponseBody gameStatusResponse) :: Either String GameDataWrapper
-    case gameStatus of
-        Right gameDataWrapper -> 
-            if codedGameState (gameData gameDataWrapper) == "F"
-            then do
-                boxScoreResponse <- httpBS (parseRequest_ $ "http://statsapi.mlb.com/api/v1/game/" ++ show gameId ++ "/boxscore")
-                return $ Just $ getResponseBody boxScoreResponse
-            else return Nothing
+    case eitherDecodeStrict $ getResponseBody response of
+        Right gameDataWrapper -> return $ Just gameDataWrapper
         Left _ -> return Nothing
 
+fetchFinishedBxScore :: Int -> IO (Maybe ByteString)
+fetchFinishedBxScore gameId = do
+    gameStatus <- fetchGameStatus gameId
+    case gameStatus of
+        Just gameDataWrapper ->
+            if codedGameState (gameData gameDataWrapper) == "F"
+            then do
+                fullGameData <- httpBS (parseRequest_ $ "http://statsapi.mlb.com/api/v1/game/" ++ show gameId ++ "/boxscore")
+                return $ Just $ getResponseBody fullGameData
+            else return Nothing
+        Nothing -> return Nothing
 
 --maps fetchFinishedBxScore over an array of game id's and returns IO (M.Map Int ByteString)
-processGameIds :: [Int] -> IO (M.Map Int ByteString)
+processGameIds :: [Int] -> IO (M.Map Int (Maybe ByteString))
 processGameIds gameIds = do
     gameDataResponses <- mapM fetchFinishedBxScore gameIds
-    let validResults = [(gameId, bs) | (gameId, Just bs) <- zip gameIds gameDataResponses]
-    return $ M.fromList validResults
+    return $ M.fromList $ zip gameIds gameDataResponses
 
 -- 
-printProcessedGameData :: M.Map Int ByteString -> IO ()
+printProcessedGameData :: M.Map Int (Maybe ByteString) -> IO ()
 printProcessedGameData gameDataMap =
-    mapM_ (\(gameId, gameData) -> putStrLn $ show gameId ++ show gameData) (M.toList gameDataMap)
+    mapM_ (\(gameId, gameData) -> case gameData of
+        Just dataStr -> putStrLn $ show gameId ++ ": " ++ show dataStr
+        Nothing -> putStrLn $ show gameId ++ " - No data available.") (M.toList gameDataMap)
 
 -- print the schedule bytestring
 processAndPrintGames :: ByteString -> IO ()
-processAndPrintGames gameSchedule = do
-    let gameIdsResult = extractGameIds gameSchedule
-    case gameIdsResult of
-        Left errMsg -> putStrLn $ "Error extracting game IDs: " ++ errMsg
-        Right gameIds -> do
-            gameDataMap <- processGameIds gameIds
-            printProcessedGameData gameDataMap
+processAndPrintGames gameSchedule = 
+    case hasGamesForDate gameSchedule of
+        Just True -> 
+            case extractGameIds gameSchedule of
+                Left errMsg -> putStrLn $ "Error extracting game IDs: " ++ errMsg
+                Right gameIds -> do
+                    gameDataMap <- processGameIds gameIds
+                    printProcessedGameData gameDataMap
+        Just False -> putStrLn "No games scheduled for the provided date."
+        Nothing    -> putStrLn "An error occurred while decoding the game schedule."

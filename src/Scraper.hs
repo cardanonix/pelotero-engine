@@ -37,19 +37,22 @@ main = do
         Right gameData -> print gameData
     
     -- testing BoxscoreScraper
-        -- Fetch game schedule for a specific date, e.g., "2023-09-05"
-    gameSchedule <- fetchGameScheduleForDate "2023-08-22"
-
-    -- Check if there are games on that date
-    let hasGames = hasGamesForDate gameSchedule
+    -- Fetch game schedule for a specific date, e.g., "2023-09-05"
+    gameScheduleMaybe <- fetchGameScheduleForDate "2023-08-22"
+    
+    let hasGames = hasGamesForDate <$> gameScheduleMaybe
 
     case hasGames of
-        Just True -> do
+        Just (Just True) -> do
             putStrLn "Games found for the date. Processing..."
-            processAndPrintGames gameSchedule
-        Just False -> putStrLn "No games for the specified date."
-        Nothing   -> putStrLn "Error checking games for the date."
-    
+            -- Ensure you handle the case when `gameScheduleMaybe` is Nothing or contains an error.
+            case gameScheduleMaybe of
+                Just gameSchedule -> processAndPrintGames gameSchedule
+                Nothing -> putStrLn "Error processing the game schedule."
+        Just (Just False) -> putStrLn "No games for the specified date."
+        Just Nothing -> putStrLn "Error in decoding game schedule."
+        Nothing -> putStrLn "Error fetching game schedule."
+        
     _ <- fetchGameStatus 716896 
     putStrLn "That file is huge!"
 
