@@ -48,10 +48,14 @@ import InputADT
 -- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule
 fetchGameScheduleForDate :: String -> IO (Either String GameSchedule)
 fetchGameScheduleForDate date = do
-    let apiUrl = "https://statsapi.mlb.com/api/v1/schedule/games/?language=en&sportId=1&startDate=" ++ date ++ "&endDate=" ++ date
+    let apiUrl = scheduleUrl date
     response <- httpBS (parseRequest_ apiUrl)
     return (eitherDecodeStrict $ getResponseBody response)
-        
+
+-- Generate the API URL for a single day's schedule
+scheduleUrl :: String -> String
+scheduleUrl date = "https://statsapi.mlb.com/api/v1/schedule/games/?language=en&sportId=1&startDate=" ++ date ++ "&endDate=" ++ date
+
 -- Takes a schedule bytestring and outputs true if games are happening, false otherwise.
 hasGamesForDate :: GameSchedule -> Bool
 hasGamesForDate schedule = any (isJust . games) (dates schedule)
@@ -60,12 +64,11 @@ hasGamesForDate schedule = any (isJust . games) (dates schedule)
 extractGameIds :: GameSchedule -> [Int]
 extractGameIds gameData = concatMap (maybe [] (V.toList . fmap gamePk) . games) (dates gameData)
 
--- takes a game id and returns the boxscore bytestring if the game is finished
--- Generate the API URL for game status
+-- Generate the API URL for live game status
 gameStatusUrl :: Int -> String
 gameStatusUrl gameId = "https://statsapi.mlb.com//api/v1.1/game/" ++ show gameId ++ "/feed/live"
 
--- Generate the API URL for boxscore
+-- Generate the API URL for finished boxscore
 boxScoreUrl :: Int -> String
 boxScoreUrl gameId = "http://statsapi.mlb.com/api/v1/game/" ++ show gameId ++ "/boxscore"
 

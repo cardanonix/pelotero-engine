@@ -34,23 +34,23 @@ main = do
         Left errMsg -> putStrLn $ "Failed to fetch game schedule: " ++ errMsg
 
     putStrLn "Testing fetchGameScheduleForDate:"
-    testFetchGameScheduleForDate
+    testFetchGameScheduleForDate "2023-08-22"
 
     putStrLn "Testing fetchFinishedBxScore:"
-    testFetchFinishedBxScore
+    testFetchFinishedBxScore 716896
 
-testFetchGameScheduleForDate :: IO ()
-testFetchGameScheduleForDate = do
-    result <- fetchGameScheduleForDate "2023-08-22"
+testFetchGameScheduleForDate :: String -> IO ()
+testFetchGameScheduleForDate  date = do
+    result <- fetchGameScheduleForDate date
     case result of
         Left errMsg -> putStrLn $ "Failed to fetch game schedule: " ++ errMsg
         Right schedule -> putStrLn $ "Fetched game schedule: " ++ show schedule
 
-testFetchFinishedBxScore :: IO ()
-testFetchFinishedBxScore = do
+testFetchFinishedBxScore :: Int -> IO ()
+testFetchFinishedBxScore game = do
     jsonData <- B.readFile "testFiles/716896_boxscore.json"
-    let gameId = 716896 -- example game ID
-    result <- fetchFinishedBxScore gameId
+    let pickedgame = game
+    result <- fetchFinishedBxScore pickedgame
     case result of
         Left errMsg -> putStrLn $ "Failed to fetch game box score: " ++ errMsg
         Right gameData -> putStrLn $ "Fetched box score: " ++ show gameData
