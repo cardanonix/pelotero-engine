@@ -1,4 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Redundant id" #-}
+{-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
+{-# LANGUAGE GADTs #-}
 
 module InputADT where
 
@@ -12,6 +17,7 @@ import qualified Data.Map.Strict as M
 import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Vector as V
 
 -- Top level data type
 data GameData = GameData
@@ -21,6 +27,7 @@ data GameData = GameData
 
 -- JSON instances
 instance FromJSON GameData where
+  parseJSON :: Value -> Parser GameData
   parseJSON = withObject "GameData" $ \v ->
     GameData <$> v .: "teams"
 
@@ -32,6 +39,7 @@ data Teams = Teams
   deriving (Show, Eq)
 
 instance FromJSON Teams where
+  parseJSON :: Value -> Parser Teams
   parseJSON = withObject "Teams" $ \v ->
     Teams
       <$> v
@@ -52,6 +60,7 @@ hasValidPositions val = case fromJSON val :: Result Player of
   _ -> False
 
 instance FromJSON TeamData where
+  parseJSON :: Value -> Parser TeamData
   parseJSON = withObject "TeamData" $ \v -> do
     playersMap <- v .: "players" :: Parser (M.Map Text Value)
     let maybePlayersList =
@@ -81,6 +90,7 @@ data Player = Player
   deriving (Show, Eq)
 
 instance FromJSON Player where
+  parseJSON :: Value -> Parser Player
   parseJSON = withObject "Player" $ \v -> do
     person <- v .: "person"
     teamId <- v .: "parentTeamId"
@@ -99,6 +109,7 @@ data Person = Person
   deriving (Show, Eq)
 
 instance FromJSON Person where
+  parseJSON :: Value -> Parser Person
   parseJSON = withObject "Person" $ \v ->
     Person
       <$> v
@@ -112,6 +123,7 @@ data Position = Position
   deriving (Show, Eq)
 
 instance FromJSON Position where
+  parseJSON :: Value -> Parser Position
   parseJSON = withObject "Position" $ \v ->
     Position
       <$> v
@@ -123,6 +135,7 @@ data Status = Status
   deriving (Show, Eq)
 
 instance FromJSON Status where
+  parseJSON :: Value -> Parser Status
   parseJSON = withObject "Status" $ \v ->
     Status
       <$> v
@@ -135,6 +148,7 @@ data PlayerStats = PlayerStats
   deriving (Show, Eq)
 
 instance FromJSON PlayerStats where
+  parseJSON :: Value -> Parser PlayerStats
   parseJSON = withObject "PlayerStats" $ \v ->
     PlayerStats
       <$> v .:? "batting"
@@ -170,6 +184,7 @@ data BattingStats = BattingStats
   deriving (Show, Eq)
 
 instance FromJSON BattingStats where
+  parseJSON :: Value -> Parser BattingStats
   parseJSON = withObject "BattingStats" $ \v ->
     BattingStats
       <$> v .:? "gamesPlayed"
@@ -249,6 +264,7 @@ data PitchingStats = PitchingStats
   deriving (Show, Eq)
 
 instance FromJSON PitchingStats where
+  parseJSON :: Value -> Parser PitchingStats
   parseJSON = withObject "PitchingStats" $ \v ->
     PitchingStats
       <$> v .:? "gamesPlayed"
@@ -297,3 +313,45 @@ instance FromJSON PitchingStats where
       <*> v .:? "sacBunts"
       <*> v .:? "sacFlies"
       <*> v .:? "passedBall"
+
+-- ## Schedule ADT's ##
+data GameSchedule where
+  GameSchedule :: {dates :: [DateEntry]} -> GameSchedule
+  deriving (Show, Eq)
+
+data DateEntry where
+  DateEntry :: {games :: Maybe (V.Vector GameID)} -> DateEntry
+  deriving (Show, Eq)
+
+data GameID where
+  GameID :: {gamePk :: Int} -> GameID
+  deriving (Show, Eq)
+
+instance Data.Aeson.FromJSON GameSchedule where
+    parseJSON = Data.Aeson.withObject "GameSchedule" $ \v -> GameSchedule
+        <$> v Data.Aeson..: "dates"
+
+instance Data.Aeson.FromJSON DateEntry where
+    parseJSON = Data.Aeson.withObject "DateEntry" $ \v -> DateEntry
+        <$> v Data.Aeson..:? "games"
+
+instance Data.Aeson.FromJSON GameID where
+    parseJSON = Data.Aeson.withObject "GameID" $ \v -> GameID
+        <$> v Data.Aeson..: "gamePk"
+
+-- ## Game Status ADT's ##
+data LiveGameStatus where
+  LiveGameStatus :: {codedGameState :: Text} -> LiveGameStatus
+  deriving (Show, Eq)
+
+instance FromJSON LiveGameStatus where
+    parseJSON = withObject "LiveGameStatus" $ \v -> LiveGameStatus
+        <$> v .: "codedGameState"
+
+data LiveGameWrapper where
+  LiveGameWrapper :: {gameData :: LiveGameStatus} -> LiveGameWrapper
+  deriving (Show, Eq)
+
+instance FromJSON LiveGameWrapper where
+    parseJSON = withObject "LiveGameWrapper" $ \v -> LiveGameWrapper
+        <$> v .: "gameData"

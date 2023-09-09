@@ -27,6 +27,27 @@ executable scraper
                 , debug-trace-var
                 , containers
 
+executable bx_test
+  hs-source-dirs: src
+  main-is: BxScoreTester.hs
+  other-modules:  InputADT, BoxScoreScraper
+  build-depends:  base >=4.11 && <4.18
+                , http-conduit 
+                , time
+                , bytestring
+                , http-client-tls
+                , http-client
+                , zlib
+                , process
+                , aeson
+                , aeson-schemas
+                , lens
+                , vector
+                , unordered-containers
+                , text
+                , debug-trace-var
+                , containers
+
 executable test_adt
   hs-source-dirs: src
   main-is: Test_ADT.hs

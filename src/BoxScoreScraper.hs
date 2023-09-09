@@ -13,9 +13,9 @@ module BoxScoreScraper
     , fetchGameStatus
     , GameSchedule
     , DateEntry
-    , Game
-    , GameStatus
-    , GameDataWrapper
+    , GameID
+    , LiveGameStatus
+    , LiveGameWrapper
     ) where
 
 import Network.HTTP.Simple
@@ -39,112 +39,78 @@ import Data.Aeson
       FromJSON(parseJSON),
       Options(fieldLabelModifier) )
 import GHC.Generics ( Generic )
+import Network.HTTP.Simple (httpBS, parseRequest_, getResponseBody)
+import Data.Aeson (eitherDecodeStrict)
 import qualified Data.ByteString.Lazy as BL
-
-data GameSchedule where
-  GameSchedule :: {dates :: [DateEntry]} -> GameSchedule
-  deriving (Show, Eq)
-
-data DateEntry where
-  DateEntry :: {games :: Maybe (V.Vector Game)} -> DateEntry
-  deriving (Show, Eq)
-
-data Game where
-  Game :: {gamePk :: Int} -> Game
-  deriving (Show, Eq)
-
-instance Data.Aeson.FromJSON GameSchedule where
-    parseJSON = Data.Aeson.withObject "GameSchedule" $ \v -> GameSchedule
-        <$> v Data.Aeson..: "dates"
-
-instance Data.Aeson.FromJSON DateEntry where
-    parseJSON = Data.Aeson.withObject "DateEntry" $ \v -> DateEntry
-        <$> v Data.Aeson..:? "games"
-
-instance Data.Aeson.FromJSON Game where
-    parseJSON = Data.Aeson.withObject "Game" $ \v -> Game
-        <$> v Data.Aeson..: "gamePk"
-
--- string that indicates the status of the game
-data GameStatus where
-  GameStatus :: {codedGameState :: Text} -> GameStatus
-  deriving (Show, Eq)
-
-instance FromJSON GameStatus where
-    parseJSON = withObject "GameStatus" $ \v -> GameStatus
-        <$> v .: "codedGameState"
-
-data GameDataWrapper where
-  GameDataWrapper :: {gameData :: GameStatus} -> GameDataWrapper
-  deriving (Show, Eq)
-
-instance FromJSON GameDataWrapper where
-    parseJSON = withObject "GameDataWrapper" $ \v -> GameDataWrapper
-        <$> v .: "gameData"
+import qualified Data.ByteString as B
+import InputADT
 
 -- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule
-fetchGameScheduleForDate :: String -> IO (Maybe ByteString)
+fetchGameScheduleForDate :: String -> IO (Either String GameSchedule)
 fetchGameScheduleForDate date = do
     let apiUrl = "https://statsapi.mlb.com/api/v1/schedule/games/?language=en&sportId=1&startDate=" ++ date ++ "&endDate=" ++ date
     response <- httpBS (parseRequest_ apiUrl)
-    return $ Just (getResponseBody response)
-
+    return (eitherDecodeStrict $ getResponseBody response)
+        
 -- Takes a schedule bytestring and outputs true if games are happening, false otherwise.
-hasGamesForDate :: ByteString -> Maybe Bool
-hasGamesForDate jsonData =
-    case eitherDecodeStrict jsonData :: Either String GameSchedule of
-        Right schedule -> Just $ any (isJust . games) (dates schedule)
-        Left _         -> Nothing
+hasGamesForDate :: GameSchedule -> Bool
+hasGamesForDate schedule = any (isJust . games) (dates schedule)
 
 -- Takes a schedule bytestring and outputs an array of gameId's or errors
-extractGameIds :: ByteString -> Either String [Int]
-extractGameIds jsonData =
-    case eitherDecodeStrict jsonData :: Either String GameSchedule of
-        Right gameData -> Right $ concatMap (maybe [] (V.toList . fmap gamePk) . games) (dates gameData)
-        Left e -> Left e
+extractGameIds :: GameSchedule -> [Int]
+extractGameIds gameData = concatMap (maybe [] (V.toList . fmap gamePk) . games) (dates gameData)
 
-fetchGameStatus :: Int -> IO (Maybe GameDataWrapper)
-fetchGameStatus gameId = do
-    let apiUrl = "https://statsapi.mlb.com//api/v1.1/game/" ++ show gameId ++ "/feed/live"
-    response <- httpBS (parseRequest_ apiUrl)
-    case eitherDecodeStrict $ getResponseBody response of
-        Right gameDataWrapper -> return $ Just gameDataWrapper
-        Left _ -> return Nothing
+-- takes a game id and returns the boxscore bytestring if the game is finished
+-- Generate the API URL for game status
+gameStatusUrl :: Int -> String
+gameStatusUrl gameId = "https://statsapi.mlb.com//api/v1.1/game/" ++ show gameId ++ "/feed/live"
 
-fetchFinishedBxScore :: Int -> IO (Maybe ByteString)
+-- Generate the API URL for boxscore
+boxScoreUrl :: Int -> String
+boxScoreUrl gameId = "http://statsapi.mlb.com/api/v1/game/" ++ show gameId ++ "/boxscore"
+
+-- Fetch and decode utility
+fetchAndDecode :: FromJSON a => String -> IO (Either String a)
+fetchAndDecode url = do
+    response <- httpBS (parseRequest_ url)
+    return $ eitherDecodeStrict $ getResponseBody response
+
+fetchGameStatus :: Int -> IO (Either String LiveGameWrapper)
+fetchGameStatus gameId = fetchAndDecode (gameStatusUrl gameId)
+
+fetchFinishedBxScore :: Int -> IO (Either String GameData)
 fetchFinishedBxScore gameId = do
     gameStatus <- fetchGameStatus gameId
     case gameStatus of
-        Just gameDataWrapper ->
-            if codedGameState (gameData gameDataWrapper) == "F"
-            then do
-                fullGameData <- httpBS (parseRequest_ $ "http://statsapi.mlb.com/api/v1/game/" ++ show gameId ++ "/boxscore")
-                return $ Just $ getResponseBody fullGameData
-            else return Nothing
-        Nothing -> return Nothing
+        Right gameDataWrapper 
+            | codedGameState (gameData gameDataWrapper) == "F" -> fetchAndDecode (boxScoreUrl gameId)
+            | otherwise -> return $ Left "Game isn't finished yet"
+        Left err -> return $ Left ("Error fetching game status: " ++ err)
 
 --maps fetchFinishedBxScore over an array of game id's and returns IO (M.Map Int ByteString)
-processGameIds :: [Int] -> IO (M.Map Int (Maybe ByteString))
+processGameIds :: [Int] -> IO (Either String (M.Map Int GameData))
 processGameIds gameIds = do
-    gameDataResponses <- mapM fetchFinishedBxScore gameIds
-    return $ M.fromList $ zip gameIds gameDataResponses
+    results <- mapM fetchFinishedBxScore gameIds
+    case sequence results of
+        Left err -> return $ Left err
+        Right gameDataList -> return $ Right $ M.fromList $ zip gameIds gameDataList
 
--- 
-printProcessedGameData :: M.Map Int (Maybe ByteString) -> IO ()
-printProcessedGameData gameDataMap =
-    mapM_ (\(gameId, gameData) -> case gameData of
-        Just dataStr -> putStrLn $ show gameId ++ ": " ++ show dataStr
-        Nothing -> putStrLn $ show gameId ++ " - No data available.") (M.toList gameDataMap)
+-- takes a map of game id's and game data and prints the game data
+printProcessedGameData :: Either String (M.Map Int GameData) -> IO ()
+printProcessedGameData gameDataMapEither =
+    case gameDataMapEither of
+        Left errMsg -> putStrLn errMsg
+        Right gameDataMap -> mapM_ (\(gameId, gameData) -> putStrLn $ show gameId ++ ": " ++ show gameData) (M.toList gameDataMap)
 
 -- print the schedule bytestring
-processAndPrintGames :: ByteString -> IO ()
-processAndPrintGames gameSchedule = 
-    case hasGamesForDate gameSchedule of
-        Just True -> 
-            case extractGameIds gameSchedule of
-                Left errMsg -> putStrLn $ "Error extracting game IDs: " ++ errMsg
-                Right gameIds -> do
-                    gameDataMap <- processGameIds gameIds
-                    printProcessedGameData gameDataMap
-        Just False -> putStrLn "No games scheduled for the provided date."
-        Nothing    -> putStrLn "An error occurred while decoding the game schedule."
+processAndPrintGames :: Either String InputADT.GameSchedule -> IO ()
+processAndPrintGames gameScheduleEither = 
+    case gameScheduleEither of
+        Left errMsg -> putStrLn errMsg
+        Right gameSchedule -> 
+            if hasGamesForDate gameSchedule
+            then do
+                let gameIds = extractGameIds gameSchedule
+                gameDataMap <- processGameIds gameIds
+                printProcessedGameData gameDataMap
+            else putStrLn "No games scheduled for the provided date."

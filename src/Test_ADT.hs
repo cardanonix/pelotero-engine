@@ -12,7 +12,7 @@ import Data.Aeson.Types (Parser, Result(..))
 import Control.Monad (filterM)
 import Data.Maybe (catMaybes)
 import Debug.Trace (traceShowM)
-import InputADT_trace
+import InputADT_trace ( GameData )
 
 main :: IO ()
 main = do
