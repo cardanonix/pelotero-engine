@@ -328,14 +328,17 @@ data GameID where
   deriving (Show, Eq)
 
 instance Data.Aeson.FromJSON GameSchedule where
+    parseJSON :: Value -> Parser GameSchedule
     parseJSON = Data.Aeson.withObject "GameSchedule" $ \v -> GameSchedule
         <$> v Data.Aeson..: "dates"
 
 instance Data.Aeson.FromJSON DateEntry where
+    parseJSON :: Value -> Parser DateEntry
     parseJSON = Data.Aeson.withObject "DateEntry" $ \v -> DateEntry
         <$> v Data.Aeson..:? "games"
 
 instance Data.Aeson.FromJSON GameID where
+    parseJSON :: Value -> Parser GameID
     parseJSON = Data.Aeson.withObject "GameID" $ \v -> GameID
         <$> v Data.Aeson..: "gamePk"
 
@@ -345,6 +348,7 @@ data LiveGameStatus where
   deriving (Show, Eq)
 
 instance FromJSON LiveGameStatus where
+    parseJSON :: Value -> Parser LiveGameStatus
     parseJSON = withObject "LiveGameStatus" $ \v -> LiveGameStatus
         <$> v .: "codedGameState"
 
@@ -353,6 +357,7 @@ data LiveGameStatusWrapper where
   deriving (Show, Eq)
 
 instance FromJSON LiveGameStatusWrapper where
+    parseJSON :: Value -> Parser LiveGameStatusWrapper
     parseJSON = withObject "LiveGameStatusWrapper" $ \v -> LiveGameStatusWrapper
         <$> v .: "status"
 
@@ -361,5 +366,6 @@ data LiveGameWrapper where
   deriving (Show, Eq)
 
 instance FromJSON LiveGameWrapper where
+    parseJSON :: Value -> Parser LiveGameWrapper
     parseJSON = withObject "LiveGameWrapper" $ \v -> LiveGameWrapper
         <$> v .: "gameData"
