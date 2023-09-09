@@ -44,6 +44,12 @@ import Data.Aeson (eitherDecodeStrict)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString as B
 import InputADT
+    ( GameData,
+      LiveGameWrapper(gameData),
+      LiveGameStatus(codedGameState),
+      DateEntry(games),
+      GameSchedule(dates),
+      GameID(gamePk) )
 
 -- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule
 fetchGameScheduleForDate :: String -> IO (Either String GameSchedule)
