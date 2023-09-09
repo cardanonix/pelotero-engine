@@ -25,7 +25,7 @@ import BoxScoreScraper  ( fetchGameScheduleForDate
 
 main :: IO ()
 main = do
-    jsonData <- B.readFile "testFiles/716896_boxscore.json"
+    jsonData <- B.readFile "testFiles/mlb/boxscore_716896.json"
     let parsedResult = eitherDecodeStrict jsonData :: Either String GameData
     case parsedResult of
         Left err -> putStrLn $ "Failed to parse JSON: " ++ err

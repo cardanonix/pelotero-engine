@@ -48,7 +48,7 @@ testFetchGameScheduleForDate  date = do
 
 testFetchFinishedBxScore :: Int -> IO ()
 testFetchFinishedBxScore game = do
-    jsonData <- B.readFile "testFiles/716896_boxscore.json"
+    jsonData <- B.readFile "testFiles/mlb/boxscore_716896.json"
     let pickedgame = game
     result <- fetchFinishedBxScore pickedgame
     case result of

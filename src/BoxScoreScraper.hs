@@ -43,31 +43,31 @@ import Network.HTTP.Simple (httpBS, parseRequest_, getResponseBody)
 import Data.Aeson (eitherDecodeStrict)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString as B
+import qualified InputADT as IDT
 import InputADT
-    ( GameData,
-      LiveGameWrapper(gameData),
-      LiveGameStatus(codedGameState),
-      DateEntry(games),
-      GameSchedule(dates),
-      GameID(gamePk) )
+    ( GameData
+    , LiveGameStatusWrapper(gameStatus)
+    , LiveGameWrapper(gameData)
+    , LiveGameStatus(codedGameState)
+    , DateEntry(games)
+    , GameSchedule(dates)
+    , GameID(gamePk) 
+    )
 
 -- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule
-fetchGameScheduleForDate :: String -> IO (Either String GameSchedule)
-fetchGameScheduleForDate date = do
-    let apiUrl = scheduleUrl date
-    response <- httpBS (parseRequest_ apiUrl)
-    return (eitherDecodeStrict $ getResponseBody response)
+fetchGameScheduleForDate :: String -> IO (Either String IDT.GameSchedule)
+fetchGameScheduleForDate date = fetchAndDecode (scheduleUrl date)
 
 -- Generate the API URL for a single day's schedule
 scheduleUrl :: String -> String
 scheduleUrl date = "https://statsapi.mlb.com/api/v1/schedule/games/?language=en&sportId=1&startDate=" ++ date ++ "&endDate=" ++ date
 
 -- Takes a schedule bytestring and outputs true if games are happening, false otherwise.
-hasGamesForDate :: GameSchedule -> Bool
+hasGamesForDate :: IDT.GameSchedule -> Bool
 hasGamesForDate schedule = any (isJust . games) (dates schedule)
 
 -- Takes a schedule bytestring and outputs an array of gameId's or errors
-extractGameIds :: GameSchedule -> [Int]
+extractGameIds :: IDT.GameSchedule -> [Int]
 extractGameIds gameData = concatMap (maybe [] (V.toList . fmap gamePk) . games) (dates gameData)
 
 -- Generate the API URL for live game status
@@ -84,20 +84,23 @@ fetchAndDecode url = do
     response <- httpBS (parseRequest_ url)
     return $ eitherDecodeStrict $ getResponseBody response
 
-fetchGameStatus :: Int -> IO (Either String LiveGameWrapper)
+fetchGameStatus :: Int -> IO (Either String IDT.LiveGameWrapper)
 fetchGameStatus gameId = fetchAndDecode (gameStatusUrl gameId)
 
-fetchFinishedBxScore :: Int -> IO (Either String GameData)
+fetchFinishedBxScore :: Int -> IO (Either String IDT.GameData)
 fetchFinishedBxScore gameId = do
-    gameStatus <- fetchGameStatus gameId
-    case gameStatus of
-        Right gameDataWrapper 
-            | codedGameState (gameData gameDataWrapper) == "F" -> fetchAndDecode (boxScoreUrl gameId)
-            | otherwise -> return $ Left "Game isn't finished yet"
+    gameStatusResult <- fetchGameStatus gameId
+    case gameStatusResult of
+        Right gameDataWrapper -> do
+            let liveStatusWrapper = gameData gameDataWrapper
+            let liveStatus = gameStatus liveStatusWrapper
+            if codedGameState liveStatus == "F"
+               then fetchAndDecode (boxScoreUrl gameId)
+               else return $ Left "Game isn't finished yet"
         Left err -> return $ Left ("Error fetching game status: " ++ err)
 
 --maps fetchFinishedBxScore over an array of game id's and returns IO (M.Map Int ByteString)
-processGameIds :: [Int] -> IO (Either String (M.Map Int GameData))
+processGameIds :: [Int] -> IO (Either String (M.Map Int IDT.GameData))
 processGameIds gameIds = do
     results <- mapM fetchFinishedBxScore gameIds
     case sequence results of
@@ -105,14 +108,14 @@ processGameIds gameIds = do
         Right gameDataList -> return $ Right $ M.fromList $ zip gameIds gameDataList
 
 -- takes a map of game id's and game data and prints the game data
-printProcessedGameData :: Either String (M.Map Int GameData) -> IO ()
+printProcessedGameData :: Either String (M.Map Int IDT.GameData) -> IO ()
 printProcessedGameData gameDataMapEither =
     case gameDataMapEither of
         Left errMsg -> putStrLn errMsg
         Right gameDataMap -> mapM_ (\(gameId, gameData) -> putStrLn $ show gameId ++ ": " ++ show gameData) (M.toList gameDataMap)
 
 -- print the schedule bytestring
-processAndPrintGames :: Either String InputADT.GameSchedule -> IO ()
+processAndPrintGames :: Either String IDT.GameSchedule -> IO ()
 processAndPrintGames gameScheduleEither = 
     case gameScheduleEither of
         Left errMsg -> putStrLn errMsg

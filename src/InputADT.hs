@@ -348,8 +348,16 @@ instance FromJSON LiveGameStatus where
     parseJSON = withObject "LiveGameStatus" $ \v -> LiveGameStatus
         <$> v .: "codedGameState"
 
+data LiveGameStatusWrapper where
+  LiveGameStatusWrapper :: {gameStatus :: LiveGameStatus} -> LiveGameStatusWrapper
+  deriving (Show, Eq)
+
+instance FromJSON LiveGameStatusWrapper where
+    parseJSON = withObject "LiveGameStatusWrapper" $ \v -> LiveGameStatusWrapper
+        <$> v .: "status"
+
 data LiveGameWrapper where
-  LiveGameWrapper :: {gameData :: LiveGameStatus} -> LiveGameWrapper
+  LiveGameWrapper :: {gameData :: LiveGameStatusWrapper} -> LiveGameWrapper
   deriving (Show, Eq)
 
 instance FromJSON LiveGameWrapper where
