@@ -33,11 +33,11 @@ main = do
             processAndPrintGames (Right gameSchedule)
         Left errMsg -> putStrLn $ "Failed to fetch game schedule: " ++ errMsg
 
-    putStrLn "Testing fetchGameScheduleForDate:"
-    testFetchGameScheduleForDate "2023-08-22"
+    -- putStrLn "Testing fetchGameScheduleForDate:"
+    -- testFetchGameScheduleForDate "2023-08-22"
 
-    putStrLn "Testing fetchFinishedBxScore:"
-    testFetchFinishedBxScore 716896
+    -- putStrLn "Testing fetchFinishedBxScore:"
+    -- testFetchFinishedBxScore 716896
 
 testFetchGameScheduleForDate :: String -> IO ()
 testFetchGameScheduleForDate  date = do
