@@ -8,7 +8,15 @@ import qualified Data.Map.Strict as M
 import qualified Data.ByteString as B
 import Data.ByteString ( ByteString)
 import Data.ByteString.Lazy.Char8 (pack)
-import Data.Aeson (decode, Result(Success), FromJSON(..), Value, (.:), (.:?), (.!=), fromJSON, withObject, eitherDecodeStrict)
+import Data.Aeson   ( decode
+                    , Result(Success)
+                    , FromJSON(..)
+                    , Value
+                    , (.:), (.:?), (.!=)
+                    , fromJSON
+                    , withObject
+                    , eitherDecodeStrict
+                    )
 import Data.Aeson.Types (Parser, Result(..))
 import Control.Monad (filterM)
 import Data.Maybe (catMaybes)
@@ -31,6 +39,13 @@ import Scraper  ( fetchGameScheduleForDate
                 , printProcessedGameData
                 , processAndPrintGames
                 , convertGameDataToOutputData
+            -- Under Construction 
+                -- , isChecksumDifferent
+                -- , mergeOutputData
+                -- , outputFilePath
+                -- , generateChecksum 
+                -- , processDate
+                -- , processDateRange
                 )
 
 main :: IO ()
