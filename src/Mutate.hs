@@ -52,7 +52,7 @@ main = do
     case parsedResult of
         Left err -> putStrLn $ "Failed to parse JSON: " ++ err
         Right gameData -> print gameData
-    -- testing BoxscoreScraper
+    -- testing Scraper
     -- Fetch game schedule for a specific date, e.g., "2023-09-05"
     -- gameScheduleMaybe <- fetchGameScheduleForDate "2023-08-22"
     -- let parsedThingey = eitherDecodeStrict gameScheduleMaybe :: Either String GameData

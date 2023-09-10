@@ -3,20 +3,21 @@
 {-# HLINT ignore "Redundant id" #-}
 {-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE DoAndIfThenElse #-}
 
 module Scraper
     ( fetchGameScheduleForDate
     , scheduleUrl
-    , hasGamesForDate 
-    , extractGameIds 
-    , gameStatusUrl 
-    , boxScoreUrl 
-    , fetchAndDecode 
+    , hasGamesForDate
+    , extractGameIds
+    , gameStatusUrl
+    , boxScoreUrl
+    , fetchAndDecode
     , fetchGameStatus
-    , fetchFinishedBxScore 
-    , processGameIds 
+    , fetchFinishedBxScore
+    , processGameIds
     , printProcessedGameData
-    , processAndPrintGames 
+    , processAndPrintGames
     , convertGameDataToOutputData
     , GameSchedule
     , DateEntry
@@ -32,7 +33,8 @@ import Network.HTTP.Simple
       httpBS,
       parseRequest_,
       getResponseBody )
-import Data.Time ()
+import Data.Time
+    ( addDays, diffDays, parseTimeOrError, defaultTimeLocale )
 import Data.Time.Clock.POSIX ()
 import Data.ByteString (ByteString, empty)
 import qualified Data.Vector as V
@@ -54,6 +56,9 @@ import Data.Aeson
 import GHC.Generics ( Generic )
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy.Char8 as BS
+import qualified Crypto.Hash.SHA256 as SHA256
+
 import qualified InputADT as IN
 import InputADT
     ( GameData(..)
@@ -185,3 +190,57 @@ convertGameDataToOutputData gameData =
     , od_checksum = "c0d122700c4f7b97b39d485c179556db02d8ca4113fec5a18ba1cde0b6be28e2"  -- TODO: calculate checksum
     , od_date = "2023_08_22"  -- dummy value, needs to be filled in properly
     }
+
+-- ## New Stuff ##
+{- 
+isChecksumDifferent :: BS.ByteString -> String -> Bool
+isChecksumDifferent date checksum = do
+    let filePath = outputFilePath date
+    not (doesFileExist filePath)
+  ||
+    (do fileData <- BS.readFile filePath
+        let fileChecksum = generateChecksum fileData
+        fileChecksum /= checksum)
+
+mergeOutputData :: [OUT.OutputData] -> OUT.OutputData
+ 
+outputFilePath :: String -> String
+
+-- Generate the SHA-256 checksum for a given ByteString
+generateChecksum :: BS.ByteString -> String
+generateChecksum bs = show $ SHA256.hashlazy bs
+
+-- Fetch, process, and save game data for a given date
+processDate :: String -> IO ()
+processDate date = do
+    gameScheduleEither <- fetchGameScheduleForDate date
+    case gameScheduleEither of
+        Left errMsg -> putStrLn errMsg
+        Right gameSchedule -> do
+            if hasGamesForDate gameSchedule then do
+                let gameIds = extractGameIds gameSchedule
+                gameDataMapEither <- processGameIds gameIds
+                case gameDataMapEither of
+                    Left errMsg -> putStrLn errMsg
+                    Right gameDataMap -> do
+                        let gameDataList = M.elems gameDataMap
+                        let outputDataList = map convertGameDataToOutputData gameDataList
+                        let mergedOutputData = mergeOutputData outputDataList
+                        let jsonData = encode mergedOutputData
+                        let checksum = generateChecksum jsonData
+                        if isChecksumDifferent date checksum then
+                            BS.writeFile (outputFilePath date) jsonData
+                        else
+                            putStrLn $ "Data for " ++ date ++ " has not changed, skipping..."
+            else
+                putStrLn $ "No games scheduled for " ++ date
+
+-- The master function
+processDateRange :: String -> String -> IO ()
+processDateRange startDate endDate = do
+    let startDay = parseTimeOrError False defaultTimeLocale "%Y-%m-%d" startDate :: Day
+    let endDay = parseTimeOrError False defaultTimeLocale "%Y-%m-%d" endDate :: Day
+    let daysBetween = [0..diffDays endDay startDay]
+    let dateStrings = map (\d -> formatTime defaultTimeLocale "%Y-%m-%d" (addDays d startDay)) daysBetween
+    mapM_ processDate dateStrings
+ -}
