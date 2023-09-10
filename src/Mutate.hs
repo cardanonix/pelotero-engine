@@ -14,14 +14,25 @@ import Data.Aeson.Types (Parser, Result(..))
 import Control.Monad (filterM)
 import Data.Maybe (catMaybes)
 import Debug.Trace (traceShowM)
-import InputADT
+import InputADT ( GameData
+                , LiveGameWrapper
+                , GameSchedule
+                )       
+import OutputADT (OutputData)
 import Scraper  ( fetchGameScheduleForDate
-                        , hasGamesForDate
-                        , extractGameIds
-                        , processAndPrintGames
-                        , fetchFinishedBxScore
-                        , fetchGameStatus
-                        )
+                , scheduleUrl
+                , hasGamesForDate 
+                , extractGameIds 
+                , gameStatusUrl 
+                , boxScoreUrl 
+                , fetchAndDecode 
+                , fetchGameStatus
+                , fetchFinishedBxScore 
+                , processGameIds 
+                , printProcessedGameData
+                , processAndPrintGames 
+                , convertGameDataToOutputData
+                )
 
 main :: IO ()
 main = do
