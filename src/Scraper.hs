@@ -54,7 +54,7 @@ import Data.Aeson
 import GHC.Generics ( Generic )
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString as B
-import qualified InputADT as I
+import qualified InputADT as IN
 import InputADT
     ( GameData(..)
     , LiveGameStatusWrapper(..)
@@ -67,7 +67,7 @@ import InputADT
     , Player (..)
     , PlayerStats (..)
     )
-import qualified OutputADT as O
+import qualified OutputADT as OUT
 import OutputADT
     ( PlayerData (..)
     , PlayerStatsOutput (..)
@@ -75,7 +75,7 @@ import OutputADT
     )
 
 -- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule
-fetchGameScheduleForDate :: String -> IO (Either String I.GameSchedule)
+fetchGameScheduleForDate :: String -> IO (Either String IN.GameSchedule)
 fetchGameScheduleForDate date = fetchAndDecode (scheduleUrl date)
 
 -- Generate the API URL for a single day's schedule
@@ -83,11 +83,11 @@ scheduleUrl :: String -> String
 scheduleUrl date = "https://statsapi.mlb.com/api/v1/schedule/games/?language=en&sportId=1&startDate=" ++ date ++ "&endDate=" ++ date
 
 -- Takes a schedule bytestring and outputs true if games are happening, false otherwise.
-hasGamesForDate :: I.GameSchedule -> Bool
+hasGamesForDate :: IN.GameSchedule -> Bool
 hasGamesForDate schedule = any (isJust . games) (dates schedule)
 
 -- Takes a schedule bytestring and outputs an array of gameId's or errors
-extractGameIds :: I.GameSchedule -> [Int]
+extractGameIds :: IN.GameSchedule -> [Int]
 extractGameIds gameData = concatMap (maybe [] (V.toList . fmap gamePk) . games) (dates gameData)
 
 -- Generate the API URL for live game status
@@ -105,11 +105,11 @@ fetchAndDecode url = do
     return $ eitherDecodeStrict $ getResponseBody response
 
 -- takes a gameId and returns IO (Either String LiveGameWrapper)
-fetchGameStatus :: Int -> IO (Either String I.LiveGameWrapper)
+fetchGameStatus :: Int -> IO (Either String IN.LiveGameWrapper)
 fetchGameStatus gameId = fetchAndDecode (gameStatusUrl gameId)
 
 -- takes a gameId and returns IO (Either String GameData)
-fetchFinishedBxScore :: Int -> IO (Either String I.GameData)
+fetchFinishedBxScore :: Int -> IO (Either String IN.GameData)
 fetchFinishedBxScore gameId = do
     gameStatusResult <- fetchGameStatus gameId
     case gameStatusResult of
@@ -122,7 +122,7 @@ fetchFinishedBxScore gameId = do
         Left err -> return $ Left ("Error fetching game status: " ++ err)
 
 --maps fetchFinishedBxScore over an array of game id's and returns IO (M.Map Int ByteString)
-processGameIds :: [Int] -> IO (Either String (M.Map Int I.GameData))
+processGameIds :: [Int] -> IO (Either String (M.Map Int IN.GameData))
 processGameIds gameIds = do
     results <- mapM fetchFinishedBxScore gameIds
     case sequence results of
@@ -130,14 +130,14 @@ processGameIds gameIds = do
         Right gameDataList -> return $ Right $ M.fromList $ zip gameIds gameDataList
 
 -- takes a list of tuples game id's and game data and prints them
-printProcessedGameData :: Either String (M.Map Int I.GameData) -> IO ()
+printProcessedGameData :: Either String (M.Map Int IN.GameData) -> IO ()
 printProcessedGameData gameDataMapEither =
     case gameDataMapEither of
         Left errMsg -> putStrLn errMsg
         Right gameDataMap -> mapM_ (\(gameId, gameData) -> putStrLn $ show gameId ++ ": " ++ show gameData) (M.toList gameDataMap)
 
 -- print the schedule bytestring
-processAndPrintGames :: Either String I.GameSchedule -> IO ()
+processAndPrintGames :: Either String IN.GameSchedule -> IO ()
 processAndPrintGames gameScheduleEither =
     case gameScheduleEither of
         Left errMsg -> putStrLn errMsg
@@ -152,30 +152,30 @@ processAndPrintGames gameScheduleEither =
 -- ## OUTPUT CONVERSION ##
 
 -- Convert from Input to Output function
-convertGameDataToOutputData :: I.GameData -> O.OutputData
+convertGameDataToOutputData :: IN.GameData -> OUT.OutputData
 convertGameDataToOutputData gameData =
     let
         -- Extract player data from TeamData and create PlayerData
-        extractPlayerData :: I.TeamData -> [O.PlayerData]
+        extractPlayerData :: IN.TeamData -> [OUT.PlayerData]
         extractPlayerData teamData =
             [ PlayerData
-                { pd_player_id = I.personId $ person player
-                , pd_fullName = I.fullName $ person player
+                { pd_player_id = IN.personId $ person player
+                , pd_fullName = IN.fullName $ person player
                 , pd_stats = M.fromList [(parentTeamId player, convertPlayerStats player (stats player))]
                 }
             | player <- M.elems $ players teamData]
         -- Convert PlayerStats to PlayerStatsOutput
-        convertPlayerStats :: I.Player -> I.PlayerStats -> O.PlayerStatsOutput
+        convertPlayerStats :: IN.Player -> IN.PlayerStats -> OUT.PlayerStatsOutput
         convertPlayerStats player playerStats =
             PlayerStatsOutput
-            { pso_parentTeamId = I.parentTeamId player
-            , pso_allPositions = I.allPositions player
-            , pso_status = I.status_code $ status player
-            , pso_batting = I.batting playerStats
-            , pso_pitching = I.pitching playerStats
+            { pso_parentTeamId = IN.parentTeamId player
+            , pso_allPositions = IN.allPositions player
+            , pso_status = IN.status_code $ status player
+            , pso_batting = IN.batting playerStats
+            , pso_pitching = IN.pitching playerStats
             }
 
-        allPlayerData = (extractPlayerData (I.away $ teams gameData) ++ extractPlayerData (I.home $ teams gameData))
+        allPlayerData = (extractPlayerData (IN.away $ teams gameData) ++ extractPlayerData (IN.home $ teams gameData))
         playerMap = M.fromList [(pd_player_id pd, pd) | pd <- allPlayerData]
 
     in
