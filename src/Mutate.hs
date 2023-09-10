@@ -8,7 +8,6 @@ import qualified Data.Map.Strict as M
 import qualified Data.ByteString as B
 import Data.ByteString ( ByteString)
 import Data.ByteString.Lazy.Char8 (pack)
-import qualified Data.ByteString as B (readFile)
 import Data.Aeson (decode, Result(Success), FromJSON(..), Value, (.:), (.:?), (.!=), fromJSON, withObject, eitherDecodeStrict)
 import Data.Aeson.Types (Parser, Result(..))
 import Control.Monad (filterM)
@@ -17,20 +16,20 @@ import Debug.Trace (traceShowM)
 import InputADT ( GameData
                 , LiveGameWrapper
                 , GameSchedule
-                )       
+                )
 import OutputADT (OutputData)
 import Scraper  ( fetchGameScheduleForDate
                 , scheduleUrl
-                , hasGamesForDate 
-                , extractGameIds 
-                , gameStatusUrl 
-                , boxScoreUrl 
-                , fetchAndDecode 
+                , hasGamesForDate
+                , extractGameIds
+                , gameStatusUrl
+                , boxScoreUrl
+                , fetchAndDecode
                 , fetchGameStatus
-                , fetchFinishedBxScore 
-                , processGameIds 
+                , fetchFinishedBxScore
+                , processGameIds
                 , printProcessedGameData
-                , processAndPrintGames 
+                , processAndPrintGames
                 , convertGameDataToOutputData
                 )
 
@@ -60,7 +59,7 @@ main = do
     -- case parsedThingey of
     --     Left err -> putStrLn $ "Failed to parse JSON: " ++ err
     --     Right gameData -> print gameData
-    
+
     -- gameScheduleResult <- fetchGameScheduleForDate "2023-08-22"
 
     -- case gameScheduleResult of

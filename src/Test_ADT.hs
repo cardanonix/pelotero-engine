@@ -6,7 +6,6 @@ import qualified Data.Map.Strict as M
 import qualified Data.ByteString as B
 import Data.ByteString ( ByteString)
 import Data.ByteString.Lazy.Char8 (pack)
-import qualified Data.ByteString as B (readFile)
 import Data.Aeson (decode, Result(Success), FromJSON(..), Value, (.:), (.:?), (.!=), fromJSON, withObject, eitherDecodeStrict)
 import Data.Aeson.Types (Parser, Result(..))
 import Control.Monad (filterM)
