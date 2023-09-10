@@ -26,6 +26,7 @@ executable scraper
                 , text
                 , debug-trace-var
                 , containers
+                , cryptohash-sha256
 
 
 executable mutant
@@ -48,6 +49,7 @@ executable mutant
                 , text
                 , debug-trace-var
                 , containers
+                , cryptohash-sha256
 
 
 executable test_adt
@@ -70,3 +72,4 @@ executable test_adt
                 , text
                 , debug-trace-var
                 , containers
+                , cryptohash-sha256
