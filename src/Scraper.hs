@@ -6,12 +6,15 @@
 {-# LANGUAGE DoAndIfThenElse #-}
 
 module Scraper
-    ( fetchGameScheduleForDate
+    ( withEither
+    , fetchGameScheduleForDate
+    , fetchActiveRoster
     , scheduleUrl
     , hasGamesForDate
     , extractGameIds
     , gameStatusUrl
     , boxScoreUrl
+    , rosterUrl
     , fetchAndDecode
     , fetchGameStatus
     , fetchFinishedBxScore
@@ -19,20 +22,40 @@ module Scraper
     , printProcessedGameData
     , processAndPrintGames
     , convertGameDataToOutputData
-    , GameSchedule
-    , DateEntry
-    , GameID
-    , LiveGameStatus
-    , LiveGameWrapper
+    , generateChecksum
+    , outputFilePath
+    , fetchAndConvertGameIds
+    , mergeOutputData
+    , processDate
+    , processDateRange
+    , ActiveRoster
+    , ActivePlayer
+    , GameData
+    , Teams
+    , TeamData
+    , Players
+    , Player 
+    , Person
+    , Position
+    , Status
+    , PlayerStats
+    , BattingStats
+    , PitchingStats
+    , GameSchedule 
+    , DateEntry 
+    , GameID 
+    , LiveGameStatus 
+    , LiveGameStatusWrapper 
+    , LiveGameWrapper 
+    , OutputData
+    , PlayerData
+    , PlayerStatsOutput
     ) where
 
 import Network.HTTP.Simple
     ( parseRequest_,
       getResponseBody,
-      httpBS,
-      httpBS,
-      parseRequest_,
-      getResponseBody )
+      httpBS )
 import Data.Time
     ( Day, addDays, diffDays, parseTimeOrError, defaultTimeLocale, formatTime )
 import Data.Time.Clock.POSIX ()
@@ -43,7 +66,6 @@ import qualified Data.Map as M
 import Data.Text (Text)
 import Data.Aeson
     ( eitherDecode,
-      eitherDecodeStrict,
       encode,
       (.:),
       (.:?),
@@ -173,7 +195,7 @@ processAndPrintGames gameScheduleEither =
 -- ## OUTPUT CONVERSION ##
 
 -- Convert from Input to Output function
-convertGameDataToOutputData :: IN.GameData -> OUT.OutputData
+convertGameDataToOutputData :: IN.GameData -> OutputData
 convertGameDataToOutputData gameData =
     let
         -- Extract player data from TeamData and create PlayerData
@@ -185,20 +207,17 @@ convertGameDataToOutputData gameData =
                 , pd_stats = M.fromList [(parentTeamId player, convertPlayerStats player (stats player))]
                 }
             | player <- M.elems $ players teamData]
+        
         -- Convert PlayerStats to PlayerStatsOutput
         convertPlayerStats :: IN.Player -> IN.PlayerStats -> OUT.PlayerStatsOutput
         convertPlayerStats player playerStats =
-            PlayerStatsOutput
+            OUT.PlayerStatsOutput
             { pso_parentTeamId = IN.parentTeamId player
             , pso_allPositions = IN.allPositions player
             , pso_status = IN.status_code $ status player
-            , pso_batting = IN.batting playerStats
-            , pso_pitching = IN.pitching playerStats
+            , pso_batting = mergeBattingStats (IN.batting playerStats) (OUT.batting playerStats)  -- Added merging here
+            , pso_pitching = mergePitchingStats (IN.pitching playerStats) (OUT.pitching playerStats)  -- Added merging here
             }
-
-        allPlayerData = (extractPlayerData (IN.away $ teams gameData) ++ extractPlayerData (IN.home $ teams gameData))
-        playerMap = M.fromList [(pd_player_id pd, pd) | pd <- allPlayerData]
-
     in
     OutputData
     { od_players = playerMap
@@ -206,8 +225,6 @@ convertGameDataToOutputData gameData =
     , od_checksum = "c0d122700c4f7b97b39d485c179556db02d8ca4113fec5a18ba1cde0b6be28e2"  -- TODO: calculate checksum
     , od_date = "2023_08_22"  -- dummy value, needs to be filled in properly
     }
-
--- ## New Stuff ##
 
 -- Generate the SHA-256 checksum for a given ByteString
 generateChecksum :: BS.ByteString -> String
@@ -217,14 +234,47 @@ generateChecksum bs = show $ SHA256.hashlazy bs
 outputFilePath :: String -> String
 outputFilePath date = "scrapedData/stats/" ++ show date ++ ".json"
 
-mergeOutputData :: IN.GameSchedule -> IO ()
-mergeOutputData gameSchedule = 
-    withEither (return gameSchedule) $ \gameSchedule -> do
-        let gameIds = extractGameIds gameSchedule
-        withEither (processGameIds gameIds) $ \gameDataMap -> do
-            let outputData = M.elems $ M.map convertGameDataToOutputData gameDataMap
-            let combinedJson = encode outputData
-            BS.writeFile "outputData.json" combinedJson
+fetchAndConvertGameIds :: [Int] -> IO (Either String (M.Map Int OUT.PlayerData))
+fetchAndConvertGameIds gameIds = do
+    results <- mapM fetchFinishedBxScore gameIds
+    case sequence results of
+        Left err -> return $ Left err
+        Right gameDataList -> 
+            let playerDataMaps = map (od_players . convertGameDataToOutputData) gameDataList
+            in return $ Right $ foldr (M.unionWith mergePlayerData) M.empty playerDataMaps
+
+mergeOutputData :: Either String (M.Map Int PlayerData) -> IO ()
+mergeOutputData gameDataMapEither =
+    withEither (return gameDataMapEither) $ \gameDataMap -> 
+        let outputData = OutputData
+                         { od_players = gameDataMap
+                        --  , od_games = M.empty
+                        --  -- TODO: Replace with a function or value that generates a checksum
+                        --  , od_checksum = "dummy_checksum"
+                        --  -- TODO: Replace with the actual date you're processing
+                        --  , od_date = "dummy_date"
+                         }
+            combinedJson = encode outputData
+        in BS.writeFile "outputData.json" combinedJson
+
+mergeStats :: OUT.PlayerStats -> OUT.PlayerStats -> OUT.PlayerStats
+mergeStats s1 s2 = 
+    OUT.PlayerStats 
+    { batting = mergeBattingStats <$> batting s1 <*> batting s2
+    , pitching = mergePitchingStats <$> pitching s1 <*> pitching s2
+    }
+
+-- Merge two PlayerData based on their statistics
+mergePlayerData :: OUT.PlayerData -> OUT.PlayerData -> OUT.PlayerData
+mergePlayerData pd1 pd2 =
+    OUT.PlayerData
+        { pd_player_id = pd_player_id pd1  -- Assuming IDs are the same
+        , pd_fullName = pd_fullName pd1    -- Assuming names are the same
+        , pd_stats = M.unionWith mergeStats (pd_stats pd1) (pd_stats pd2)
+        }
+
+mergeAllPlayerData :: [OUT.PlayerData] -> OUT.PlayerData
+mergeAllPlayerData = foldr1 mergePlayerData
 
 -- Fetch, process, and save game data for a given date`
 processDate :: String -> IO ()
@@ -232,23 +282,8 @@ processDate date =
     withEither (fetchGameScheduleForDate date) $ \gameSchedule ->
         if hasGamesForDate gameSchedule then do
             let gameIds = extractGameIds gameSchedule
-            withEither (processGameIds gameIds) $ \gameDataMap -> do
-                let gameDataList = M.elems gameDataMap
-                let outputDataList = map convertGameDataToOutputData gameDataList
-                let mergedOutputData = mergeOutputData outputDataList
-                let jsonData = encode mergedOutputData
-                let checksum = generateChecksum jsonData
-
-                let filePath = outputFilePath date
-                fileExists <- doesFileExist filePath
-
-                if fileExists then do
-                    oldFileData <- BS.readFile filePath
-                    let oldChecksum = generateChecksum oldFileData
-                    when (oldChecksum /= checksum) $ 
-                        BS.writeFile filePath jsonData
-                else
-                    BS.writeFile filePath jsonData
+            gameDataMap <- fetchAndConvertGameIds gameIds
+            mergeOutputData gameDataMap
         else
             putStrLn $ "No games scheduled for " ++ date
 

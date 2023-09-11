@@ -34,11 +34,25 @@ import qualified Data.Vector as V
 import qualified Data.Aeson.Key as K
 import InputADT (BattingStats (..), GameData (..), PitchingStats (..), Player (..), PlayerStats (..), Position (..), TeamData (..), Teams (..), fullName, parentTeamId, person, personId, pitching, status, status_code, stats, allPositions, batting)
 
+data OutputData = OutputData
+  { od_players   :: M.Map Int PlayerData
+  } deriving (Show, Eq)
+
+instance ToJSON OutputData where
+  toJSON od = toJSON (od_players od)
+  
 data PlayerData = PlayerData
   { pd_player_id  :: Int
   , pd_fullName   :: Text
   , pd_stats      :: M.Map Int PlayerStatsOutput
   } deriving (Show, Eq)
+
+instance ToJSON PlayerData where
+  toJSON pd = object
+    [ "player_id" .= pd_player_id pd
+    , "fullName"  .= pd_fullName pd
+    , "stats"     .= pd_stats pd
+    ]
 
 data PlayerStatsOutput = PlayerStatsOutput
   { pso_parentTeamId :: Int
@@ -47,28 +61,6 @@ data PlayerStatsOutput = PlayerStatsOutput
   , pso_batting      :: Maybe BattingStats
   , pso_pitching     :: Maybe PitchingStats
   } deriving (Show, Eq)
-
-data OutputData = OutputData
-  { od_players   :: M.Map Int PlayerData
-  , od_games     :: M.Map Int Text
-  , od_checksum  :: Text
-  , od_date      :: Text
-  } deriving (Show, Eq)
-
-instance ToJSON OutputData where
-  toJSON od = object
-    [ "players"   .= od_players od
-    , "games"     .= od_games od
-    , "checksum"  .= od_checksum od
-    , "date"      .= od_date od
-    ]
-
-instance ToJSON PlayerData where
-  toJSON pd = object
-    [ "player_id" .= pd_player_id pd
-    , "fullName"  .= pd_fullName pd
-    , "stats"     .= pd_stats pd
-    ]
 
 instance ToJSON PlayerStatsOutput where
   toJSON pso = object $ catMaybes
@@ -80,7 +72,7 @@ instance ToJSON PlayerStatsOutput where
     ]
 
 instance ToJSON Position where
-    toJSON pos = object ["code" .= pos_code pos]
+    toJSON pos = toJSON (read (Text.unpack (pos_code pos)) :: Int)
 
 instance ToJSON PitchingStats where
     toJSON pitStats = object $ catMaybes

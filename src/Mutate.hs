@@ -26,12 +26,15 @@ import InputADT ( GameData
                 , GameSchedule
                 )
 import OutputADT (OutputData)
-import Scraper  ( fetchGameScheduleForDate
+import Scraper  ( withEither
+                , fetchGameScheduleForDate
+                , fetchActiveRoster
                 , scheduleUrl
                 , hasGamesForDate
                 , extractGameIds
                 , gameStatusUrl
                 , boxScoreUrl
+                , rosterUrl
                 , fetchAndDecode
                 , fetchGameStatus
                 , fetchFinishedBxScore
@@ -39,9 +42,10 @@ import Scraper  ( fetchGameScheduleForDate
                 , printProcessedGameData
                 , processAndPrintGames
                 , convertGameDataToOutputData
-                , mergeOutputData
+                , generateChecksum
                 , outputFilePath
-                , generateChecksum 
+                , fetchAndConvertGameIds
+                , mergeOutputData
                 , processDate
                 , processDateRange
                 )
