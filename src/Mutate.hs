@@ -39,72 +39,22 @@ import Scraper  ( fetchGameScheduleForDate
                 , printProcessedGameData
                 , processAndPrintGames
                 , convertGameDataToOutputData
-            -- Under Construction 
-                -- , isChecksumDifferent
-                -- , mergeOutputData
-                -- , outputFilePath
-                -- , generateChecksum 
-                -- , processDate
-                -- , processDateRange
+                , mergeOutputData
+                , outputFilePath
+                , generateChecksum 
+                , processDate
+                , processDateRange
                 )
 
 main :: IO ()
 main = do
 
+    -- -- Prompt the user for a date
+    -- putStrLn "Enter date to process (YYYY-MM-DD):"
+    -- date <- getLine
 
-    jsonData <- B.readFile "testFiles/mlb/boxscore_716896.json"
-    let parsedResult = eitherDecodeStrict jsonData :: Either String GameData
-    case parsedResult of
-        Left err -> putStrLn $ "Failed to parse JSON: " ++ err
-        Right gameData -> print gameData
-    -- handPicked <- B.readFile "testFiles/shortened.json"
-    -- let parsedResult = eitherDecodeStrict handPicked :: Either String GameData
-    -- case parsedResult of
-    --     Left err -> putStrLn $ "Failed to parse JSON: " ++ err
-    --     Right gameData -> print gameData
-    jsonData <- B.readFile "testFiles/mlb/boxscore_716896.json"
-    let parsedResult = eitherDecodeStrict jsonData :: Either String GameData
-    case parsedResult of
-        Left err -> putStrLn $ "Failed to parse JSON: " ++ err
-        Right gameData -> print gameData
-    -- testing Scraper
-    -- Fetch game schedule for a specific date, e.g., "2023-09-05"
-    -- gameScheduleMaybe <- fetchGameScheduleForDate "2023-08-22"
-    -- let parsedThingey = eitherDecodeStrict gameScheduleMaybe :: Either String GameData
-    -- case parsedThingey of
-    --     Left err -> putStrLn $ "Failed to parse JSON: " ++ err
-    --     Right gameData -> print gameData
+    -- Process the given date
+    processDate "2023-08-22"
 
-    -- gameScheduleResult <- fetchGameScheduleForDate "2023-08-22"
-
-    -- case gameScheduleResult of
-    --     Right gameSchedule -> do
-    --         putStrLn "Processing games..."
-    --         putStrLn ".."
-    --         putStrLn "..."
-    --         putStrLn "HERE THEY ARE!"
-    --         processAndPrintGames (Right gameSchedule)
-    --     Left errMsg -> putStrLn $ "Failed to fetch game schedule: " ++ errMsg
-
-    -- -- putStrLn "Testing fetchGameScheduleForDate:"
-    -- -- testFetchGameScheduleForDate "2023-08-22"
-
-    -- -- putStrLn "Testing fetchFinishedBxScore:"
-    -- -- testFetchFinishedBxScore 716896
-
--- testFetchGameScheduleForDate :: String -> IO ()
--- testFetchGameScheduleForDate  date = do
---     result <- fetchGameScheduleForDate date
---     case result of
---         Left errMsg -> putStrLn $ "Failed to fetch game schedule: " ++ errMsg
---         Right schedule -> putStrLn $ "Fetched game schedule: " ++ show schedule
-
--- testFetchFinishedBxScore :: Int -> IO ()
--- testFetchFinishedBxScore game = do
---     jsonData <- B.readFile "testFiles/mlb/boxscore_716896.json"
---     let pickedgame = game
---     result <- fetchFinishedBxScore pickedgame
---     case result of
---         Left errMsg -> putStrLn $ "Failed to fetch game box score: " ++ errMsg
---         Right gameData -> putStrLn $ "Fetched box score: " ++ show gameData
---     -- eventually compare the fetched result to jsonData or other expected data...
+    -- Completion message
+    putStrLn "Processing completed for the given date!"

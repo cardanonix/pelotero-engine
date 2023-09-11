@@ -28,6 +28,7 @@ executable scraper
                 , containers
                 , cryptohash-sha256
                 , scientific
+                , directory
 
 
 executable mutant
@@ -52,6 +53,7 @@ executable mutant
                 , containers
                 , cryptohash-sha256
                 , scientific
+                , directory
 
 
 executable test_adt
@@ -76,3 +78,4 @@ executable test_adt
                 , containers
                 , cryptohash-sha256
                 , scientific
+                , directory

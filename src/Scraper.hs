@@ -34,7 +34,7 @@ import Network.HTTP.Simple
       parseRequest_,
       getResponseBody )
 import Data.Time
-    ( addDays, diffDays, parseTimeOrError, defaultTimeLocale )
+    ( Day, addDays, diffDays, parseTimeOrError, defaultTimeLocale, formatTime )
 import Data.Time.Clock.POSIX ()
 import Data.ByteString (ByteString, empty)
 import qualified Data.Vector as V
@@ -58,6 +58,8 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Crypto.Hash.SHA256 as SHA256
+import System.Directory (createDirectoryIfMissing, doesFileExist)
+import Control.Monad (when, filterM)
 
 import qualified InputADT as IN
 import InputADT
@@ -79,6 +81,14 @@ import OutputADT
     , PlayerStatsOutput (..)
     , OutputData (..)
     )
+
+-- monadic error handling for fetching and decoding
+withEither :: IO (Either String a) -> (a -> IO ()) -> IO ()
+withEither action successHandler = do
+    result <- action
+    case result of
+        Left err       -> putStrLn err
+        Right dataPacket -> successHandler dataPacket
 
 -- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule
 fetchGameScheduleForDate :: String -> IO (Either String IN.GameSchedule)
@@ -147,22 +157,18 @@ processGameIds gameIds = do
 -- takes a list of tuples game id's and game data and prints them
 printProcessedGameData :: Either String (M.Map Int IN.GameData) -> IO ()
 printProcessedGameData gameDataMapEither =
-    case gameDataMapEither of
-        Left errMsg -> putStrLn errMsg
-        Right gameDataMap -> mapM_ (\(gameId, gameData) -> putStrLn $ show gameId ++ ": " ++ show gameData) (M.toList gameDataMap)
+    withEither (return gameDataMapEither) $ \gameDataMap -> 
+        mapM_ (\(gameId, gameData) -> putStrLn $ show gameId ++ ": " ++ show gameData) (M.toList gameDataMap)
 
 -- print the schedule bytestring
 processAndPrintGames :: Either String IN.GameSchedule -> IO ()
 processAndPrintGames gameScheduleEither =
-    case gameScheduleEither of
-        Left errMsg -> putStrLn errMsg
-        Right gameSchedule ->
-            if hasGamesForDate gameSchedule
-            then do
-                let gameIds = extractGameIds gameSchedule
-                gameDataMap <- processGameIds gameIds
-                printProcessedGameData gameDataMap
-            else putStrLn "No games scheduled for the provided date."
+    withEither (return gameScheduleEither) $ \gameSchedule -> 
+        if hasGamesForDate gameSchedule then do
+            let gameIds = extractGameIds gameSchedule
+            gameDataMap <- processGameIds gameIds
+            printProcessedGameData gameDataMap
+        else putStrLn "No games scheduled for the provided date."
 
 -- ## OUTPUT CONVERSION ##
 
@@ -202,48 +208,49 @@ convertGameDataToOutputData gameData =
     }
 
 -- ## New Stuff ##
-{- 
-isChecksumDifferent :: BS.ByteString -> String -> Bool
-isChecksumDifferent date checksum = do
-    let filePath = outputFilePath date
-    not (doesFileExist filePath)
-  ||
-    (do fileData <- BS.readFile filePath
-        let fileChecksum = generateChecksum fileData
-        fileChecksum /= checksum)
-
-mergeOutputData :: [OUT.OutputData] -> OUT.OutputData
- 
-outputFilePath :: String -> String
 
 -- Generate the SHA-256 checksum for a given ByteString
 generateChecksum :: BS.ByteString -> String
 generateChecksum bs = show $ SHA256.hashlazy bs
+ 
+-- Generate the filename for the current day's stat file
+outputFilePath :: String -> String
+outputFilePath date = "scrapedData/stats/" ++ show date ++ ".json"
 
--- Fetch, process, and save game data for a given date
+mergeOutputData :: IN.GameSchedule -> IO ()
+mergeOutputData gameSchedule = 
+    withEither (return gameSchedule) $ \gameSchedule -> do
+        let gameIds = extractGameIds gameSchedule
+        withEither (processGameIds gameIds) $ \gameDataMap -> do
+            let outputData = M.elems $ M.map convertGameDataToOutputData gameDataMap
+            let combinedJson = encode outputData
+            BS.writeFile "outputData.json" combinedJson
+
+-- Fetch, process, and save game data for a given date`
 processDate :: String -> IO ()
-processDate date = do
-    gameScheduleEither <- fetchGameScheduleForDate date
-    case gameScheduleEither of
-        Left errMsg -> putStrLn errMsg
-        Right gameSchedule -> do
-            if hasGamesForDate gameSchedule then do
-                let gameIds = extractGameIds gameSchedule
-                gameDataMapEither <- processGameIds gameIds
-                case gameDataMapEither of
-                    Left errMsg -> putStrLn errMsg
-                    Right gameDataMap -> do
-                        let gameDataList = M.elems gameDataMap
-                        let outputDataList = map convertGameDataToOutputData gameDataList
-                        let mergedOutputData = mergeOutputData outputDataList
-                        let jsonData = encode mergedOutputData
-                        let checksum = generateChecksum jsonData
-                        if isChecksumDifferent date checksum then
-                            BS.writeFile (outputFilePath date) jsonData
-                        else
-                            putStrLn $ "Data for " ++ date ++ " has not changed, skipping..."
-            else
-                putStrLn $ "No games scheduled for " ++ date
+processDate date = 
+    withEither (fetchGameScheduleForDate date) $ \gameSchedule ->
+        if hasGamesForDate gameSchedule then do
+            let gameIds = extractGameIds gameSchedule
+            withEither (processGameIds gameIds) $ \gameDataMap -> do
+                let gameDataList = M.elems gameDataMap
+                let outputDataList = map convertGameDataToOutputData gameDataList
+                let mergedOutputData = mergeOutputData outputDataList
+                let jsonData = encode mergedOutputData
+                let checksum = generateChecksum jsonData
+
+                let filePath = outputFilePath date
+                fileExists <- doesFileExist filePath
+
+                if fileExists then do
+                    oldFileData <- BS.readFile filePath
+                    let oldChecksum = generateChecksum oldFileData
+                    when (oldChecksum /= checksum) $ 
+                        BS.writeFile filePath jsonData
+                else
+                    BS.writeFile filePath jsonData
+        else
+            putStrLn $ "No games scheduled for " ++ date
 
 -- The master function
 processDateRange :: String -> String -> IO ()
@@ -253,4 +260,3 @@ processDateRange startDate endDate = do
     let daysBetween = [0..diffDays endDay startDay]
     let dateStrings = map (\d -> formatTime defaultTimeLocale "%Y-%m-%d" (addDays d startDay)) daysBetween
     mapM_ processDate dateStrings
- -}
