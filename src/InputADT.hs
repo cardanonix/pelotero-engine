@@ -14,12 +14,52 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as B (readFile)
 import Data.ByteString.Lazy.Char8 (pack)
 import qualified Data.Map.Strict as M
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as V
 
--- Top level data type
+
+-- Top level structure to handle the list of people
+data ActiveRoster = ActiveRoster
+  { people :: [ActivePlayer]
+  } deriving (Show, Eq)
+
+instance FromJSON ActiveRoster where
+  parseJSON :: Value -> Parser ActiveRoster
+  parseJSON = withObject "ActiveRoster" $ \v -> do
+    people <- v .: "people"
+    return $ ActiveRoster people
+
+-- PlayerInfo data type
+data ActivePlayer = ActivePlayer
+  { playerId :: Int,
+    useName :: Maybe Text, -- Made optional
+    useLastName :: Maybe Text, -- Made optional
+    nameSlug :: Maybe Text, -- Made optional
+    currentTeam :: Maybe Int,
+    primaryPosition :: Maybe Text,
+    batSide:: Maybe Text,
+    pitchHand :: Maybe Text,
+    active :: Bool
+  }
+  deriving (Show, Eq)
+
+instance FromJSON ActivePlayer where
+  parseJSON :: Value -> Parser ActivePlayer
+  parseJSON = withObject "ActivePlayer" $ \v -> do
+    playerId <- v .: "id"
+    useName <- v .:? "useName"
+    useLastName <- v .:? "useLastName"
+    nameSlug <- v .:? "nameSlug"
+    currentTeam <- v .:? "currentTeam" >>= traverse (.: "id")
+    primaryPosition <- v .:? "primaryPosition" >>= traverse (.: "code")
+    batSide <- v .:? "batSide" >>= traverse (.: "code")
+    pitchHand <- v .:? "pitchHand" >>= traverse (.: "code")
+    active <- v .: "active"
+    return $ ActivePlayer playerId useName useLastName nameSlug currentTeam primaryPosition batSide pitchHand active
+
+-- Top level Stats data type
 data GameData = GameData
   { teams :: Teams
   }

@@ -71,6 +71,7 @@ import InputADT
     , TeamData(..)
     , Player (..)
     , PlayerStats (..)
+    , ActivePlayer (..)
     )
 import qualified OutputADT as OUT
 import OutputADT
@@ -82,6 +83,10 @@ import OutputADT
 -- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule
 fetchGameScheduleForDate :: String -> IO (Either String IN.GameSchedule)
 fetchGameScheduleForDate date = fetchAndDecode (scheduleUrl date)
+
+-- takes a season and outputs a roster bytestring of that season
+fetchActiveRoster :: Int -> IO (Either String IN.ActivePlayer)
+fetchActiveRoster season = fetchAndDecode (rosterUrl season)
 
 -- Generate the API URL for a single day's schedule
 scheduleUrl :: String -> String
@@ -102,6 +107,11 @@ gameStatusUrl gameId = "https://statsapi.mlb.com//api/v1.1/game/" ++ show gameId
 -- Generate the API URL for finished boxscore
 boxScoreUrl :: Int -> String
 boxScoreUrl gameId = "http://statsapi.mlb.com/api/v1/game/" ++ show gameId ++ "/boxscore"
+
+-- Generate the API URL for specific year 
+rosterUrl :: Int -> String
+rosterUrl season = "https://statsapi.mlb.com/api/v1/sports/1/players?activeStatus=ACTIVE&season=" ++ show season
+
 
 -- Fetch and decode utility
 fetchAndDecode :: FromJSON a => String -> IO (Either String a)
