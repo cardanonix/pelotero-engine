@@ -15,15 +15,22 @@ import Data.Maybe (catMaybes)
 import Debug.Trace (traceShowM)
 import InputADT
 import Scraper  ( fetchGameScheduleForDate
-                        , hasGamesForDate
-                        , extractGameIds
-                        , processAndPrintGames
-                        , fetchFinishedBxScore
-                        , fetchGameStatus
-                        )
+                , hasGamesForDate
+                , extractGameIds
+                , processAndPrintGames
+                , fetchFinishedBxScore
+                , fetchGameStatus
+                )
+import ConfigADT
 
 main :: IO ()
 main = do
+    -- decoding json file with Configuration ADT using Data.Aeson.Types.FromJSON
+    jsonConfig <- B.readFile "testFiles/prototype_config/config.json"
+    let parsedResult = eitherDecodeStrict jsonConfig :: Either String Configuration
+    case parsedResult of
+        Left err -> putStrLn $ "Failed to parse JSON: " ++ err
+        Right config -> print config
 
     -- decoding json file with ActivePlayer InputADT using Data.Aeson.Types.FromJSON
     jsonRoster <- B.readFile "testFiles/mlb/activePlayers.json"

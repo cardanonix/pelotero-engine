@@ -9,7 +9,7 @@ version: 0.0.2.0
 executable scraper
   hs-source-dirs: src
   main-is: Main.hs
-  other-modules:  InputADT, Scraper, OutputADT
+  other-modules:  InputADT, Scraper, OutputADT, ConfigADT
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -27,12 +27,13 @@ executable scraper
                 , debug-trace-var
                 , containers
                 , cryptohash-sha256
+                , scientific
 
 
 executable mutant
   hs-source-dirs: src
   main-is: Mutate.hs
-  other-modules:  InputADT, Scraper, OutputADT
+  other-modules:  InputADT, Scraper, OutputADT, ConfigADT
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -50,6 +51,7 @@ executable mutant
                 , debug-trace-var
                 , containers
                 , cryptohash-sha256
+                , scientific
 
 
 executable test_adt
@@ -73,3 +75,4 @@ executable test_adt
                 , debug-trace-var
                 , containers
                 , cryptohash-sha256
+                , scientific

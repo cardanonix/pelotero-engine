@@ -20,7 +20,7 @@ import qualified Data.Text as Text
 import qualified Data.Vector as V
 
 
--- Top level structure to handle the list of people
+-- Top level structure for the active roster
 data ActiveRoster = ActiveRoster
   { people :: [ActivePlayer]
   } deriving (Show, Eq)
@@ -34,9 +34,9 @@ instance FromJSON ActiveRoster where
 -- PlayerInfo data type
 data ActivePlayer = ActivePlayer
   { playerId :: Int,
-    useName :: Maybe Text, -- Made optional
-    useLastName :: Maybe Text, -- Made optional
-    nameSlug :: Maybe Text, -- Made optional
+    useName :: Maybe Text,
+    useLastName :: Maybe Text, 
+    nameSlug :: Maybe Text,
     currentTeam :: Maybe Int,
     primaryPosition :: Maybe Text,
     batSide:: Maybe Text,
