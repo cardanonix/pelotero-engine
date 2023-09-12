@@ -257,12 +257,25 @@ mergeOutputData gameDataMapEither =
             combinedJson = encode outputData
         in BS.writeFile "outputData.json" combinedJson
 
-mergeStats :: OUT.PlayerStats -> OUT.PlayerStats -> OUT.PlayerStats
+mergeStats :: PlayerStats -> PlayerStats -> OUT.PlayerData
 mergeStats s1 s2 = 
-    OUT.PlayerStats 
+    OUT.PlayerData 
     { batting = mergeBattingStats <$> batting s1 <*> batting s2
     , pitching = mergePitchingStats <$> pitching s1 <*> pitching s2
     }
+
+mergeBattingStats :: BattingStats -> BattingStats -> BattingStats
+mergeBattingStats s1 s2 = 
+    BattingStats 
+    { ...  -- fill in the fields here with the merged data
+    }
+
+mergePitchingStats :: PitchingStats -> PitchingStats -> PitchingStats
+mergePitchingStats s1 s2 = 
+    PitchingStats 
+    { ...  -- fill in the fields here with the merged data
+    }
+
 
 -- Merge two PlayerData based on their statistics
 mergePlayerData :: OUT.PlayerData -> OUT.PlayerData -> OUT.PlayerData

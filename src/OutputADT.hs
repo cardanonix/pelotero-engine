@@ -32,7 +32,17 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as V
 import qualified Data.Aeson.Key as K
-import InputADT (BattingStats (..), GameData (..), PitchingStats (..), Player (..), PlayerStats (..), Position (..), TeamData (..), Teams (..), fullName, parentTeamId, person, personId, pitching, status, status_code, stats, allPositions, batting)
+import InputADT (BattingStats (..), DateEntry(..), GameID(..), GameData (..), PitchingStats (..), Player (..), PlayerStats (..), Position (..), TeamData (..), Teams (..), fullName, parentTeamId, person, personId, pitching, status, status_code, stats, allPositions, batting)
+
+instance FromJSON DateEntry where
+    parseJSON :: Value -> Parser DateEntry
+    parseJSON = withObject "DateEntry" $ \v -> DateEntry
+        <$> v .:? "games"
+
+instance FromJSON GameID where
+    parseJSON :: Value -> Parser GameID
+    parseJSON = withObject "GameID" $ \v -> GameID
+        <$> v .: "gamePk"
 
 data OutputData = OutputData
   { od_players   :: M.Map Int PlayerData
