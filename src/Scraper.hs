@@ -76,10 +76,6 @@ fetchGameScheduleForDate date = fetchAndDecode (scheduleUrl date)
 fetchActiveRoster :: Int -> IO (Either String IN.ActivePlayer)
 fetchActiveRoster season = fetchAndDecode (rosterUrl season)
 
--- Generate the API URL for a single day's schedule
-scheduleUrl :: String -> String
-scheduleUrl date = "https://statsapi.mlb.com/api/v1/schedule/games/?language=en&sportId=1&startDate=" ++ date ++ "&endDate=" ++ date
-
 -- Takes a schedule bytestring and outputs true if games are happening, false otherwise.
 hasGamesForDate :: IN.GameSchedule -> Bool
 hasGamesForDate schedule = any (isJust . games) (dates schedule)
@@ -87,6 +83,10 @@ hasGamesForDate schedule = any (isJust . games) (dates schedule)
 -- Takes a schedule bytestring and outputs an array of gameId's or errors
 extractGameIds :: IN.GameSchedule -> [Int]
 extractGameIds gameData = concatMap (maybe [] (V.toList . fmap gamePk) . games) (dates gameData)
+
+-- Generate the API URL for a single day's schedule
+scheduleUrl :: String -> String
+scheduleUrl date = "https://statsapi.mlb.com/api/v1/schedule/games/?language=en&sportId=1&startDate=" ++ date ++ "&endDate=" ++ date
 
 -- Generate the API URL for live game status
 gameStatusUrl :: Int -> String

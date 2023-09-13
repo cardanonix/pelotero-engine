@@ -33,13 +33,6 @@ data TeamData where
   TeamData :: {players :: M.Map Text Player} -> TeamData
   deriving (Show, Eq)
 
-hasValidPositions :: Value -> Bool
-hasValidPositions val = case fromJSON val :: Result Player of
-  Success player -> case allPositions player of
-    Just positions -> not (null positions)
-    Nothing -> False
-  _ -> False
-
 type Players = [(Text, Player)]
 
 -- ##
@@ -210,6 +203,13 @@ instance FromJSON Teams where
       .: "away"
       <*> v
       .: "home"
+
+hasValidPositions :: Value -> Bool
+hasValidPositions val = case fromJSON val :: Result Player of
+  Success player -> case allPositions player of
+    Just positions -> not (null positions)
+    Nothing -> False
+  _ -> False
 
 instance FromJSON TeamData where
   parseJSON :: Value -> Parser TeamData

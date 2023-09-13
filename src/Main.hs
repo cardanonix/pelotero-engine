@@ -84,26 +84,3 @@ main = do
             putStrLn "HERE THEY ARE!"
             processAndPrintGames (Right gameSchedule)
         Left errMsg -> putStrLn $ "Failed to fetch game schedule: " ++ errMsg
-
-    -- -- putStrLn "Testing fetchGameScheduleForDate:"
-    -- -- testFetchGameScheduleForDate "2023-08-22"
-
-    -- -- putStrLn "Testing fetchFinishedBxScore:"
-    -- -- testFetchFinishedBxScore 716896
-
--- testFetchGameScheduleForDate :: String -> IO ()
--- testFetchGameScheduleForDate  date = do
---     result <- fetchGameScheduleForDate date
---     case result of
---         Left errMsg -> putStrLn $ "Failed to fetch game schedule: " ++ errMsg
---         Right schedule -> putStrLn $ "Fetched game schedule: " ++ show schedule
-
--- testFetchFinishedBxScore :: Int -> IO ()
--- testFetchFinishedBxScore game = do
---     jsonData <- B.readFile "testFiles/mlb/boxscore_716896.json"
---     let pickedgame = game
---     result <- fetchFinishedBxScore pickedgame
---     case result of
---         Left errMsg -> putStrLn $ "Failed to fetch game box score: " ++ errMsg
---         Right gameData -> putStrLn $ "Fetched box score: " ++ show gameData
---     -- eventually compare the fetched result to jsonData or other expected data...
