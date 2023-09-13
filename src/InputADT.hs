@@ -204,7 +204,7 @@ data GameID where
   GameID :: {gamePk :: Int} -> GameID
   deriving (Show, Eq)
 
--- JSON instances
+-- ## JSON instances ##
 instance FromJSON GameData where
   parseJSON :: Value -> Parser GameData
   parseJSON = withObject "GameData" $ \v ->
