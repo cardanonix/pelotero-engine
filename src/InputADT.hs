@@ -19,54 +19,12 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as V
 
-
--- Top level structure for the active roster
-data ActiveRoster = ActiveRoster
-  { people :: [ActivePlayer]
-  } deriving (Show, Eq)
-
-instance FromJSON ActiveRoster where
-  parseJSON :: Value -> Parser ActiveRoster
-  parseJSON = withObject "ActiveRoster" $ \v -> do
-    people <- v .: "people"
-    return $ ActiveRoster people
-
--- PlayerInfo data type
-data ActivePlayer = ActivePlayer
-  { playerId :: Int,
-    useName :: Maybe Text,
-    useLastName :: Maybe Text, 
-    nameSlug :: Maybe Text,
-    currentTeam :: Maybe Int,
-    primaryPosition :: Maybe Text,
-    batSide:: Maybe Text,
-    pitchHand :: Maybe Text,
-    active :: Bool
-  }
+-- ##
+-- ## Boxscore Stats data type
+data GameData where
+  GameData :: {teams :: Teams} -> GameData
   deriving (Show, Eq)
 
-instance FromJSON ActivePlayer where
-  parseJSON :: Value -> Parser ActivePlayer
-  parseJSON = withObject "ActivePlayer" $ \v -> do
-    playerId <- v .: "id"
-    useName <- v .:? "useName"
-    useLastName <- v .:? "useLastName"
-    nameSlug <- v .:? "nameSlug"
-    currentTeam <- v .:? "currentTeam" >>= traverse (.: "id")
-    primaryPosition <- v .:? "primaryPosition" >>= traverse (.: "code")
-    batSide <- v .:? "batSide" >>= traverse (.: "code")
-    pitchHand <- v .:? "pitchHand" >>= traverse (.: "code")
-    active <- v .: "active"
-    return $ ActivePlayer playerId useName useLastName nameSlug currentTeam primaryPosition batSide pitchHand active
-
--- Top level Stats data type
-data GameData = GameData
-  { teams :: Teams
-  }
-  deriving (Show, Eq)
-
-
--- Teams data type
 data Teams where
   Teams :: {away :: TeamData, home :: TeamData} -> Teams
   deriving (Show, Eq)
@@ -84,6 +42,7 @@ hasValidPositions val = case fromJSON val :: Result Player of
 
 type Players = [(Text, Player)]
 
+-- ##
 -- Player data structure
 data Player where
   Player :: {person :: Person,
@@ -191,6 +150,7 @@ data PitchingStats where
                      -> PitchingStats
   deriving (Show, Eq)
 
+-- ##
 -- ## Schedule ADT's ##
 data GameSchedule where
   GameSchedule :: {dates :: [DateEntry]} -> GameSchedule
@@ -202,6 +162,38 @@ data DateEntry where
 
 data GameID where
   GameID :: {gamePk :: Int} -> GameID
+  deriving (Show, Eq)
+
+-- ##
+-- Top level structure for the active roster
+data ActiveRoster where
+  ActiveRoster :: {people :: [ActivePlayer]} -> ActiveRoster
+  deriving (Show, Eq)
+
+data ActivePlayer where
+  ActivePlayer :: {playerId :: Int,
+                     useName :: Maybe Text,
+                     useLastName :: Maybe Text,
+                     nameSlug :: Maybe Text,
+                     currentTeam :: Maybe Int,
+                     primaryPosition :: Maybe Text,
+                     batSide :: Maybe Text,
+                     pitchHand :: Maybe Text,
+                     active :: Bool}
+                    -> ActivePlayer
+  deriving (Show, Eq)
+
+-- ## Game Status ADT's ##
+data LiveGameStatus where
+  LiveGameStatus :: {codedGameState :: Text} -> LiveGameStatus
+  deriving (Show, Eq)
+
+data LiveGameStatusWrapper where
+  LiveGameStatusWrapper :: {gameStatus :: LiveGameStatus} -> LiveGameStatusWrapper
+  deriving (Show, Eq)
+
+data LiveGameWrapper where
+  LiveGameWrapper :: {gameData :: LiveGameStatusWrapper} -> LiveGameWrapper
   deriving (Show, Eq)
 
 -- ## JSON instances ##
@@ -361,6 +353,7 @@ instance FromJSON PitchingStats where
       <*> v .:? "sacFlies"
       <*> v .:? "passedBall"
 
+-- ##
 -- Schedule Instances
 instance Data.Aeson.FromJSON GameSchedule where
     parseJSON :: Value -> Parser GameSchedule
@@ -377,30 +370,40 @@ instance Data.Aeson.FromJSON GameID where
     parseJSON = Data.Aeson.withObject "GameID" $ \v -> GameID
         <$> v Data.Aeson..: "gamePk"
 
--- ## Game Status ADT's ##
-data LiveGameStatus where
-  LiveGameStatus :: {codedGameState :: Text} -> LiveGameStatus
-  deriving (Show, Eq)
-
+-- ##
+-- ##Live Game Status instances##
 instance FromJSON LiveGameStatus where
     parseJSON :: Value -> Parser LiveGameStatus
     parseJSON = withObject "LiveGameStatus" $ \v -> LiveGameStatus
         <$> v .: "codedGameState"
-
-data LiveGameStatusWrapper where
-  LiveGameStatusWrapper :: {gameStatus :: LiveGameStatus} -> LiveGameStatusWrapper
-  deriving (Show, Eq)
 
 instance FromJSON LiveGameStatusWrapper where
     parseJSON :: Value -> Parser LiveGameStatusWrapper
     parseJSON = withObject "LiveGameStatusWrapper" $ \v -> LiveGameStatusWrapper
         <$> v .: "status"
 
-data LiveGameWrapper where
-  LiveGameWrapper :: {gameData :: LiveGameStatusWrapper} -> LiveGameWrapper
-  deriving (Show, Eq)
-
 instance FromJSON LiveGameWrapper where
     parseJSON :: Value -> Parser LiveGameWrapper
     parseJSON = withObject "LiveGameWrapper" $ \v -> LiveGameWrapper
         <$> v .: "gameData"
+
+-- ##ROSTER instances##
+instance FromJSON ActivePlayer where
+  parseJSON :: Value -> Parser ActivePlayer
+  parseJSON = withObject "ActivePlayer" $ \v -> do
+    playerId <- v .: "id"
+    useName <- v .:? "useName"
+    useLastName <- v .:? "useLastName"
+    nameSlug <- v .:? "nameSlug"
+    currentTeam <- v .:? "currentTeam" >>= traverse (.: "id")
+    primaryPosition <- v .:? "primaryPosition" >>= traverse (.: "code")
+    batSide <- v .:? "batSide" >>= traverse (.: "code")
+    pitchHand <- v .:? "pitchHand" >>= traverse (.: "code")
+    active <- v .: "active"
+    return $ ActivePlayer playerId useName useLastName nameSlug currentTeam primaryPosition batSide pitchHand active
+
+instance FromJSON ActiveRoster where
+  parseJSON :: Value -> Parser ActiveRoster
+  parseJSON = withObject "ActiveRoster" $ \v -> do
+    people <- v .: "people"
+    return $ ActiveRoster people

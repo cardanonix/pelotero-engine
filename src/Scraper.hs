@@ -149,27 +149,27 @@ processAndPrintGames gameScheduleEither =
 
 -- ## OUTPUT CONVERSION ##
 
-flattenGameData :: IN.GameData -> Int -> OUT.OutputData
-flattenGameData gameData gameId = OutputData $ M.fromList $ map convertPlayer allPlayers
-  where
-    teamsData = IN.teams gameData
-    allPlayers = M.elems (IN.players $ IN.away teamsData) ++ M.elems (IN.players $ IN.home teamsData)
+-- flattenGameData :: IN.GameData -> Int -> OUT.OutputData
+-- flattenGameData gameData gameId = OutputData $ M.fromList $ map convertPlayer allPlayers
+--   where
+--     teamsData = IN.teams gameData
+--     allPlayers = M.elems (IN.players $ IN.away teamsData) ++ M.elems (IN.players $ IN.home teamsData)
 
-    convertPlayer :: IN.Player -> (Int, OUT.PlayerData)
-    convertPlayer p = 
-        (IN.personId $ IN.person p,
-         OUT.PlayerData 
-            (IN.personId $ IN.person p) 
-            (IN.fullName $ IN.person p)
-            (M.singleton gameId (convertPlayerStats $ IN.stats p)))
+--     convertPlayer :: IN.Player -> (Int, OUT.PlayerData)
+--     convertPlayer p = 
+--         (IN.personId $ IN.person p,
+--          OUT.PlayerData 
+--             (IN.personId $ IN.person p) 
+--             (IN.fullName $ IN.person p)
+--             (M.singleton gameId (convertPlayerStats $ IN.stats p)))
 
-    convertPlayerStats :: IN.Player -> IN.PlayerStats -> OUT.PlayerStatsOutput
-    convertPlayerStats p ps = OUT.PlayerStatsOutput 
-            (IN.parentTeamId p)
-            (map readPositionCode <$> IN.allPositions p)
-            (IN.status_code $ IN.status p)
-            (IN.batting ps)
-            (IN.pitching ps)
+--     convertPlayerStats :: IN.Player -> IN.PlayerStats -> OUT.PlayerStatsOutput
+--     convertPlayerStats p ps = OUT.PlayerStatsOutput 
+--             (IN.parentTeamId p)
+--             (map readPositionCode <$> IN.allPositions p)
+--             (IN.status_code $ IN.status p)
+--             (IN.batting ps)
+--             (IN.pitching ps)
 
-    readPositionCode :: IN.Position -> Int
-    readPositionCode pos = read $ T.unpack $ IN.pos_code pos
+--     readPositionCode :: IN.Position -> Int
+--     readPositionCode pos = read $ T.unpack $ IN.pos_code pos

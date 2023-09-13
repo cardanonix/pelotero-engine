@@ -41,13 +41,6 @@ import Scraper  ( withEither
                 , processGameIds
                 , printProcessedGameData
                 , processAndPrintGames
-                , convertGameDataToOutputData
-                , generateChecksum
-                , outputFilePath
-                , fetchAndConvertGameIds
-                , mergeOutputData
-                , processDate
-                , processDateRange
                 )
 
 main :: IO ()
@@ -57,8 +50,6 @@ main = do
     -- putStrLn "Enter date to process (YYYY-MM-DD):"
     -- date <- getLine
 
-    -- Process the given date
-    processDate "2023-08-22"
 
     -- Completion message
     putStrLn "Processing completed for the given date!"
