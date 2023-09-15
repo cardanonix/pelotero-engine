@@ -71,28 +71,28 @@ data BattingStats where
                      bat_flyOuts :: Maybe Int,
                      bat_groundOuts :: Maybe Int,
                      bat_runs :: Maybe Int
-                    --  ,
-                    --  bat_doubles :: Maybe Int,
-                    --  bat_triples :: Maybe Int,
-                    --  bat_homeRuns :: Maybe Int,
-                    --  bat_strikeOuts :: Maybe Int,
-                    --  bat_baseOnBalls :: Maybe Int,
-                    --  bat_intentionalWalks :: Maybe Int,
-                    --  bat_hits :: Maybe Int,
-                    --  bat_hitByPitch :: Maybe Int,
-                    --  bat_atBats :: Maybe Int,
-                    --  bat_caughtStealing :: Maybe Int,
-                    --  bat_stolenBases :: Maybe Int,
-                    --  bat_groundIntoDoublePlay :: Maybe Int,
-                    --  bat_groundIntoTriplePlay :: Maybe Int,
-                    --  bat_plateAppearances :: Maybe Int,
-                    --  bat_totalBases :: Maybe Int,
-                    --  bat_rbi :: Maybe Int,
-                    --  bat_leftOnBase :: Maybe Int,
-                    --  bat_sacBunts :: Maybe Int,
-                    --  bat_sacFlies :: Maybe Int,
-                    --  bat_catchersInterference :: Maybe Int,
-                    --  bat_pickoffs :: Maybe Int
+                     ,
+                     bat_doubles :: Maybe Int,
+                     bat_triples :: Maybe Int,
+                     bat_homeRuns :: Maybe Int,
+                     bat_strikeOuts :: Maybe Int,
+                     bat_baseOnBalls :: Maybe Int,
+                     bat_intentionalWalks :: Maybe Int,
+                     bat_hits :: Maybe Int,
+                     bat_hitByPitch :: Maybe Int,
+                     bat_atBats :: Maybe Int,
+                     bat_caughtStealing :: Maybe Int,
+                     bat_stolenBases :: Maybe Int,
+                     bat_groundIntoDoublePlay :: Maybe Int,
+                     bat_groundIntoTriplePlay :: Maybe Int,
+                     bat_plateAppearances :: Maybe Int,
+                     bat_totalBases :: Maybe Int,
+                     bat_rbi :: Maybe Int,
+                     bat_leftOnBase :: Maybe Int,
+                     bat_sacBunts :: Maybe Int,
+                     bat_sacFlies :: Maybe Int,
+                     bat_catchersInterference :: Maybe Int,
+                     bat_pickoffs :: Maybe Int
                      }
                     -> BattingStats
   deriving (Show, Eq)
@@ -104,47 +104,47 @@ data PitchingStats where
                       pit_groundOuts :: Maybe Int,
                       pit_airOuts :: Maybe Int,
                       pit_runs :: Maybe Int
-                      -- ,
-                      -- pit_doubles :: Maybe Int,
-                      -- pit_triples :: Maybe Int,
-                      -- pit_homeRuns :: Maybe Int,
-                      -- pit_strikeOuts :: Maybe Int,
-                      -- pit_baseOnBalls :: Maybe Int,
-                      -- pit_intentionalWalks :: Maybe Int,
-                      -- pit_hits :: Maybe Int,
-                      -- pit_hitByPitch :: Maybe Int,
-                      -- pit_atBats :: Maybe Int,
-                      -- pit_caughtStealing :: Maybe Int,
-                      -- pit_stolenBases :: Maybe Int,
-                      -- pit_numberOfPitches :: Maybe Int,
-                      -- pit_inningsPitched :: Maybe Text,
-                      -- pit_wins :: Maybe Int,
-                      -- pit_losses :: Maybe Int,
-                      -- pit_saves :: Maybe Int,
-                      -- pit_saveOpportunities :: Maybe Int,
-                      -- pit_holds :: Maybe Int,
-                      -- pit_blownSaves :: Maybe Int,
-                      -- pit_earnedRuns :: Maybe Int,
-                      -- pit_battersFaced :: Maybe Int,
-                      -- pit_outs :: Maybe Int,
-                      -- pit_gamesPitched :: Maybe Int,
-                      -- pit_completeGames :: Maybe Int,
-                      -- pit_shutouts :: Maybe Int,
-                      -- pit_pitchesThrown :: Maybe Int,
-                      -- pit_balls :: Maybe Int,
-                      -- pit_strikes :: Maybe Int,
-                      -- pit_hitBatsmen :: Maybe Int,
-                      -- pit_balks :: Maybe Int,
-                      -- pit_wildPitches :: Maybe Int,
-                      -- pit_pickoffs :: Maybe Int,
-                      -- pit_rbi :: Maybe Int,
-                      -- pit_gamesFinished :: Maybe Int,
-                      -- pit_inheritedRunners :: Maybe Int,
-                      -- pit_inheritedRunnersScored :: Maybe Int,
-                      -- pit_catchersInterference :: Maybe Int,
-                      -- pit_sacBunts :: Maybe Int,
-                      -- pit_sacFlies :: Maybe Int,
-                      -- pit_passedBall :: Maybe Int
+                      ,
+                      pit_doubles :: Maybe Int,
+                      pit_triples :: Maybe Int,
+                      pit_homeRuns :: Maybe Int,
+                      pit_strikeOuts :: Maybe Int,
+                      pit_baseOnBalls :: Maybe Int,
+                      pit_intentionalWalks :: Maybe Int,
+                      pit_hits :: Maybe Int,
+                      pit_hitByPitch :: Maybe Int,
+                      pit_atBats :: Maybe Int,
+                      pit_caughtStealing :: Maybe Int,
+                      pit_stolenBases :: Maybe Int,
+                      pit_numberOfPitches :: Maybe Int,
+                      pit_inningsPitched :: Maybe Text,
+                      pit_wins :: Maybe Int,
+                      pit_losses :: Maybe Int,
+                      pit_saves :: Maybe Int,
+                      pit_saveOpportunities :: Maybe Int,
+                      pit_holds :: Maybe Int,
+                      pit_blownSaves :: Maybe Int,
+                      pit_earnedRuns :: Maybe Int,
+                      pit_battersFaced :: Maybe Int,
+                      pit_outs :: Maybe Int,
+                      pit_gamesPitched :: Maybe Int,
+                      pit_completeGames :: Maybe Int,
+                      pit_shutouts :: Maybe Int,
+                      pit_pitchesThrown :: Maybe Int,
+                      pit_balls :: Maybe Int,
+                      pit_strikes :: Maybe Int,
+                      pit_hitBatsmen :: Maybe Int,
+                      pit_balks :: Maybe Int,
+                      pit_wildPitches :: Maybe Int,
+                      pit_pickoffs :: Maybe Int,
+                      pit_rbi :: Maybe Int,
+                      pit_gamesFinished :: Maybe Int,
+                      pit_inheritedRunners :: Maybe Int,
+                      pit_inheritedRunnersScored :: Maybe Int,
+                      pit_catchersInterference :: Maybe Int,
+                      pit_sacBunts :: Maybe Int,
+                      pit_sacFlies :: Maybe Int,
+                      pit_passedBall :: Maybe Int
                       }
                      -> PitchingStats
   deriving (Show, Eq)
@@ -287,27 +287,27 @@ instance FromJSON BattingStats where
       <*> v .:? "flyOuts"
       <*> v .:? "groundOuts"
       <*> v .:? "runs"
-      -- <*> v .:? "doubles"
-      -- <*> v .:? "triples"
-      -- <*> v .:? "homeRuns"
-      -- <*> v .:? "strikeOuts"
-      -- <*> v .:? "baseOnBalls"
-      -- <*> v .:? "intentionalWalks"
-      -- <*> v .:? "hits"
-      -- <*> v .:? "hitByPitch"
-      -- <*> v .:? "atBats"
-      -- <*> v .:? "caughtStealing"
-      -- <*> v .:? "stolenBases"
-      -- <*> v .:? "groundIntoDoublePlay"
-      -- <*> v .:? "groundIntoTriplePlay"
-      -- <*> v .:? "plateAppearances"
-      -- <*> v .:? "totalBases"
-      -- <*> v .:? "rbi"
-      -- <*> v .:? "leftOnBase"
-      -- <*> v .:? "sacBunts"
-      -- <*> v .:? "sacFlies"
-      -- <*> v .:? "catchersInterference"
-      -- <*> v .:? "pickoffs"
+      <*> v .:? "doubles"
+      <*> v .:? "triples"
+      <*> v .:? "homeRuns"
+      <*> v .:? "strikeOuts"
+      <*> v .:? "baseOnBalls"
+      <*> v .:? "intentionalWalks"
+      <*> v .:? "hits"
+      <*> v .:? "hitByPitch"
+      <*> v .:? "atBats"
+      <*> v .:? "caughtStealing"
+      <*> v .:? "stolenBases"
+      <*> v .:? "groundIntoDoublePlay"
+      <*> v .:? "groundIntoTriplePlay"
+      <*> v .:? "plateAppearances"
+      <*> v .:? "totalBases"
+      <*> v .:? "rbi"
+      <*> v .:? "leftOnBase"
+      <*> v .:? "sacBunts"
+      <*> v .:? "sacFlies"
+      <*> v .:? "catchersInterference"
+      <*> v .:? "pickoffs"
 
 instance FromJSON PitchingStats where
   parseJSON :: Value -> Parser PitchingStats
@@ -319,46 +319,46 @@ instance FromJSON PitchingStats where
       <*> v .:? "groundOuts"
       <*> v .:? "airOuts"
       <*> v .:? "runs"
-      -- <*> v .:? "doubles"
-      -- <*> v .:? "triples"
-      -- <*> v .:? "homeRuns"
-      -- <*> v .:? "strikeOuts"
-      -- <*> v .:? "baseOnBalls"
-      -- <*> v .:? "intentionalWalks"
-      -- <*> v .:? "hits"
-      -- <*> v .:? "hitByPitch"
-      -- <*> v .:? "atBats"
-      -- <*> v .:? "caughtStealing"
-      -- <*> v .:? "stolenBases"
-      -- <*> v .:? "numberOfPitches"
-      -- <*> v .:? "inningsPitched"
-      -- <*> v .:? "wins"
-      -- <*> v .:? "losses"
-      -- <*> v .:? "saves"
-      -- <*> v .:? "saveOpportunities"
-      -- <*> v .:? "holds"
-      -- <*> v .:? "blownSaves"
-      -- <*> v .:? "earnedRuns"
-      -- <*> v .:? "battersFaced"
-      -- <*> v .:? "outs"
-      -- <*> v .:? "gamesPitched"
-      -- <*> v .:? "completeGames"
-      -- <*> v .:? "shutouts"
-      -- <*> v .:? "pitchesThrown"
-      -- <*> v .:? "balls"
-      -- <*> v .:? "strikes"
-      -- <*> v .:? "hitBatsmen"
-      -- <*> v .:? "balks"
-      -- <*> v .:? "wildPitches"
-      -- <*> v .:? "pickoffs"
-      -- <*> v .:? "rbi"
-      -- <*> v .:? "gamesFinished"
-      -- <*> v .:? "inheritedRunners"
-      -- <*> v .:? "inheritedRunnersScored"
-      -- <*> v .:? "catchersInterference"
-      -- <*> v .:? "sacBunts"
-      -- <*> v .:? "sacFlies"
-      -- <*> v .:? "passedBall"
+      <*> v .:? "doubles"
+      <*> v .:? "triples"
+      <*> v .:? "homeRuns"
+      <*> v .:? "strikeOuts"
+      <*> v .:? "baseOnBalls"
+      <*> v .:? "intentionalWalks"
+      <*> v .:? "hits"
+      <*> v .:? "hitByPitch"
+      <*> v .:? "atBats"
+      <*> v .:? "caughtStealing"
+      <*> v .:? "stolenBases"
+      <*> v .:? "numberOfPitches"
+      <*> v .:? "inningsPitched"
+      <*> v .:? "wins"
+      <*> v .:? "losses"
+      <*> v .:? "saves"
+      <*> v .:? "saveOpportunities"
+      <*> v .:? "holds"
+      <*> v .:? "blownSaves"
+      <*> v .:? "earnedRuns"
+      <*> v .:? "battersFaced"
+      <*> v .:? "outs"
+      <*> v .:? "gamesPitched"
+      <*> v .:? "completeGames"
+      <*> v .:? "shutouts"
+      <*> v .:? "pitchesThrown"
+      <*> v .:? "balls"
+      <*> v .:? "strikes"
+      <*> v .:? "hitBatsmen"
+      <*> v .:? "balks"
+      <*> v .:? "wildPitches"
+      <*> v .:? "pickoffs"
+      <*> v .:? "rbi"
+      <*> v .:? "gamesFinished"
+      <*> v .:? "inheritedRunners"
+      <*> v .:? "inheritedRunnersScored"
+      <*> v .:? "catchersInterference"
+      <*> v .:? "sacBunts"
+      <*> v .:? "sacFlies"
+      <*> v .:? "passedBall"
 
 -- ##
 -- Schedule Instances
