@@ -1,0 +1,31 @@
+quasi code haskell/json description of goal:
+```
+{
+  "GameData.Teams.TeamData.Players.Player.Person.personId:Int -> Text": {
+    "player_id": GameData.Teams.TeamData.Players.Player.Person.personId:Int,
+    "fullName": "GameData.Teams.TeamData.Players.Player.Person.personId:Text",
+    "stats": {
+      "GameData.Teams.TeamData.Players.gameid:Int -> Text": {
+        "parentTeamId": GameData.Teams.TeamData.Players.Player.parentTeamId:Int,
+        "allPositions": [
+          GameData.Teams.TeamData.Players.Player.allPositions:Array
+        ],
+        "status": "GameData.Teams.TeamData.Players.Player.Status.status_code: Text",
+        "batting": {
+          "bat_gamesPlayed": GameData.Teams.TeamData.Players.Player.PlayerStats.BattingStats.bat_gamesPlayed:Maybe Int,
+          "bat_flyOuts": GameData.Teams.TeamData.Players.Player.PlayerStats.BattingStats.bat_flyOuts:Maybe Int,
+          "bat_groundOuts": GameData.Teams.TeamData.Players.Player.PlayerStats.BattingStats.bat_groundOuts:Maybe Int,
+          "bat_runs": GameData.Teams.TeamData.Players.Player.PlayerStats.BattingStats.bat_runs:Maybe Int,
+        },
+        "pitching": {
+          "pit_gamesPlayed": GameData.Teams.TeamData.Players.Player.PlayerStats.PitchingStats.pit_gamesPlayed: Maybe Int,
+          "pit_gamesStarted": GameData.Teams.TeamData.Players.Player.PlayerStats.PitchingStats.pit_gamesStarted: Maybe Int,
+          "pit_groundOuts": GameData.Teams.TeamData.Players.Player.PlayerStats.PitchingStats.pit_groundOuts: Maybe Int,
+          "pit_airOuts": GameData.Teams.TeamData.Players.Player.PlayerStats.PitchingStats.pit_airOuts: Maybe Int,
+          "pit_runs": GameData.Teams.TeamData.Players.Player.PlayerStats.PitchingStats.pit_runs: Maybe Int
+        }
+      }
+    }
+  }
+}
+```
