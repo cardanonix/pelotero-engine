@@ -39,6 +39,7 @@ type Players = [(Text, Player)]
 -- Player data structure
 data Player where
   Player :: {person :: Person,
+               gameid :: Maybe Int,
                parentTeamId :: Int,
                allPositions :: Maybe [Position],
                status :: Status,
@@ -59,7 +60,8 @@ data Status where
   deriving (Show, Eq)
 
 data PlayerStats where
-  PlayerStats :: {batting :: Maybe BattingStats,
+  PlayerStats :: {  
+                    batting :: Maybe BattingStats,
                     pitching :: Maybe PitchingStats}
                    -> PlayerStats
   deriving (Show, Eq)
@@ -240,7 +242,8 @@ instance FromJSON Player where
           Nothing -> Nothing
     status <- v .: "status"
     stats <- v .: "stats"
-    return $ Player person teamId validPositions status stats
+    let gameid = Nothing -- skips nonexistent (but necessary) gameId field, which is later added in Scraper.assignGameIdToPlayers
+    return $ Player person gameid teamId validPositions status stats
 
 instance FromJSON Person where
   parseJSON :: Value -> Parser Person

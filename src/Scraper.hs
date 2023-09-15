@@ -110,6 +110,13 @@ fetchAndDecode url = do
 fetchGameStatus :: Int -> IO (Either String IN.LiveGameWrapper)
 fetchGameStatus gameId = fetchAndDecode (gameStatusUrl gameId)
 
+assignGameIdToPlayers :: Int -> GameData -> GameData
+assignGameIdToPlayers gameId gameData = 
+    let assignToTeam team = team { players = M.map assignToPlayer (players team) }
+        assignToPlayer player = player { gameid = Just gameId }
+    in gameData { teams = (teams gameData) { IN.away = assignToTeam (IN.away (teams gameData)), 
+                                             IN.home = assignToTeam (IN.home (teams gameData)) } }
+
 -- takes a gameId and returns IO (Either String GameData)
 fetchFinishedBxScore :: Int -> IO (Either String IN.GameData)
 fetchFinishedBxScore gameId = do
@@ -119,7 +126,9 @@ fetchFinishedBxScore gameId = do
             let liveStatusWrapper = gameData gameDataWrapper
             let liveStatus = gameStatus liveStatusWrapper
             if codedGameState liveStatus == "F"
-               then fetchAndDecode (boxScoreUrl gameId)
+               then do 
+                   boxscoreResult <- fetchAndDecode (boxScoreUrl gameId)
+                   return $ fmap (assignGameIdToPlayers gameId) boxscoreResult
                else return $ Left "Game isn't finished yet"
         Left err -> return $ Left ("Error fetching game status: " ++ err)
 
