@@ -54,11 +54,11 @@ import InputADT
     , ActivePlayer (..)
     )
 import qualified OutputADT as OUT
-import OutputADT
-    ( PlayerData (..)
-    , PlayerStatsOutput (..)
-    , OutputData (..)
-    )
+-- import OutputADT
+--     ( PlayerData (..)
+--     , PlayerStatsOutput (..)
+--     , OutputData (..)
+--     )
 
 -- monadic error handling for fetching and decoding
 withEither :: IO (Either String a) -> (a -> IO ()) -> IO ()
