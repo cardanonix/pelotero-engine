@@ -19,7 +19,6 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as V
 
--- ##
 -- ## Boxscore Stats data type
 data GameData where
   GameData :: {teams :: Teams} -> GameData
@@ -35,7 +34,6 @@ data TeamData where
 
 type Players = [(Text, Player)]
 
--- ##
 -- Player data structure
 data Player where
   Player :: {person :: Person,
@@ -70,8 +68,7 @@ data BattingStats where
   BattingStats :: {bat_gamesPlayed :: Maybe Int,
                      bat_flyOuts :: Maybe Int,
                      bat_groundOuts :: Maybe Int,
-                     bat_runs :: Maybe Int
-                     ,
+                     bat_runs :: Maybe Int,
                      bat_doubles :: Maybe Int,
                      bat_triples :: Maybe Int,
                      bat_homeRuns :: Maybe Int,
@@ -103,8 +100,7 @@ data PitchingStats where
                       pit_flyOuts :: Maybe Int,
                       pit_groundOuts :: Maybe Int,
                       pit_airOuts :: Maybe Int,
-                      pit_runs :: Maybe Int
-                      ,
+                      pit_runs :: Maybe Int,
                       pit_doubles :: Maybe Int,
                       pit_triples :: Maybe Int,
                       pit_homeRuns :: Maybe Int,
@@ -149,7 +145,6 @@ data PitchingStats where
                      -> PitchingStats
   deriving (Show, Eq)
 
--- ##
 -- ## Schedule ADT's ##
 data GameSchedule where
   GameSchedule :: {dates :: [DateEntry]} -> GameSchedule
@@ -160,10 +155,12 @@ data DateEntry where
   deriving (Show, Eq)
 
 data GameID where
-  GameID :: {gamePk :: Int} -> GameID
+  GameID :: {
+              gamePk :: Int,
+              game_date :: Maybe Text
+            } -> GameID
   deriving (Show, Eq)
 
--- ##
 -- Top level structure for the active roster
 data ActiveRoster where
   ActiveRoster :: {people :: [ActivePlayer]} -> ActiveRoster
@@ -360,24 +357,24 @@ instance FromJSON PitchingStats where
       <*> v .:? "sacFlies"
       <*> v .:? "passedBall"
 
--- ##
--- Schedule Instances
-instance Data.Aeson.FromJSON GameSchedule where
+-- ## Schedule Instances
+instance FromJSON GameSchedule where
     parseJSON :: Value -> Parser GameSchedule
-    parseJSON = Data.Aeson.withObject "GameSchedule" $ \v -> GameSchedule
-        <$> v Data.Aeson..: "dates"
+    parseJSON = withObject "GameSchedule" $ \v -> GameSchedule
+        <$> v .: "dates"
 
-instance Data.Aeson.FromJSON DateEntry where
+instance FromJSON DateEntry where
     parseJSON :: Value -> Parser DateEntry
-    parseJSON = Data.Aeson.withObject "DateEntry" $ \v -> DateEntry
-        <$> v Data.Aeson..:? "games"
+    parseJSON = withObject "DateEntry" $ \v -> DateEntry
+        <$> v .:? "games"
 
-instance Data.Aeson.FromJSON GameID where
+instance FromJSON GameID where
     parseJSON :: Value -> Parser GameID
-    parseJSON = Data.Aeson.withObject "GameID" $ \v -> GameID
-        <$> v Data.Aeson..: "gamePk"
+    parseJSON = withObject "GameID" $ \v -> do
+        gamePk <- v .: "gamePk"
+        let game_date = Nothing
+        return $ GameID gamePk game_date
 
--- ##
 -- ##Live Game Status instances##
 instance FromJSON LiveGameStatus where
     parseJSON :: Value -> Parser LiveGameStatus

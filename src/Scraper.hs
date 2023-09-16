@@ -39,7 +39,7 @@ import qualified Crypto.Hash.SHA256 as SHA256
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import Control.Monad (when, filterM)
 
-import qualified InputADT as IN
+import qualified InputADT as I
 import InputADT
     ( GameData(..)
     , LiveGameStatusWrapper(..)
@@ -69,19 +69,27 @@ withEither action successHandler = do
         Right dataPacket -> successHandler dataPacket
 
 -- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule
-fetchGameScheduleForDate :: String -> IO (Either String IN.GameSchedule)
-fetchGameScheduleForDate date = fetchAndDecode (scheduleUrl date)
+fetchGameScheduleForDate :: String -> IO (Either String GameSchedule)
+fetchGameScheduleForDate date = do
+    scheduleResult <- fetchAndDecode (scheduleUrl date)
+    return $ fmap (assignDateToSchedule (T.pack date)) scheduleResult
+
+assignDateToSchedule :: Text -> GameSchedule -> GameSchedule
+assignDateToSchedule date schedule = 
+    let assignToDateEntry entry = entry { games = fmap (V.map assignToDate) (games entry) }
+        assignToDate gameID = gameID { game_date = Just date }
+    in schedule { dates = map assignToDateEntry (dates schedule) }
 
 -- takes a season and outputs a roster bytestring of that season
-fetchActiveRoster :: Int -> IO (Either String IN.ActivePlayer)
+fetchActiveRoster :: Int -> IO (Either String I.ActivePlayer)
 fetchActiveRoster season = fetchAndDecode (rosterUrl season)
 
 -- Takes a schedule bytestring and outputs true if games are happening, false otherwise.
-hasGamesForDate :: IN.GameSchedule -> Bool
+hasGamesForDate :: I.GameSchedule -> Bool
 hasGamesForDate schedule = any (isJust . games) (dates schedule)
 
 -- Takes a schedule bytestring and outputs an array of gameId's or errors
-extractGameIds :: IN.GameSchedule -> [Int]
+extractGameIds :: I.GameSchedule -> [Int]
 extractGameIds gameData = concatMap (maybe [] (V.toList . fmap gamePk) . games) (dates gameData)
 
 -- Generate the API URL for a single day's schedule
@@ -107,18 +115,18 @@ fetchAndDecode url = do
     return $ eitherDecodeStrict $ getResponseBody response
 
 -- takes a gameId and returns IO (Either String LiveGameWrapper)
-fetchGameStatus :: Int -> IO (Either String IN.LiveGameWrapper)
+fetchGameStatus :: Int -> IO (Either String I.LiveGameWrapper)
 fetchGameStatus gameId = fetchAndDecode (gameStatusUrl gameId)
 
 assignGameIdToPlayers :: Int -> GameData -> GameData
 assignGameIdToPlayers gameId gameData = 
     let assignToTeam team = team { players = M.map assignToPlayer (players team) }
         assignToPlayer player = player { gameid = Just gameId }
-    in gameData { teams = (teams gameData) { IN.away = assignToTeam (IN.away (teams gameData)), 
-                                             IN.home = assignToTeam (IN.home (teams gameData)) } }
+    in gameData { teams = (teams gameData) { I.away = assignToTeam (I.away (teams gameData)), 
+                                             I.home = assignToTeam (I.home (teams gameData)) } }
 
 -- takes a gameId and returns IO (Either String GameData)
-fetchFinishedBxScore :: Int -> IO (Either String IN.GameData)
+fetchFinishedBxScore :: Int -> IO (Either String I.GameData)
 fetchFinishedBxScore gameId = do
     gameStatusResult <- fetchGameStatus gameId
     case gameStatusResult of
@@ -133,7 +141,7 @@ fetchFinishedBxScore gameId = do
         Left err -> return $ Left ("Error fetching game status: " ++ err)
 
 --maps fetchFinishedBxScore over an array of game id's and returns IO (M.Map Int ByteString)
-processGameIds :: [Int] -> IO (Either String (M.Map Int IN.GameData))
+processGameIds :: [Int] -> IO (Either String (M.Map Int I.GameData))
 processGameIds gameIds = do
     results <- mapM fetchFinishedBxScore gameIds
     case sequence results of
@@ -141,13 +149,13 @@ processGameIds gameIds = do
         Right gameDataList -> return $ Right $ M.fromList $ zip gameIds gameDataList
 
 -- takes a list of tuples game id's and game data and prints them
-printProcessedGameData :: Either String (M.Map Int IN.GameData) -> IO ()
+printProcessedGameData :: Either String (M.Map Int I.GameData) -> IO ()
 printProcessedGameData gameDataMapEither =
     withEither (return gameDataMapEither) $ \gameDataMap -> 
         mapM_ (\(gameId, gameData) -> putStrLn $ show gameId ++ ": " ++ show gameData) (M.toList gameDataMap)
 
 -- print the schedule bytestring
-processAndPrintGames :: Either String IN.GameSchedule -> IO ()
+processAndPrintGames :: Either String I.GameSchedule -> IO ()
 processAndPrintGames gameScheduleEither =
     withEither (return gameScheduleEither) $ \gameSchedule -> 
         if hasGamesForDate gameSchedule then do
@@ -158,27 +166,27 @@ processAndPrintGames gameScheduleEither =
 
 -- ## OUTPUT CONVERSION ##
 
--- flattenGameData :: IN.GameData -> Int -> OUT.OutputData
+-- flattenGameData :: I.GameData -> Int -> OUT.OutputData
 -- flattenGameData gameData gameId = OutputData $ M.fromList $ map convertPlayer allPlayers
 --   where
---     teamsData = IN.teams gameData
---     allPlayers = M.elems (IN.players $ IN.away teamsData) ++ M.elems (IN.players $ IN.home teamsData)
+--     teamsData = I.teams gameData
+--     allPlayers = M.elems (I.players $ I.away teamsData) ++ M.elems (I.players $ I.home teamsData)
 
---     convertPlayer :: IN.Player -> (Int, OUT.PlayerData)
+--     convertPlayer :: I.Player -> (Int, OUT.PlayerData)
 --     convertPlayer p = 
---         (IN.personId $ IN.person p,
+--         (I.personId $ I.person p,
 --          OUT.PlayerData 
---             (IN.personId $ IN.person p) 
---             (IN.fullName $ IN.person p)
---             (M.singleton gameId (convertPlayerStats $ IN.stats p)))
+--             (I.personId $ I.person p) 
+--             (I.fullName $ I.person p)
+--             (M.singleton gameId (convertPlayerStats $ I.stats p)))
 
---     convertPlayerStats :: IN.Player -> IN.PlayerStats -> OUT.PlayerStatsOutput
+--     convertPlayerStats :: I.Player -> I.PlayerStats -> OUT.PlayerStatsOutput
 --     convertPlayerStats p ps = OUT.PlayerStatsOutput 
---             (IN.parentTeamId p)
---             (map readPositionCode <$> IN.allPositions p)
---             (IN.status_code $ IN.status p)
---             (IN.batting ps)
---             (IN.pitching ps)
+--             (I.parentTeamId p)
+--             (map readPositionCode <$> I.allPositions p)
+--             (I.status_code $ I.status p)
+--             (I.batting ps)
+--             (I.pitching ps)
 
---     readPositionCode :: IN.Position -> Int
---     readPositionCode pos = read $ T.unpack $ IN.pos_code pos
+--     readPositionCode :: I.Position -> Int
+--     readPositionCode pos = read $ T.unpack $ I.pos_code pos
