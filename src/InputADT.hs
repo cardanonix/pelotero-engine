@@ -34,7 +34,6 @@ data TeamData where
 
 type Players = [(Text, Player)]
 
--- Player data structure
 data Player where
   Player :: {person :: Person,
                gameid :: Maybe Int,
@@ -65,7 +64,7 @@ data PlayerStats where
   deriving (Show, Eq)
 
 data BattingStats where
-  BattingStats :: {bat_gamesPlayed :: Maybe Int,
+  BattingStats :: {  bat_gamesPlayed :: Maybe Int,
                      bat_flyOuts :: Maybe Int,
                      bat_groundOuts :: Maybe Int,
                      bat_runs :: Maybe Int,
@@ -95,7 +94,7 @@ data BattingStats where
   deriving (Show, Eq)
 
 data PitchingStats where
-  PitchingStats :: {pit_gamesPlayed :: Maybe Int,
+  PitchingStats :: {  pit_gamesPlayed :: Maybe Int,
                       pit_gamesStarted :: Maybe Int,
                       pit_flyOuts :: Maybe Int,
                       pit_groundOuts :: Maybe Int,
@@ -167,7 +166,7 @@ data ActiveRoster where
   deriving (Show, Eq)
 
 data ActivePlayer where
-  ActivePlayer :: {playerId :: Int,
+  ActivePlayer :: {  playerId :: Int,
                      useName :: Maybe Text,
                      useLastName :: Maybe Text,
                      nameSlug :: Maybe Text,
