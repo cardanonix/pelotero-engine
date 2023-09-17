@@ -5,7 +5,8 @@ quasi code haskell/json description of goal:
     "player_id": GameData.Teams.TeamData.Players.Player.Person.personId:Int,
     "fullName": "GameData.Teams.TeamData.Players.Player.Person.personId:Text",
     "stats": {
-      "GameData.Teams.TeamData.Players.gameid:Int -> Text": {
+      "GameData.Teams.TeamData.Players.Player.gameid:Int -> Text": {
+        "game_id": GameData.Teams.TeamData.Players.gameid:Int,
         "parentTeamId": GameData.Teams.TeamData.Players.Player.parentTeamId:Int,
         "allPositions": [
           GameData.Teams.TeamData.Players.Player.allPositions:Array
@@ -26,6 +27,12 @@ quasi code haskell/json description of goal:
         }
       }
     }
-  }
+  },
+  "games": {
+    "718739": "LiveGameWrapper.LiveGameStatusWrapper.LiveGameStatus.codedGameState: Text"
+  },
+  "checksum": "a checksum of the gameData for that day",
+  "date": "date initially scraped to populate games here"
 }
+
 ```

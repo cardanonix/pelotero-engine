@@ -15,8 +15,6 @@ import Data.Maybe (catMaybes)
 import Debug.Trace (traceShowM)
 import InputADT
 import Scraper  ( fetchGameScheduleForDate
-                , hasGamesForDate
-                , extractGameIds
                 , processAndPrintGames
                 , fetchFinishedBxScore
                 , fetchGameStatus

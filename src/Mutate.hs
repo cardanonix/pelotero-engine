@@ -29,32 +29,19 @@ import MiddleADT ( JsonPlayerData(..)
                  , JsonStatsData(..)
                  )
 import OutputADT (OutputData)
-import Scraper  ( withEither
-                , fetchGameScheduleForDate
+import Scraper  ( fetchGameScheduleForDate
                 , fetchActiveRoster
-                , scheduleUrl
-                , hasGamesForDate
-                , extractGameIds
-                , gameStatusUrl
-                , boxScoreUrl
-                , rosterUrl
-                , fetchAndDecode
                 , fetchGameStatus
                 , fetchFinishedBxScore
-                , processGameIds
-                , printProcessedGameData
+                , printGameData
                 , processAndPrintGames
-                ,
+                , scrapeDataForDateRange
                 )
+import System.Environment (getArgs)
 
 main :: IO ()
 main = do
-
-    -- -- Prompt the user for a date
-    -- putStrLn "Enter date to process (YYYY-MM-DD):"
-    -- date <- getLine
-
-
-    -- Completion message
-    putStrLn "Processing completed for the given date!"
-
+    args <- getArgs
+    case args of
+        [start, end] -> scrapeDataForDateRange start end
+        _            -> putStrLn "Usage: <executable> <start_date> <end_date>"
