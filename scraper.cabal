@@ -9,7 +9,7 @@ version: 0.0.3.0
 executable scraper
   hs-source-dirs: src
   main-is: Main.hs
-  other-modules:  InputADT, Scraper, MiddleADT, OutputADT, ConfigADT, ScrapeTools
+  other-modules:  InputADT, Scraper, MiddleADT, OutputADT, ConfigADT
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -34,7 +34,7 @@ executable scraper
 executable mutant
   hs-source-dirs: src
   main-is: Mutate.hs
-  other-modules:  InputADT, Scraper, MiddleADT, OutputADT, ConfigADT, ScrapeTools
+  other-modules:  InputADT, Scraper, MiddleADT, OutputADT, ConfigADT
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time

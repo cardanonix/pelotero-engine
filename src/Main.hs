@@ -15,7 +15,6 @@ import Data.Maybe (catMaybes)
 import Debug.Trace (traceShowM)
 import InputADT
 import Scraper  ( fetchGameScheduleForDate
-                , processAndPrintGames
                 , fetchFinishedBxScore
                 , fetchGameStatus
                 )
@@ -72,13 +71,13 @@ main = do
     --     Left err -> putStrLn $ "Failed to parse JSON: " ++ err
     --     Right gameData -> print gameData
 
-    gameScheduleResult <- fetchGameScheduleForDate "2023-08-22"
+    -- gameScheduleResult <- fetchGameScheduleForDate "2023-08-22"
 
-    case gameScheduleResult of
-        Right gameSchedule -> do
-            putStrLn "Processing games..."
-            putStrLn ".."
-            putStrLn "..."
-            putStrLn "HERE THEY ARE!"
-            processAndPrintGames (Right gameSchedule)
-        Left errMsg -> putStrLn $ "Failed to fetch game schedule: " ++ errMsg
+    -- case gameScheduleResult of
+    --     Right gameSchedule -> do
+    --         putStrLn "Processing games..."
+    --         putStrLn ".."
+    --         putStrLn "..."
+    --         putStrLn "HERE THEY ARE!"
+    --         processAndPrintGames (Right gameSchedule)
+    --     Left errMsg -> putStrLn $ "Failed to fetch game schedule: " ++ errMsg
