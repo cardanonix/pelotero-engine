@@ -31,6 +31,22 @@ import qualified Data.Aeson.Key as K
 import qualified InputADT as I
 import GHC.Arr (array)
 
+-- data JsonDayData = JsonDayData
+--   { fo_players  :: M.Map Text JsonPlayerData
+--   , fo_games    :: M.Map Text LiveGameWrapper.LiveGameStatusWrapper.LiveGameStatus.codedGameState: Text
+--   , fo_checksum :: Text
+--   , fo_date     :: Text
+--   } deriving (Show, Eq)
+
+-- instance ToJSON JsonDayData where
+--   toJSON :: JsonDayData -> Value
+--   toJSON fo = object
+--     [ "players"  .= fo_players fo
+--     , "games"    .= fo_games fo
+--     , "checksum" .= fo_checksum fo
+--     , "date"     .= fo_date fo
+--     ]
+
 data JsonPlayerData where
   JsonPlayerData :: {playerId :: Text,
                        fullName :: Text,
@@ -46,25 +62,6 @@ data JsonStatsData where
                       pitching :: Maybe I.PitchingStats}
                      -> JsonStatsData
   deriving (Show, Eq)
-
--- Important Stat-Mutation stuff
-playerToJsonPlayerData :: I.Player -> JsonPlayerData
-playerToJsonPlayerData p =
-    JsonPlayerData
-        { playerId = Text.pack $ show $ I.personId (I.person p)
-        , fullName = I.fullName (I.person p)
-        , stats = M.singleton (maybe "" (Text.pack . show) (I.gameid p)) (playerToJsonStatsData p)
-        }
-
-playerToJsonStatsData :: I.Player -> JsonStatsData
-playerToJsonStatsData p =
-    JsonStatsData
-        { parentTeamId = I.parentTeamId p
-        , allPositions = fromMaybe [] (I.allPositions p)
-        , statusCode = I.status_code (I.status p)
-        , batting = I.batting (I.stats p)
-        , pitching = I.pitching (I.stats p)
-        }
 
 instance ToJSON JsonPlayerData where
     toJSON :: JsonPlayerData -> Value
@@ -160,9 +157,3 @@ instance ToJSON I.BattingStats where
 instance ToJSON I.Position where
     toJSON :: I.Position -> Value
     toJSON (I.Position allPositions) = object ["allPositions" .= allPositions]
-
-convertPlayerToJson :: I.Player -> ByteString
-convertPlayerToJson = BL.toStrict . encode . playerToJsonPlayerData
-
-writePlayerToJsonFile :: FilePath -> I.Player -> IO ()
-writePlayerToJsonFile path player = B.writeFile path (convertPlayerToJson player)

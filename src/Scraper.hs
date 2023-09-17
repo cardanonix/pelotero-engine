@@ -53,6 +53,7 @@ import InputADT
     , PlayerStats (..)
     , ActivePlayer (..)
     )
+import qualified MiddleADT as MI
 import qualified OutputADT as OUT
 -- import OutputADT
 --     ( PlayerData (..)
@@ -166,27 +167,42 @@ processAndPrintGames gameScheduleEither =
 
 -- ## OUTPUT CONVERSION ##
 
--- flattenGameData :: I.GameData -> Int -> OUT.OutputData
--- flattenGameData gameData gameId = OutputData $ M.fromList $ map convertPlayer allPlayers
---   where
---     teamsData = I.teams gameData
---     allPlayers = M.elems (I.players $ I.away teamsData) ++ M.elems (I.players $ I.home teamsData)
+-- Stat-Mutation stuff
+playerToJsonPlayerData :: I.Player -> MI.JsonPlayerData
+playerToJsonPlayerData p =
+    MI.JsonPlayerData
+        { MI.playerId = T.pack $ show $ I.personId (I.person p)
+        , MI.fullName = I.fullName (I.person p)
+        , MI.stats = M.singleton (maybe "" (T.pack . show) (I.gameid p)) (playerToJsonStatsData p)
+        }
 
---     convertPlayer :: I.Player -> (Int, OUT.PlayerData)
---     convertPlayer p = 
---         (I.personId $ I.person p,
---          OUT.PlayerData 
---             (I.personId $ I.person p) 
---             (I.fullName $ I.person p)
---             (M.singleton gameId (convertPlayerStats $ I.stats p)))
+playerToJsonStatsData :: I.Player -> MI.JsonStatsData
+playerToJsonStatsData p =
+    MI.JsonStatsData
+        { MI.parentTeamId = I.parentTeamId p
+        , MI.allPositions = fromMaybe [] (I.allPositions p)
+        , MI.statusCode = I.status_code (I.status p)
+        , MI.batting = I.batting (I.stats p)
+        , MI.pitching = I.pitching (I.stats p)
+        }
 
---     convertPlayerStats :: I.Player -> I.PlayerStats -> OUT.PlayerStatsOutput
---     convertPlayerStats p ps = OUT.PlayerStatsOutput 
---             (I.parentTeamId p)
---             (map readPositionCode <$> I.allPositions p)
---             (I.status_code $ I.status p)
---             (I.batting ps)
---             (I.pitching ps)
+convertPlayerToJson :: I.Player -> ByteString
+convertPlayerToJson = BL.toStrict . encode . playerToJsonPlayerData
 
---     readPositionCode :: I.Position -> Int
---     readPositionCode pos = read $ T.unpack $ I.pos_code pos
+writePlayerToJsonFile :: FilePath -> I.Player -> IO ()
+writePlayerToJsonFile path player = B.writeFile path (convertPlayerToJson player)
+
+convertGameDataMapToJsonPlayerData :: M.Map Int I.GameData -> M.Map Int [MI.JsonPlayerData]
+convertGameDataMapToJsonPlayerData = M.map gameDataToPlayerDataList
+  where
+    gameDataToPlayerDataList :: I.GameData -> [MI.JsonPlayerData]
+    gameDataToPlayerDataList gameData =
+        let awayPlayers = M.elems $ I.players $ I.away $ I.teams gameData
+            homePlayers = M.elems $ I.players $ I.home $ I.teams gameData
+        in map playerToJsonPlayerData (awayPlayers ++ homePlayers)
+
+processGameIdsToJsonPlayerData :: [Int] -> IO (Either String (M.Map Int [MI.JsonPlayerData]))
+processGameIdsToJsonPlayerData gameIds = do
+    gameDataResult <- processGameIds gameIds
+    return $ fmap convertGameDataMapToJsonPlayerData gameDataResult
+

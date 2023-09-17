@@ -25,6 +25,9 @@ import InputADT ( GameData
                 , LiveGameWrapper
                 , GameSchedule
                 )
+import MiddleADT ( JsonPlayerData(..)
+                 , JsonStatsData(..)
+                 )
 import OutputADT (OutputData)
 import Scraper  ( withEither
                 , fetchGameScheduleForDate
@@ -41,6 +44,7 @@ import Scraper  ( withEither
                 , processGameIds
                 , printProcessedGameData
                 , processAndPrintGames
+                ,
                 )
 
 main :: IO ()
@@ -53,3 +57,4 @@ main = do
 
     -- Completion message
     putStrLn "Processing completed for the given date!"
+
