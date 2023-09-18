@@ -99,12 +99,6 @@ fetchFinishedBxScores gameIds = do
 
 -- ## OUTPUT CONVERSION ##
 -- [B] list of gameIds -> C status checks -> [D] (list of box scores) -> [E] (list of player data)
---older version
--- fetchFinishedBxScoresToJsonPlayerData :: [Int] -> IO (Either String (M.Map Int [MI.JsonPlayerData]))
--- fetchFinishedBxScoresToJsonPlayerData gameIds = do
---     gameDataResult <- fetchFinishedBxScores gameIds
---     return $ fmap convertGameDataMapToJsonPlayerData gameDataResult
-
 fetchFinishedBxScoresToJsonPlayerData :: [Int] -> IO (Either String (M.Map Text MI.JsonPlayerData))
 fetchFinishedBxScoresToJsonPlayerData gameIds = do
     gameDataResult <- fetchFinishedBxScores gameIds
@@ -138,63 +132,6 @@ scrapeDataForDateRange start end = do
 
 flattenedPlayersList :: M.Map Text MI.JsonPlayerData -> M.Map Text [MI.JsonPlayerData]
 flattenedPlayersList players = M.map (\v -> [v]) players
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
--- helper functions
 
 -- # Printing 
 -- takes a list of tuples game id's and game data and prints them
@@ -289,9 +226,6 @@ formatFilename date = replace '-' '_' date ++ ".json"
   where
     replace old new = T.unpack . T.replace (T.pack [old]) (T.pack [new]) . T.pack
 
--- encodeMyMap :: M.Map Text MI.JsonPlayerData -> ByteString
--- encodeMyMap = B.encode
-
 -- Write Player to JSON File
 writePlayerToJsonFile :: FilePath -> I.Player -> IO ()
 writePlayerToJsonFile path player = B.writeFile path (convertPlayerToJson player)
@@ -317,9 +251,6 @@ generateDateRange start end = map (formatTime defaultTimeLocale "%Y-%m-%d") date
     endDate = stringToDay end
     dates = takeWhile (<= endDate) $ iterate incrementDay startDate
 
-
--- I had to copy these functions to two places
--- mutation functions:
 -- Stat-Mutation stuff
 playerToJsonPlayerData :: I.Player -> MI.JsonPlayerData
 playerToJsonPlayerData p =
@@ -360,18 +291,7 @@ convertPlayerToJson = BL.toStrict . encode . playerToJsonPlayerData
 --         let awayPlayers = M.elems $ I.players $ I.away $ I.teams gameData
 --             homePlayers = M.elems $ I.players $ I.home $ I.teams gameData
 --             allPlayers = awayPlayers ++ homePlayers
---         in map (\player -> (MI.playerId (playerToJsonPlayerData player), playerToJsonPlayerData player)) allPlayers
-
--- convertGameDataMapToJsonPlayerData :: M.Map Int I.GameData -> M.Map Text MI.JsonPlayerData
--- convertGameDataMapToJsonPlayerData gameDataMap = 
---     M.fromList $ concatMap gameDataToPlayerDataPairs (M.elems gameDataMap)
---   where
---     gameDataToPlayerDataPairs :: I.GameData -> [(Text, MI.JsonPlayerData)]
---     gameDataToPlayerDataPairs gameData =
---         let awayPlayers = M.elems $ I.players $ I.away $ I.teams gameData
---             homePlayers = M.elems $ I.players $ I.home $ I.teams gameData
---             allPlayers = awayPlayers ++ homePlayers
---         in map (\player -> (MI.playerId (playerToJsonPlayerData player), playerToJsonPlayerData player)) allPlayers
+--         in map (\player -> (T.pack . show $ MI.playerId (playerToJsonPlayerData player), playerToJsonPlayerData player)) allPlayers
 
 convertGameDataMapToJsonPlayerData :: M.Map Int I.GameData -> M.Map Text MI.JsonPlayerData
 convertGameDataMapToJsonPlayerData gameDataMap = 
@@ -382,4 +302,7 @@ convertGameDataMapToJsonPlayerData gameDataMap =
         let awayPlayers = M.elems $ I.players $ I.away $ I.teams gameData
             homePlayers = M.elems $ I.players $ I.home $ I.teams gameData
             allPlayers = awayPlayers ++ homePlayers
-        in map (\player -> (T.pack . show $ MI.playerId (playerToJsonPlayerData player), playerToJsonPlayerData player)) allPlayers
+        in map (\player -> (rawStringToText $ MI.playerId (playerToJsonPlayerData player), playerToJsonPlayerData player)) allPlayers
+
+    rawStringToText :: Text -> Text
+    rawStringToText = T.replace "\\\"" "\"" . T.replace "\\\\" "\\"
