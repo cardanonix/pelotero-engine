@@ -268,9 +268,12 @@ convertPlayerToJson :: I.Player -> ByteString
 convertPlayerToJson = BL.toStrict . encode . playerToJsonPlayerData
 
 convertGameDataMapToJsonPlayerData :: M.Map Int I.GameData -> M.Map Text MI.JsonPlayerData
-convertGameDataMapToJsonPlayerData gameDataMap = 
-    M.fromList $ concatMap gameDataToPlayerDataPairs (M.elems gameDataMap)
+convertGameDataMapToJsonPlayerData gameDataMap =
+    foldl mergePlayerData M.empty allPlayerDataPairs
   where
+    allPlayerDataPairs :: [(Text, MI.JsonPlayerData)]
+    allPlayerDataPairs = concatMap gameDataToPlayerDataPairs (M.elems gameDataMap)
+
     gameDataToPlayerDataPairs :: I.GameData -> [(Text, MI.JsonPlayerData)]
     gameDataToPlayerDataPairs gameData =
         let awayPlayers = M.elems $ I.players $ I.away $ I.teams gameData
@@ -280,3 +283,29 @@ convertGameDataMapToJsonPlayerData gameDataMap =
 
     rawStringToText :: Text -> Text
     rawStringToText = T.replace "\\\"" "\"" . T.replace "\\\\" "\\"
+
+    mergePlayerData :: M.Map Text MI.JsonPlayerData -> (Text, MI.JsonPlayerData) -> M.Map Text MI.JsonPlayerData
+    mergePlayerData acc (playerId, newPlayerData) =
+        let mergedData = case M.lookup playerId acc of
+                Just existingPlayerData -> mergeJsonPlayerData existingPlayerData newPlayerData
+                Nothing                 -> newPlayerData
+        in M.insert playerId mergedData acc
+
+mergeJsonPlayerData :: MI.JsonPlayerData -> MI.JsonPlayerData -> MI.JsonPlayerData
+mergeJsonPlayerData existing new = 
+    MI.JsonPlayerData
+        { MI.playerId = MI.playerId existing  -- assuming playerIds are the same, else there's a bigger problem!
+        , MI.fullName = MI.fullName existing  -- assuming fullNames are the same
+        , MI.stats = M.unionWith mergeJsonStatsData (MI.stats existing) (MI.stats new)
+        }
+
+mergeJsonStatsData :: MI.JsonStatsData -> MI.JsonStatsData -> MI.JsonStatsData
+mergeJsonStatsData existing new =
+    -- Modify this if you have more complex merging logic!
+    MI.JsonStatsData
+        { MI.parentTeamId = MI.parentTeamId existing  -- assuming parentTeamIds are the same
+        , MI.allPositions = MI.allPositions existing  -- TODO: Consider merging lists if they differ between games
+        , MI.statusCode = MI.statusCode existing      -- TODO: Handle if status codes differ between games
+        , MI.batting = MI.batting new  -- for this example, just taking the new stats
+        , MI.pitching = MI.pitching new  -- same here, just taking the new stats
+        }

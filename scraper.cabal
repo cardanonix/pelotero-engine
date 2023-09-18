@@ -31,10 +31,10 @@ executable scraper
                 , directory
 
 
-executable mutant
+executable fetchStats
   hs-source-dirs: src
   main-is: Mutate.hs
-  other-modules:  InputADT, Scraper, MiddleADT, OutputADT, ConfigADT
+  other-modules:  InputADT, Scraper, MiddleADT
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time

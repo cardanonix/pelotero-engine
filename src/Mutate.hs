@@ -28,12 +28,12 @@ import InputADT ( GameData
 import MiddleADT ( JsonPlayerData(..)
                  , JsonStatsData(..)
                  )
-import OutputADT (OutputData)
 import Scraper ( scrapeDataForDateRange )
 import System.Environment (getArgs)
 
 main :: IO ()
 main = do
-    let startDate = "2023-08-22"  -- or whatever your start date is
-        endDate   = "2023-08-22"  -- or whatever your end date is
-    scrapeDataForDateRange startDate endDate
+    args <- getArgs
+    case args of
+        [startDate, endDate] -> scrapeDataForDateRange startDate endDate
+        _ -> putStrLn "Usage: fetchStats <start-date> <end-date>"
