@@ -106,6 +106,25 @@ fetchFinishedBxScoresToJsonPlayerData gameIds = do
 
 -- ## Very Rough Output Stuff ##
 -- A -> [B] list of gameIds -> C status checks -> [D] (list of box scores) -> [E] (list of player data)
+-- processDate :: String -> IO ()
+-- processDate date = do
+--     putStrLn $ "Processing " ++ date
+--     scheduleResult <- fetchGameScheduleForDate date
+--     processAndPrintGames scheduleResult
+--     case scheduleResult of
+--         Left err -> putStrLn $ "Failed to fetch game schedule: " ++ err
+--         Right schedule -> do
+--             let gameIds = extractGameIds schedule
+--             flattenedPlayersResult <- fetchFinishedBxScoresToJsonPlayerData gameIds
+--             case flattenedPlayersResult of
+--                 Left err -> putStrLn $ "Failed to process JSON: " ++ err
+--                 Right flattenedPlayers -> do
+--                     putStrLn "Flattened Player Data:"
+--                     print flattenedPlayers
+--                     -- Writing data to file
+--                     let filename = formatFilename date
+--                     writeDataToFile filename "scrapedData/stats" (flattenedPlayersList flattenedPlayers)
+
 processDate :: String -> IO ()
 processDate date = do
     putStrLn $ "Processing " ++ date
@@ -123,15 +142,18 @@ processDate date = do
                     print flattenedPlayers
                     -- Writing data to file
                     let filename = formatFilename date
-                    writeDataToFile filename "scrapedData/stats" (flattenedPlayersList flattenedPlayers)
+                    writeDataToFile filename "scrapedData/stats" flattenedPlayers
 
 -- Main scraper function tying everything together
 scrapeDataForDateRange :: String -> String -> IO ()
 scrapeDataForDateRange start end = do
     mapM_ processDate (generateDateRange start end)
 
-flattenedPlayersList :: M.Map Text MI.JsonPlayerData -> M.Map Text [MI.JsonPlayerData]
-flattenedPlayersList players = M.map (\v -> [v]) players
+-- flattenedPlayersList :: M.Map Text MI.JsonPlayerData -> M.Map Text [MI.JsonPlayerData]
+-- flattenedPlayersList players = M.map (\v -> [v]) players
+
+flattenedPlayersList :: M.Map Text MI.JsonPlayerData -> M.Map Text MI.JsonPlayerData
+flattenedPlayersList = id  -- or simply remove this function and use the map directly
 
 -- # Printing 
 -- takes a list of tuples game id's and game data and prints them
@@ -208,7 +230,7 @@ assignGameIdToPlayers gameId gameData =
 
 -- ## FileName Manipulation Stuff 
 -- Takes a filename, path, and the data to save, then writes to a JSON file at the specified path with the given filename.
-writeDataToFile :: FilePath -> FilePath -> M.Map Text [MI.JsonPlayerData] -> IO ()
+writeDataToFile :: FilePath -> FilePath -> M.Map Text MI.JsonPlayerData -> IO ()
 writeDataToFile filename path dataToSave = do
     createOutputDirectory path
     let fullpath = path ++ "/" ++ filename
