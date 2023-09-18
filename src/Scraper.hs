@@ -8,8 +8,8 @@
 module Scraper ( fetchGameScheduleForDate
                 , fetchFinishedBxScore
                 , fetchGameStatus
-    , scrapeDataForDateRange
-)where
+                , scrapeDataForDateRange
+            )where
 
 import Network.HTTP.Simple
     ( parseRequest_,
@@ -208,12 +208,6 @@ assignGameIdToPlayers gameId gameData =
 
 -- ## FileName Manipulation Stuff 
 -- Takes a filename, path, and the data to save, then writes to a JSON file at the specified path with the given filename.
--- writeDataToFile :: FilePath -> FilePath -> M.Map Int [MI.JsonPlayerData] -> IO ()
--- writeDataToFile filename path dataToSave = do
---     createOutputDirectory path
---     let fullpath = path ++ "/" ++ filename
---     BL.writeFile fullpath (encode dataToSave)
-
 writeDataToFile :: FilePath -> FilePath -> M.Map Text [MI.JsonPlayerData] -> IO ()
 writeDataToFile filename path dataToSave = do
     createOutputDirectory path
@@ -272,26 +266,6 @@ playerToJsonStatsData p =
 
 convertPlayerToJson :: I.Player -> ByteString
 convertPlayerToJson = BL.toStrict . encode . playerToJsonPlayerData
-
--- convertGameDataMapToJsonPlayerData :: M.Map Int I.GameData -> M.Map Int [MI.JsonPlayerData]
--- convertGameDataMapToJsonPlayerData = M.map gameDataToPlayerDataList
---   where
---     gameDataToPlayerDataList :: I.GameData -> [MI.JsonPlayerData]
---     gameDataToPlayerDataList gameData =
---         let awayPlayers = M.elems $ I.players $ I.away $ I.teams gameData
---             homePlayers = M.elems $ I.players $ I.home $ I.teams gameData
---         in map playerToJsonPlayerData (awayPlayers ++ homePlayers)
-
--- convertGameDataMapToJsonPlayerData :: M.Map Int I.GameData -> M.Map Text MI.JsonPlayerData
--- convertGameDataMapToJsonPlayerData gameDataMap = 
---     M.fromList $ concatMap gameDataToPlayerDataPairs (M.elems gameDataMap)
---   where
---     gameDataToPlayerDataPairs :: I.GameData -> [(Text, MI.JsonPlayerData)]
---     gameDataToPlayerDataPairs gameData =
---         let awayPlayers = M.elems $ I.players $ I.away $ I.teams gameData
---             homePlayers = M.elems $ I.players $ I.home $ I.teams gameData
---             allPlayers = awayPlayers ++ homePlayers
---         in map (\player -> (T.pack . show $ MI.playerId (playerToJsonPlayerData player), playerToJsonPlayerData player)) allPlayers
 
 convertGameDataMapToJsonPlayerData :: M.Map Int I.GameData -> M.Map Text MI.JsonPlayerData
 convertGameDataMapToJsonPlayerData gameDataMap = 
