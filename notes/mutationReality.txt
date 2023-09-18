@@ -1,0 +1,108 @@
+``
+{
+  "716887": [
+    {
+      "fullName": "Yuli Gurriel",
+      "player_id": "493329",
+      "stats": {
+        "716887": {
+          "allPositions": [
+            3
+          ],
+          "batting": {
+            "bat_atBats": 3,
+            "bat_baseOnBalls": 1,
+            "bat_catchersInterference": 0,
+            "bat_caughtStealing": 0,
+            "bat_doubles": 0,
+            "bat_flyOuts": 0,
+            "bat_gamesPlayed": 1,
+            "bat_groundIntoDoublePlay": 0,
+            "bat_groundIntoTriplePlay": 0,
+            "bat_groundOuts": 1,
+            "bat_hitByPitch": 0,
+            "bat_hits": 1,
+            "bat_homeRuns": 0,
+            "bat_intentionalWalks": 0,
+            "bat_leftOnBase": 0,
+            "bat_pickoffs": 0,
+            "bat_plateAppearances": 4,
+            "bat_rbi": 0,
+            "bat_runs": 0,
+            "bat_sacBunts": 0,
+            "bat_sacFlies": 0,
+            "bat_stolenBases": 0,
+            "bat_strikeOuts": 1,
+            "bat_totalBases": 1,
+            "bat_triples": 0
+          },
+          "parentTeamId": 146,
+          "pitching": {},
+          "status": "A"
+        }
+      }
+    },
+    {
+      "fullName": "David Robertson",
+      "player_id": "502085",
+      "stats": {
+        "716887": {
+          "allPositions": [
+            1
+          ],
+          "batting": {},
+          "parentTeamId": 146,
+          "pitching": {
+            "pit_airOuts": 2,
+            "pit_atBats": 3,
+            "pit_balks": 0,
+            "pit_balls": 9,
+            "pit_baseOnBalls": 1,
+            "pit_battersFaced": 4,
+            "pit_blownSaves": 0,
+            "pit_catchersInterference": 0,
+            "pit_caughtStealing": 0,
+            "pit_completeGames": 0,
+            "pit_doubles": 0,
+            "pit_earnedRuns": 0,
+            "pit_gamesFinished": 1,
+            "pit_gamesPitched": 1,
+            "pit_gamesPlayed": 1,
+            "pit_gamesStarted": 0,
+            "pit_groundOuts": 0,
+            "pit_hitBatsmen": 0,
+            "pit_hitByPitch": 0,
+            "pit_hits": 0,
+            "pit_holds": 0,
+            "pit_homeRuns": 0,
+            "pit_inheritedRunners": 0,
+            "pit_inheritedRunnersScored": 0,
+            "pit_inningsPitched": "1.0",
+            "pit_intentionalWalks": 0,
+            "pit_losses": 0,
+            "pit_numberOfPitches": 19,
+            "pit_outs": 3,
+            "pit_passedBall": 0,
+            "pit_pickoffs": 0,
+            "pit_pitchesThrown": 19,
+            "pit_rbi": 0,
+            "pit_runs": 0,
+            "pit_sacBunts": 0,
+            "pit_sacFlies": 0,
+            "pit_saveOpportunities": 1,
+            "pit_saves": 1,
+            "pit_shutouts": 0,
+            "pit_stolenBases": 0,
+            "pit_strikeOuts": 1,
+            "pit_strikes": 10,
+            "pit_triples": 0,
+            "pit_wildPitches": 0,
+            "pit_wins": 0
+          },
+          "status": "A"
+        }
+      }
+    }
+  ]
+}
+``

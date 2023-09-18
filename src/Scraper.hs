@@ -5,12 +5,10 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 
-module Scraper (
-    fetchActiveRoster,
-    fetchGameScheduleForDate,
-    fetchGameStatus,
-    fetchFinishedBxScore,
-    fetchFinishedBxScores
+module Scraper ( fetchGameScheduleForDate
+                , fetchFinishedBxScore
+                , fetchGameStatus
+    , scrapeDataForDateRange
 )where
 
 import Network.HTTP.Simple
@@ -62,37 +60,19 @@ import InputADT
 import qualified MiddleADT as MI
 import qualified OutputADT as OUT
 
--- # Printing 
--- takes a list of tuples game id's and game data and prints them
-printGameData :: Either String (M.Map Int I.GameData) -> IO ()
-printGameData gameDataMapEither =
-    withEither (return gameDataMapEither) $ \gameDataMap ->
-        mapM_ (\(gameId, gameData) -> putStrLn $ show gameId ++ ": " ++ show gameData) (M.toList gameDataMap)
-
--- print the schedule bytestring
-processAndPrintGames :: Either String I.GameSchedule -> IO ()
-processAndPrintGames gameScheduleEither =
-    withEither (return gameScheduleEither) $ \gameSchedule ->
-        if hasGamesForDate gameSchedule then do
-            let gameIds = extractGameIds gameSchedule
-            gameDataMap <- fetchFinishedBxScores gameIds
-            printGameData gameDataMap
-        else putStrLn "No games scheduled for the provided date."
-
--- takes a season and outputs a roster bytestring of that season
-fetchActiveRoster :: Int -> IO (Either String I.ActivePlayer)
-fetchActiveRoster season = fetchAndDecodeJSON (rosterUrl season)
-
+-- A (date String) -> [B] (list of gameIds/GameSchedule)
 -- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule
 fetchGameScheduleForDate :: String -> IO (Either String GameSchedule)
 fetchGameScheduleForDate date = do
     scheduleResult <- fetchAndDecodeJSON (scheduleUrl date)
     return $ fmap (assignDateToSchedule (T.pack date)) scheduleResult
 
+-- B (gameId) -> C (status)
 -- takes a gameId and returns IO (Either String LiveGameWrapper)
 fetchGameStatus :: Int -> IO (Either String I.LiveGameWrapper)
 fetchGameStatus gameId = fetchAndDecodeJSON (gameStatusUrl gameId)
 
+-- B (gameId) -> C (status) -> D (boxscore)
 -- takes a gameId and returns IO (Either String GameData)
 fetchFinishedBxScore :: Int -> IO (Either String I.GameData)
 fetchFinishedBxScore gameId = do
@@ -108,6 +88,7 @@ fetchFinishedBxScore gameId = do
                else return $ Left "Game isn't finished yet"
         Left err -> return $ Left ("Error fetching game status: " ++ err)
 
+-- [B] list of gameIds -> C status checks -> [D] list of boxscores
 --maps fetchFinishedBxScore over an array of game id's and returns IO (M.Map Int ByteString)
 fetchFinishedBxScores :: [Int] -> IO (Either String (M.Map Int I.GameData))
 fetchFinishedBxScores gameIds = do
@@ -117,14 +98,20 @@ fetchFinishedBxScores gameIds = do
         Right gameDataList -> return $ Right $ M.fromList $ zip gameIds gameDataList
 
 -- ## OUTPUT CONVERSION ##
+-- [B] list of gameIds -> C status checks -> [D] (list of box scores) -> [E] (list of player data)
+--older version
+-- fetchFinishedBxScoresToJsonPlayerData :: [Int] -> IO (Either String (M.Map Int [MI.JsonPlayerData]))
+-- fetchFinishedBxScoresToJsonPlayerData gameIds = do
+--     gameDataResult <- fetchFinishedBxScores gameIds
+--     return $ fmap convertGameDataMapToJsonPlayerData gameDataResult
 
-fetchFinishedBxScoresToJsonPlayerData :: [Int] -> IO (Either String (M.Map Int [MI.JsonPlayerData]))
+fetchFinishedBxScoresToJsonPlayerData :: [Int] -> IO (Either String (M.Map Text MI.JsonPlayerData))
 fetchFinishedBxScoresToJsonPlayerData gameIds = do
     gameDataResult <- fetchFinishedBxScores gameIds
     return $ fmap convertGameDataMapToJsonPlayerData gameDataResult
 
 -- ## Very Rough Output Stuff ##
-
+-- A -> [B] list of gameIds -> C status checks -> [D] (list of box scores) -> [E] (list of player data)
 processDate :: String -> IO ()
 processDate date = do
     putStrLn $ "Processing " ++ date
@@ -142,12 +129,15 @@ processDate date = do
                     print flattenedPlayers
                     -- Writing data to file
                     let filename = formatFilename date
-                    writeDataToFile filename "scrapedData/stats/" flattenedPlayers
+                    writeDataToFile filename "scrapedData/stats" (flattenedPlayersList flattenedPlayers)
 
 -- Main scraper function tying everything together
 scrapeDataForDateRange :: String -> String -> IO ()
 scrapeDataForDateRange start end = do
     mapM_ processDate (generateDateRange start end)
+
+flattenedPlayersList :: M.Map Text MI.JsonPlayerData -> M.Map Text [MI.JsonPlayerData]
+flattenedPlayersList players = M.map (\v -> [v]) players
 
 
 
@@ -206,6 +196,26 @@ scrapeDataForDateRange start end = do
 
 -- helper functions
 
+-- # Printing 
+-- takes a list of tuples game id's and game data and prints them
+printGameData :: Either String (M.Map Int I.GameData) -> IO ()
+printGameData gameDataMapEither =
+    withEither (return gameDataMapEither) $ \gameDataMap ->
+        mapM_ (\(gameId, gameData) -> putStrLn $ show gameId ++ ": " ++ show gameData) (M.toList gameDataMap)
+
+-- print the schedule bytestring
+processAndPrintGames :: Either String I.GameSchedule -> IO ()
+processAndPrintGames gameScheduleEither =
+    withEither (return gameScheduleEither) $ \gameSchedule ->
+        if hasGamesForDate gameSchedule then do
+            let gameIds = extractGameIds gameSchedule
+            gameDataMap <- fetchFinishedBxScores gameIds
+            printGameData gameDataMap
+        else putStrLn "No games scheduled for the provided date."
+
+-- takes a season and outputs a roster bytestring of that season
+fetchActiveRoster :: Int -> IO (Either String I.ActivePlayer)
+fetchActiveRoster season = fetchAndDecodeJSON (rosterUrl season)
 
 -- monadic error handling for fetching and decoding
 withEither :: IO (Either String a) -> (a -> IO ()) -> IO ()
@@ -261,17 +271,26 @@ assignGameIdToPlayers gameId gameData =
 
 -- ## FileName Manipulation Stuff 
 -- Takes a filename, path, and the data to save, then writes to a JSON file at the specified path with the given filename.
-writeDataToFile :: FilePath -> FilePath -> M.Map Int [MI.JsonPlayerData] -> IO ()
+-- writeDataToFile :: FilePath -> FilePath -> M.Map Int [MI.JsonPlayerData] -> IO ()
+-- writeDataToFile filename path dataToSave = do
+--     createOutputDirectory path
+--     let fullpath = path ++ "/" ++ filename
+--     BL.writeFile fullpath (encode dataToSave)
+
+writeDataToFile :: FilePath -> FilePath -> M.Map Text [MI.JsonPlayerData] -> IO ()
 writeDataToFile filename path dataToSave = do
     createOutputDirectory path
     let fullpath = path ++ "/" ++ filename
     BL.writeFile fullpath (encode dataToSave)
-
+    
 -- Takes a date string and formats it as a filename, like "2023_08_22.json".
 formatFilename :: String -> String
 formatFilename date = replace '-' '_' date ++ ".json"
   where
     replace old new = T.unpack . T.replace (T.pack [old]) (T.pack [new]) . T.pack
+
+-- encodeMyMap :: M.Map Text MI.JsonPlayerData -> ByteString
+-- encodeMyMap = B.encode
 
 -- Write Player to JSON File
 writePlayerToJsonFile :: FilePath -> I.Player -> IO ()
@@ -323,11 +342,44 @@ playerToJsonStatsData p =
 convertPlayerToJson :: I.Player -> ByteString
 convertPlayerToJson = BL.toStrict . encode . playerToJsonPlayerData
 
-convertGameDataMapToJsonPlayerData :: M.Map Int I.GameData -> M.Map Int [MI.JsonPlayerData]
-convertGameDataMapToJsonPlayerData = M.map gameDataToPlayerDataList
+-- convertGameDataMapToJsonPlayerData :: M.Map Int I.GameData -> M.Map Int [MI.JsonPlayerData]
+-- convertGameDataMapToJsonPlayerData = M.map gameDataToPlayerDataList
+--   where
+--     gameDataToPlayerDataList :: I.GameData -> [MI.JsonPlayerData]
+--     gameDataToPlayerDataList gameData =
+--         let awayPlayers = M.elems $ I.players $ I.away $ I.teams gameData
+--             homePlayers = M.elems $ I.players $ I.home $ I.teams gameData
+--         in map playerToJsonPlayerData (awayPlayers ++ homePlayers)
+
+-- convertGameDataMapToJsonPlayerData :: M.Map Int I.GameData -> M.Map Text MI.JsonPlayerData
+-- convertGameDataMapToJsonPlayerData gameDataMap = 
+--     M.fromList $ concatMap gameDataToPlayerDataPairs (M.elems gameDataMap)
+--   where
+--     gameDataToPlayerDataPairs :: I.GameData -> [(Text, MI.JsonPlayerData)]
+--     gameDataToPlayerDataPairs gameData =
+--         let awayPlayers = M.elems $ I.players $ I.away $ I.teams gameData
+--             homePlayers = M.elems $ I.players $ I.home $ I.teams gameData
+--             allPlayers = awayPlayers ++ homePlayers
+--         in map (\player -> (MI.playerId (playerToJsonPlayerData player), playerToJsonPlayerData player)) allPlayers
+
+-- convertGameDataMapToJsonPlayerData :: M.Map Int I.GameData -> M.Map Text MI.JsonPlayerData
+-- convertGameDataMapToJsonPlayerData gameDataMap = 
+--     M.fromList $ concatMap gameDataToPlayerDataPairs (M.elems gameDataMap)
+--   where
+--     gameDataToPlayerDataPairs :: I.GameData -> [(Text, MI.JsonPlayerData)]
+--     gameDataToPlayerDataPairs gameData =
+--         let awayPlayers = M.elems $ I.players $ I.away $ I.teams gameData
+--             homePlayers = M.elems $ I.players $ I.home $ I.teams gameData
+--             allPlayers = awayPlayers ++ homePlayers
+--         in map (\player -> (MI.playerId (playerToJsonPlayerData player), playerToJsonPlayerData player)) allPlayers
+
+convertGameDataMapToJsonPlayerData :: M.Map Int I.GameData -> M.Map Text MI.JsonPlayerData
+convertGameDataMapToJsonPlayerData gameDataMap = 
+    M.fromList $ concatMap gameDataToPlayerDataPairs (M.elems gameDataMap)
   where
-    gameDataToPlayerDataList :: I.GameData -> [MI.JsonPlayerData]
-    gameDataToPlayerDataList gameData =
+    gameDataToPlayerDataPairs :: I.GameData -> [(Text, MI.JsonPlayerData)]
+    gameDataToPlayerDataPairs gameData =
         let awayPlayers = M.elems $ I.players $ I.away $ I.teams gameData
             homePlayers = M.elems $ I.players $ I.home $ I.teams gameData
-        in map playerToJsonPlayerData (awayPlayers ++ homePlayers)
+            allPlayers = awayPlayers ++ homePlayers
+        in map (\player -> (T.pack . show $ MI.playerId (playerToJsonPlayerData player), playerToJsonPlayerData player)) allPlayers

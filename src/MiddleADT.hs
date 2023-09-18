@@ -31,22 +31,6 @@ import qualified Data.Aeson.Key as K
 import qualified InputADT as I
 import GHC.Arr (array)
 
--- data JsonDayData = JsonDayData
---   { fo_players  :: M.Map Text JsonPlayerData
---   , fo_games    :: M.Map Text LiveGameWrapper.LiveGameStatusWrapper.LiveGameStatus.codedGameState: Text
---   , fo_checksum :: Text
---   , fo_date     :: Text
---   } deriving (Show, Eq)
-
--- instance ToJSON JsonDayData where
---   toJSON :: JsonDayData -> Value
---   toJSON fo = object
---     [ "players"  .= fo_players fo
---     , "games"    .= fo_games fo
---     , "checksum" .= fo_checksum fo
---     , "date"     .= fo_date fo
---     ]
-
 data JsonPlayerData where
   JsonPlayerData :: {playerId :: Text,
                        fullName :: Text,
@@ -66,12 +50,24 @@ data JsonStatsData where
 instance ToJSON JsonPlayerData where
     toJSON :: JsonPlayerData -> Value
     toJSON (JsonPlayerData pid fname sts) =
-        object ["player_id" .= pid, "fullName" .= fname, "stats" .= sts]
+        object ["fullName" .= fname, "player_id" .= pid, "stats" .= sts]
 
 instance ToJSON JsonStatsData where
     toJSON :: JsonStatsData -> Value
     toJSON (JsonStatsData pId allPos statCode bat pitch) =
         object ["parentTeamId" .= pId, "allPositions" .= allPos, "status" .= statCode, "batting" .= bat, "pitching" .= pitch]
+
+-- instance ToJSON I.Position where
+--     toJSON :: I.Position -> Value
+--     toJSON (I.Position allPositions) = 
+--         let positionValue = read (Text.unpack allPositions) :: Int 
+--         in Array $ V.fromList [Number (fromIntegral positionValue)]
+
+instance ToJSON I.Position where
+    toJSON :: I.Position -> Value
+    toJSON (I.Position allPositions) = 
+        let positionValue = read (Text.unpack allPositions) :: Int 
+        in Number (fromIntegral positionValue)
 
 instance ToJSON I.PitchingStats where
     toJSON :: I.PitchingStats -> Value
@@ -153,7 +149,3 @@ instance ToJSON I.BattingStats where
         , fmap ("bat_catchersInterference" .=) (I.bat_catchersInterference batStats)
         , fmap ("bat_pickoffs" .=) (I.bat_pickoffs batStats)
         ]
-
-instance ToJSON I.Position where
-    toJSON :: I.Position -> Value
-    toJSON (I.Position allPositions) = object ["allPositions" .= allPositions]
