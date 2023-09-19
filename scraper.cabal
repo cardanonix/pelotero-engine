@@ -9,7 +9,8 @@ version: 0.0.3.0
 executable scraper
   hs-source-dirs: src
   main-is: Main.hs
-  other-modules:  InputADT, Scraper, MiddleADT, OutputADT, ConfigADT
+  ghc-options: -O2
+  other-modules:  InputADT, Scraper, MiddleADT, ConfigADT
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -29,11 +30,13 @@ executable scraper
                 , cryptohash-sha256
                 , scientific
                 , directory
+                , async
 
 
 executable fetchStats
   hs-source-dirs: src
   main-is: Mutate.hs
+  ghc-options: -O2
   other-modules:  InputADT, Scraper, MiddleADT
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
@@ -54,11 +57,13 @@ executable fetchStats
                 , cryptohash-sha256
                 , scientific
                 , directory
+                , async
 
 
 executable test_adt
   hs-source-dirs: src
   main-is: Test_ADT.hs
+  ghc-options: -O2
   other-modules:  InputADT_trace
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
@@ -79,3 +84,4 @@ executable test_adt
                 , cryptohash-sha256
                 , scientific
                 , directory
+                , async

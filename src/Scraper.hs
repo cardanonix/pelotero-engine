@@ -42,6 +42,7 @@ import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Crypto.Hash.SHA256 as SHA256
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import Control.Monad (when, filterM)
+import Control.Concurrent.Async (mapConcurrently)
 
 import qualified InputADT as I
 import InputADT
@@ -58,7 +59,7 @@ import InputADT
     , ActivePlayer (..)
     )
 import qualified MiddleADT as MI
-import qualified OutputADT as OUT
+
 
 -- A (date String) -> [B] (list of gameIds/GameSchedule)
 -- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule
@@ -90,15 +91,32 @@ fetchFinishedBxScore gameId = do
 
 -- [B] list of gameIds -> C status checks -> [D] list of boxscores
 --maps fetchFinishedBxScore over an array of game id's and returns IO (M.Map Int ByteString)
+-- fetchFinishedBxScores :: [Int] -> IO (Either String (M.Map Int I.GameData))
+-- fetchFinishedBxScores gameIds = do
+--     results <- mapM fetchFinishedBxScore gameIds
+--     case sequence results of
+--         Left err -> return $ Left err
+--         Right gameDataList -> return $ Right $ M.fromList $ zip gameIds gameDataList
+
+-- async attempt to fix this
+-- Assuming fetchFinishedBxScore can be safely run concurrently
 fetchFinishedBxScores :: [Int] -> IO (Either String (M.Map Int I.GameData))
 fetchFinishedBxScores gameIds = do
-    results <- mapM fetchFinishedBxScore gameIds
-    case sequence results of
-        Left err -> return $ Left err
-        Right gameDataList -> return $ Right $ M.fromList $ zip gameIds gameDataList
+    results <- mapConcurrently fetchGame gameIds
+    let combinedResults = sequenceA results -- Change the structure from [Either] to Either [..]
+    return $ fmap M.fromList combinedResults
+    where 
+        fetchGame gameId = do
+            result <- fetchFinishedBxScore gameId
+            return $ fmap (\d -> (gameId, d)) result
 
 -- ## OUTPUT CONVERSION ##
 -- [B] list of gameIds -> C status checks -> [D] (list of box scores) -> [E] (list of player data)
+-- fetchFinishedBxScoresToJsonPlayerData :: [Int] -> IO (Either String (M.Map Text MI.JsonPlayerData))
+-- fetchFinishedBxScoresToJsonPlayerData gameIds = do
+--     gameDataResult <- fetchFinishedBxScores gameIds
+--     return $ fmap convertGameDataMapToJsonPlayerData gameDataResult
+
 fetchFinishedBxScoresToJsonPlayerData :: [Int] -> IO (Either String (M.Map Text MI.JsonPlayerData))
 fetchFinishedBxScoresToJsonPlayerData gameIds = do
     gameDataResult <- fetchFinishedBxScores gameIds
