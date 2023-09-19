@@ -55,10 +55,9 @@ nix develop
 # Usage
 To scrape data for a specific date range, you can use the scrapeDataForDateRange function, providing the start and end date:
 
-```haskell`
-nix develop && 
-scrapeDataForDateRange 2023-08-22 2023-08-31
-``
+```
+nix develop github:harryprayiv/scraperProto
+```
 
 # Note
 This app focuses on a baseball API and its structure at the time of the last update. It's advisable to ensure that the API's structure or endpoints haven't changed significantly before using this scraper for production purposes.
