@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Main (main) where
 
@@ -14,8 +15,10 @@ import Control.Monad (filterM)
 import Data.Maybe (catMaybes)
 import Debug.Trace (traceShowM)
 
-import ADT_Config (Configuration)
-import ADT_Roster (CurrentLineup, LgManager, current_lineup)
+import ADT_Config
+import ADT_Roster 
+
+import Data.Foldable (foldl')
 
 main :: IO ()
 main = do
