@@ -3,6 +3,7 @@
 *SYNOFILE*
 *appData/stats*
 *appData/rosters*
+*appData/config*
 output*
 /bower_components/
 /node_modules/
