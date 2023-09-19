@@ -82,8 +82,8 @@ printDiscrepancies lineup rosterConfig = do
     mapM_ printDifference discrepancies
   where
     printDifference (pos, diff)
-      | diff > 0 = putStrLn $ "Too many players for " ++ pos ++ " by " ++ show diff
-      | diff < 0 = putStrLn $ "Too few players for " ++ pos ++ " by " ++ show (abs diff)
+      | diff > 0 = putStrLn $ "This roster has " ++ show diff ++ " too many players at " ++ pos ++ "."
+      | diff < 0 = putStrLn $ "This roster needs " ++ show (abs diff) ++ " more players at " ++ pos ++ "."
 
 validateAndPrint :: LgManager -> Configuration -> IO Bool
 validateAndPrint manager config = do
