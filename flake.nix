@@ -95,6 +95,12 @@
               echo ...
             '';
           };
+          # apps = {
+          #   fetchStats = {
+          #     type = "app";
+          #     program = "${fetchStats}/bin/fetchStats";
+          #   };
+          # };
         });
 
   # --- Flake Local Nix Configuration ----------------------------

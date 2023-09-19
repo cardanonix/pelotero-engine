@@ -1,7 +1,7 @@
 /result
 /dist*
 *SYNOFILE*
-*scrapedData*
+*appData*
 output*
 /bower_components/
 /node_modules/

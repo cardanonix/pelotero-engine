@@ -5,7 +5,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE InstanceSigs #-}
 
-module MiddleADT where
+module ADT_Middle where
 
 import Control.Monad (filterM)
 import Data.Aeson
@@ -28,7 +28,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as V
 import qualified Data.Aeson.Key as K
-import qualified InputADT as I
+import qualified ADT_Input as I
 import GHC.Arr (array)
 
 data JsonPlayerData where
@@ -56,12 +56,6 @@ instance ToJSON JsonStatsData where
     toJSON :: JsonStatsData -> Value
     toJSON (JsonStatsData pId allPos statCode bat pitch) =
         object ["parentTeamId" .= pId, "allPositions" .= allPos, "status" .= statCode, "batting" .= bat, "pitching" .= pitch]
-
--- instance ToJSON I.Position where
---     toJSON :: I.Position -> Value
---     toJSON (I.Position allPositions) = 
---         let positionValue = read (Text.unpack allPositions) :: Int 
---         in Array $ V.fromList [Number (fromIntegral positionValue)]
 
 instance ToJSON I.Position where
     toJSON :: I.Position -> Value

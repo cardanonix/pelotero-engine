@@ -5,7 +5,7 @@
 {-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
 {-# LANGUAGE GADTs #-}
 
-module InputADT where
+module ADT_Input where
 
 import Control.Monad (filterM)
 import Data.Aeson (FromJSON (..), Result (Success), Value, decode, eitherDecodeStrict, fromJSON, withObject, (.!=), (.:), (.:?))

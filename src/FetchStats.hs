@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+
 module Main (main) where
 
 import Data.Text (Text)
@@ -21,13 +22,6 @@ import Data.Aeson.Types (Parser, Result(..))
 import Control.Monad (filterM)
 import Data.Maybe (catMaybes)
 import Debug.Trace (traceShowM)
-import InputADT ( GameData
-                , LiveGameWrapper
-                , GameSchedule
-                )
-import MiddleADT ( JsonPlayerData(..)
-                 , JsonStatsData(..)
-                 )
 import Scraper ( scrapeDataForDateRange )
 import System.Environment (getArgs)
 

@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module InputADT_trace where
+module ADT_Input_trace where
 
 import Control.Monad (filterM)
 import Data.Aeson (FromJSON (..), Result (Success), Value, decode, eitherDecodeStrict, fromJSON, withObject, (.!=), (.:), (.:?))

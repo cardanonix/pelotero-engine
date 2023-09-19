@@ -5,11 +5,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 
-module Scraper ( fetchGameScheduleForDate
-                , fetchFinishedBxScore
-                , fetchGameStatus
-                , scrapeDataForDateRange
-            )where
+module Scraper ( scrapeDataForDateRange )where
 
 import Network.HTTP.Simple
     ( parseRequest_,
@@ -44,8 +40,8 @@ import System.Directory (createDirectoryIfMissing, doesFileExist)
 import Control.Monad (when, filterM)
 import Control.Concurrent.Async (mapConcurrently)
 
-import qualified InputADT as I
-import InputADT
+import qualified ADT_Input as I
+import ADT_Input
     ( GameData(..)
     , LiveGameStatusWrapper(..)
     , LiveGameWrapper(..)
@@ -58,7 +54,7 @@ import InputADT
     , PlayerStats (..)
     , ActivePlayer (..)
     )
-import qualified MiddleADT as MI
+import qualified ADT_Middle as MI
 
 
 -- A (date String) -> [B] (list of gameIds/GameSchedule)
@@ -98,8 +94,9 @@ fetchFinishedBxScore gameId = do
 --         Left err -> return $ Left err
 --         Right gameDataList -> return $ Right $ M.fromList $ zip gameIds gameDataList
 
--- async attempt to fix this
--- Assuming fetchFinishedBxScore can be safely run concurrently
+
+-- async version of above code 
+-- [B] list of gameIds -> C status checks -> [D] list of boxscores
 fetchFinishedBxScores :: [Int] -> IO (Either String (M.Map Int I.GameData))
 fetchFinishedBxScores gameIds = do
     results <- mapConcurrently fetchGame gameIds
@@ -112,36 +109,12 @@ fetchFinishedBxScores gameIds = do
 
 -- ## OUTPUT CONVERSION ##
 -- [B] list of gameIds -> C status checks -> [D] (list of box scores) -> [E] (list of player data)
--- fetchFinishedBxScoresToJsonPlayerData :: [Int] -> IO (Either String (M.Map Text MI.JsonPlayerData))
--- fetchFinishedBxScoresToJsonPlayerData gameIds = do
---     gameDataResult <- fetchFinishedBxScores gameIds
---     return $ fmap convertGameDataMapToJsonPlayerData gameDataResult
-
 fetchFinishedBxScoresToJsonPlayerData :: [Int] -> IO (Either String (M.Map Text MI.JsonPlayerData))
 fetchFinishedBxScoresToJsonPlayerData gameIds = do
     gameDataResult <- fetchFinishedBxScores gameIds
     return $ fmap convertGameDataMapToJsonPlayerData gameDataResult
 
 -- ## Very Rough Output Stuff ##
--- A -> [B] list of gameIds -> C status checks -> [D] (list of box scores) -> [E] (list of player data)
--- processDate :: String -> IO ()
--- processDate date = do
---     putStrLn $ "Processing " ++ date
---     scheduleResult <- fetchGameScheduleForDate date
---     processAndPrintGames scheduleResult
---     case scheduleResult of
---         Left err -> putStrLn $ "Failed to fetch game schedule: " ++ err
---         Right schedule -> do
---             let gameIds = extractGameIds schedule
---             flattenedPlayersResult <- fetchFinishedBxScoresToJsonPlayerData gameIds
---             case flattenedPlayersResult of
---                 Left err -> putStrLn $ "Failed to process JSON: " ++ err
---                 Right flattenedPlayers -> do
---                     putStrLn "Flattened Player Data:"
---                     print flattenedPlayers
---                     -- Writing data to file
---                     let filename = formatFilename date
---                     writeDataToFile filename "scrapedData/stats" (flattenedPlayersList flattenedPlayers)
 
 processDate :: String -> IO ()
 processDate date = do
@@ -160,15 +133,13 @@ processDate date = do
                     print flattenedPlayers
                     -- Writing data to file
                     let filename = formatFilename date
-                    writeDataToFile filename "scrapedData/stats" flattenedPlayers
+                    writeDataToFile filename "appData/stats" flattenedPlayers
 
 -- Main scraper function tying everything together
 scrapeDataForDateRange :: String -> String -> IO ()
 scrapeDataForDateRange start end = do
     mapM_ processDate (generateDateRange start end)
 
--- flattenedPlayersList :: M.Map Text MI.JsonPlayerData -> M.Map Text [MI.JsonPlayerData]
--- flattenedPlayersList players = M.map (\v -> [v]) players
 
 flattenedPlayersList :: M.Map Text MI.JsonPlayerData -> M.Map Text MI.JsonPlayerData
 flattenedPlayersList = id  -- or simply remove this function and use the map directly
@@ -339,13 +310,17 @@ mergeJsonPlayerData existing new =
         , MI.stats = M.unionWith mergeJsonStatsData (MI.stats existing) (MI.stats new)
         }
 
+--inexplicably both of the following functions have the same result on 2023-08-23 when player "668715" played in two games
+-- mergeJsonStatsData :: MI.JsonStatsData -> MI.JsonStatsData -> MI.JsonStatsData
+-- mergeJsonStatsData existing new =
+--     -- Modify this if you have more complex merging logic!
+--     MI.JsonStatsData
+--         { MI.parentTeamId = MI.parentTeamId existing  -- assuming parentTeamIds are the same
+--         , MI.allPositions = MI.allPositions existing  -- TODO: Consider merging lists if they differ between games
+--         , MI.statusCode = MI.statusCode existing      -- TODO: Handle if status codes differ between games
+--         , MI.batting = MI.batting new  -- for this example, just taking the new stats
+--         , MI.pitching = MI.pitching new  -- same here, just taking the new stats
+--         }
+
 mergeJsonStatsData :: MI.JsonStatsData -> MI.JsonStatsData -> MI.JsonStatsData
-mergeJsonStatsData existing new =
-    -- Modify this if you have more complex merging logic!
-    MI.JsonStatsData
-        { MI.parentTeamId = MI.parentTeamId existing  -- assuming parentTeamIds are the same
-        , MI.allPositions = MI.allPositions existing  -- TODO: Consider merging lists if they differ between games
-        , MI.statusCode = MI.statusCode existing      -- TODO: Handle if status codes differ between games
-        , MI.batting = MI.batting new  -- for this example, just taking the new stats
-        , MI.pitching = MI.pitching new  -- same here, just taking the new stats
-        }
+mergeJsonStatsData _ new = new

@@ -6,38 +6,11 @@ cabal-version: 3.6
 name: scraper
 version: 0.0.3.0
 
-executable scraper
-  hs-source-dirs: src
-  main-is: Main.hs
-  ghc-options: -O2
-  other-modules:  InputADT, Scraper, MiddleADT, ConfigADT
-  build-depends:  base >=4.11 && <4.18
-                , http-conduit 
-                , time
-                , bytestring
-                , http-client-tls
-                , http-client
-                , zlib
-                , process
-                , aeson
-                , aeson-schemas
-                , lens
-                , vector
-                , unordered-containers
-                , text
-                , debug-trace-var
-                , containers
-                , cryptohash-sha256
-                , scientific
-                , directory
-                , async
-
-
 executable fetchStats
   hs-source-dirs: src
-  main-is: Mutate.hs
+  main-is: FetchStats.hs
   ghc-options: -O2
-  other-modules:  InputADT, Scraper, MiddleADT
+  other-modules:  ADT_Input, Scraper, ADT_Middle
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -59,12 +32,37 @@ executable fetchStats
                 , directory
                 , async
 
+executable league
+  hs-source-dirs: src
+  main-is: League.hs
+  ghc-options: -O2
+  other-modules:  ADT_Lg, ADT_Config, 
+  build-depends:  base >=4.11 && <4.18
+                , http-conduit 
+                , time
+                , bytestring
+                , http-client-tls
+                , http-client
+                , zlib
+                , process
+                , aeson
+                , aeson-schemas
+                , lens
+                , vector
+                , unordered-containers
+                , text
+                , debug-trace-var
+                , containers
+                , cryptohash-sha256
+                , scientific
+                , directory
+                , async
 
 executable test_adt
   hs-source-dirs: src
   main-is: Test_ADT.hs
   ghc-options: -O2
-  other-modules:  InputADT_trace
+  other-modules:  ADT_Input_trace
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time

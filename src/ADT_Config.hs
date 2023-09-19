@@ -4,7 +4,7 @@
 {-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
 {-# LANGUAGE InstanceSigs #-}
 
-module ConfigADT where
+module ADT_Config where
 
 import Control.Monad (filterM)
 import Control.Applicative ((<|>))
@@ -20,7 +20,7 @@ import qualified Data.Text as T
 import qualified Data.Vector as V
 import Data.Scientific (toBoundedInteger)
 
--- ## League Confuguration ADT ## -- 
+-- ## League Configuration ADT ## -- 
 data Configuration = Configuration
   { status           :: Text
   , leagueID         :: Text
