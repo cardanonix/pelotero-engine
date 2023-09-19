@@ -57,6 +57,7 @@ To scrape data for a specific date range, you can use the scrapeDataForDateRange
 
 ```
 nix develop github:harryprayiv/scraperProto
+cabal run fetchStats 2023-08-22 2023-08-22
 ```
 
 # Note
