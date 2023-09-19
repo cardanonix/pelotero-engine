@@ -87,9 +87,12 @@
               export NIX_SHELL_NAME="scraper"
               echo "Welcome to the development shell!"
               echo
-              echo grabbing the Current Complete MLB roster right quick....
+              echo Building the Apps...
+              echo .
+              echo ..
+              echo ...
               cabal build
-              cabal run fetchStats 2023-08-22 2023-08-23
+              #cabal run fetchStats 2023-08-22 2023-08-23
               echo .
               echo ..
               echo ...
