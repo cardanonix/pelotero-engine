@@ -10,7 +10,7 @@ executable fetchStats
   hs-source-dirs: src
   main-is: FetchStats.hs
   ghc-options: -O2
-  other-modules:  ADT_Input, Scraper, ADT_Middle
+  other-modules:  ADT_Input, ADT_Middle, Scraper
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -36,7 +36,7 @@ executable league
   hs-source-dirs: src
   main-is: League.hs
   ghc-options: -O2
-  other-modules:  ADT_Lg, ADT_Config, 
+  other-modules:  ADT_Roster, ADT_Config, 
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -60,7 +60,7 @@ executable league
 
 executable test_adt
   hs-source-dirs: src
-  main-is: Test_ADT.hs
+  main-is: ADT_Test.hs
   ghc-options: -O2
   other-modules:  ADT_Input_trace
   build-depends:  base >=4.11 && <4.18

@@ -4,7 +4,7 @@
 {-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
 {-# LANGUAGE InstanceSigs #-}
 
-module ADT_Lg where
+module ADT_Roster where
 
 import Control.Monad (filterM)
 import Control.Applicative ((<|>))
@@ -33,6 +33,7 @@ data LgManager = LgManager
 
 data CurrentLineup = CurrentLineup
   { cC  :: Text
+  , b1C :: Text
   , b2C  :: Text
   , b3C  :: Text
   , ssC  :: Text

@@ -14,16 +14,24 @@ import Control.Monad (filterM)
 import Data.Maybe (catMaybes)
 import Debug.Trace (traceShowM)
 
-import ADT_Config
-import ADT_Lg
+import ADT_Config (Configuration)
+import ADT_Roster (CurrentLineup, LgManager, current_lineup)
 
 main :: IO ()
 main = do
 
     -- decoding json file with ADT_Config using Data.Aeson.Types.FromJSON   
-    jsonBoxScore <- B.readFile "testFiles/mlb/boxscore_716896.json"
-    let parsedResult = eitherDecodeStrict jsonBoxScore :: Either String GameData
+    jsonConfig <- B.readFile "appData/config/config.json"
+    let parsedResult = eitherDecodeStrict jsonConfig :: Either String Configuration
     case parsedResult of
-        Left err -> putStrLn $ "Failed to parse JSON: " ++ err
-        Right gameData -> print gameData
-        
+        Left err -> putStrLn $ "Failed to parse Config JSON: " ++ err
+        Right config -> print config
+    
+        -- decoding json file with ADT_Config using Data.Aeson.Types.FromJSON   
+    jsonRoster <- B.readFile "appData/rosters/roster.json"
+    let parsedResult = eitherDecodeStrict jsonRoster :: Either String LgManager
+    case parsedResult of
+        Left err -> putStrLn $ "Failed to parse Roster JSON: " ++ err
+        Right lgManager -> do
+            print $ current_lineup lgManager 
+            print lgManager  

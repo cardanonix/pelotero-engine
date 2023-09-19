@@ -1,7 +1,8 @@
 /result
 /dist*
 *SYNOFILE*
-*appData*
+*appData/stats*
+*appData/rosters*
 output*
 /bower_components/
 /node_modules/
