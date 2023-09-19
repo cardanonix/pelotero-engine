@@ -24,7 +24,7 @@ nix develop github:harryprayiv/scraperProto
 
 
 # Features
-- Scraping Game Data: Using MLB API endpoints, this module retrieves game schedules, live game statuses, and box scores.
+- Scraping Game Data: Using baseball API endpoints, this module retrieves game schedules, live game statuses, and box scores.
 
 - Async Fetch: Instead of fetching data for each game one by one, this module offers an asynchronous version that can fetch data for multiple games concurrently.
 
