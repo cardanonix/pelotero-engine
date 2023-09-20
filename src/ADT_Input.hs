@@ -162,8 +162,11 @@ data GameID where
 
 -- Top level structure for the active roster
 data ActiveRoster where
-  ActiveRoster :: {people :: [ActivePlayer]} -> ActiveRoster
-  deriving (Show, Eq)
+  ActiveRoster :: {
+                    people :: [ActivePlayer],
+                    dataPulled :: Maybe Text,
+                    checksum :: Maybe Text 
+                  } -> ActiveRoster
 
 data ActivePlayer where
   ActivePlayer :: {  playerId :: Int,
@@ -177,6 +180,8 @@ data ActivePlayer where
                      active :: Bool}
                     -> ActivePlayer
   deriving (Show, Eq)
+  
+
 
 -- ## Game Status ADT's ##
 data LiveGameStatus where
@@ -409,4 +414,6 @@ instance FromJSON ActiveRoster where
   parseJSON :: Value -> Parser ActiveRoster
   parseJSON = withObject "ActiveRoster" $ \v -> do
     people <- v .: "people"
-    return $ ActiveRoster people
+    dataPulled <- v .:? "dataPulled"
+    checksum <- v .:? "checksum"
+    return $ ActiveRoster people dataPulled checksum

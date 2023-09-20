@@ -28,6 +28,7 @@ executable fetchStats
                 , debug-trace-var
                 , containers
                 , cryptohash-sha256
+                , crypton
                 , scientific
                 , directory
                 , async
@@ -54,6 +55,7 @@ executable roster
                 , debug-trace-var
                 , containers
                 , cryptohash-sha256
+                , crypton
                 , scientific
                 , directory
                 , async
@@ -80,6 +82,7 @@ executable league
                 , debug-trace-var
                 , containers
                 , cryptohash-sha256
+                , crypton
                 , scientific
                 , directory
                 , async
@@ -106,6 +109,7 @@ executable test_adt
                 , debug-trace-var
                 , containers
                 , cryptohash-sha256
+                , crypton
                 , scientific
                 , directory
                 , async

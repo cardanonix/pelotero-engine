@@ -25,11 +25,12 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.Map.Strict as M
 import Data.Maybe (catMaybes, fromMaybe)
 import Data.Text (Text)
-import qualified Data.Text as Text
+import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Data.Aeson.Key as K
 import qualified ADT_Input as I
 import GHC.Arr (array)
+import Data.Aeson.Key as K
 
 data JsonPlayerData where
   JsonPlayerData :: {playerId :: Text,
@@ -60,7 +61,7 @@ instance ToJSON JsonStatsData where
 instance ToJSON I.Position where
     toJSON :: I.Position -> Value
     toJSON (I.Position allPositions) = 
-        let positionValue = read (Text.unpack allPositions) :: Int 
+        let positionValue = read (T.unpack allPositions) :: Int 
         in Number (fromIntegral positionValue)
 
 instance ToJSON I.PitchingStats where
@@ -158,6 +159,6 @@ instance ToJSON I.ActivePlayer where
                 "active" .= active]
 
 instance ToJSON I.ActiveRoster where
-    toJSON (I.ActiveRoster people) =
-        let playerMap = M.fromList [(show playerId, playerJSON) | player@(I.ActivePlayer playerId _ _ _ _ _ _ _ _) <- people, let playerJSON = toJSON player]
-        in object ["people" .= playerMap]
+    toJSON (I.ActiveRoster people dataPulled checksum) =
+        let playerPairs = [(K.fromText (T.pack (show playerId)), playerJSON) | player@(I.ActivePlayer playerId _ _ _ _ _ _ _ _) <- people, let playerJSON = toJSON player]
+        in object $ playerPairs ++ ["dataPulled" .= dataPulled, "checksum" .= checksum]

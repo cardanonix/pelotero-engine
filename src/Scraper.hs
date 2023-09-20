@@ -17,6 +17,8 @@ import Network.HTTP.Simple
 import Data.Time
     ( Day, addDays, diffDays, parseTimeOrError, defaultTimeLocale, formatTime )
 import Data.Time.Clock.POSIX ()
+import Data.Time.Clock
+import Data.Time.Format
 import Data.ByteString (ByteString, empty)
 import qualified Data.Vector as V
 import Data.Maybe (isJust, fromMaybe, maybeToList)
@@ -39,11 +41,15 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Crypto.Hash.SHA256 as SHA256
+import Crypto.Hash
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import Control.Monad (when, filterM)
 import Control.Concurrent.Async (mapConcurrently)
 
 import qualified ADT_Input as I
+
+
+
 import ADT_Input
     ( GameData(..)
     , LiveGameStatusWrapper(..)
@@ -169,10 +175,32 @@ processAndPrintGames gameScheduleEither =
 fetchActiveRoster :: Int -> IO (Either String I.ActiveRoster)
 fetchActiveRoster season = fetchAndDecodeJSON (rosterUrl season)
 
+-- writeRosterToFile :: FilePath -> I.ActiveRoster -> IO ()
+-- writeRosterToFile path roster = do
+--     let jsonData = encode roster
+--     BL.writeFile path jsonData
+
 writeRosterToFile :: FilePath -> I.ActiveRoster -> IO ()
 writeRosterToFile path roster = do
-    let jsonData = encode roster
+    -- Original player data encoding
+    let playerData = encode (I.people roster)
+    
+    -- Compute checksum and get date stamp
+    dateStamp <- getCurrentDate
+    let checksumValue = computeChecksum playerData
+    let fullRoster = I.ActiveRoster (I.people roster) (Just dateStamp) (Just checksumValue)
+    
+    -- Encode the full roster including the checksum and date stamp
+    let jsonData = encode fullRoster
+    
+    -- Write to file
     BL.writeFile path jsonData
+
+computeChecksum :: BL.ByteString -> Text
+computeChecksum bs = T.pack . show . hashWith SHA256 $ BL.toStrict bs
+
+getCurrentDate :: IO Text
+getCurrentDate = T.pack . formatTime defaultTimeLocale "%Y_%m_%d_%H_%M" <$> getCurrentTime
 
 -- monadic error handling for fetching and decoding
 withEither :: IO (Either String a) -> (a -> IO ()) -> IO ()
