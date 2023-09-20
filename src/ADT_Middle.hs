@@ -143,3 +143,21 @@ instance ToJSON I.BattingStats where
         , fmap ("bat_catchersInterference" .=) (I.bat_catchersInterference batStats)
         , fmap ("bat_pickoffs" .=) (I.bat_pickoffs batStats)
         ]
+
+-- toJSON for ActiveRoster
+instance ToJSON I.ActivePlayer where
+    toJSON (I.ActivePlayer playerId useName useLastName nameSlug currentTeam primaryPosition batSide pitchHand active) =
+        object ["id" .= playerId,
+                "useName" .= useName,
+                "useLastName" .= useLastName,
+                "nameSlug" .= nameSlug,
+                "currentTeam" .= currentTeam,  -- Note: No nested object
+                "primaryPosition" .= primaryPosition,
+                "batSide" .= batSide,
+                "pitchHand" .= pitchHand,
+                "active" .= active]
+
+instance ToJSON I.ActiveRoster where
+    toJSON (I.ActiveRoster people) =
+        let playerMap = M.fromList [(show playerId, playerJSON) | player@(I.ActivePlayer playerId _ _ _ _ _ _ _ _) <- people, let playerJSON = toJSON player]
+        in object ["people" .= playerMap]

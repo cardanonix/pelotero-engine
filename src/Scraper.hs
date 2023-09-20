@@ -5,7 +5,10 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 
-module Scraper ( scrapeDataForDateRange )where
+module Scraper  ( scrapeDataForDateRange
+                , writeRosterToFile
+                , fetchActiveRoster 
+                ) where
 
 import Network.HTTP.Simple
     ( parseRequest_,
@@ -162,8 +165,14 @@ processAndPrintGames gameScheduleEither =
         else putStrLn "No games scheduled for the provided date."
 
 -- takes a season and outputs a roster bytestring of that season
-fetchActiveRoster :: Int -> IO (Either String I.ActivePlayer)
+-- fetchActiveRoster :: Int -> IO (Either String I.ActivePlayer)
+fetchActiveRoster :: Int -> IO (Either String I.ActiveRoster)
 fetchActiveRoster season = fetchAndDecodeJSON (rosterUrl season)
+
+writeRosterToFile :: FilePath -> I.ActiveRoster -> IO ()
+writeRosterToFile path roster = do
+    let jsonData = encode roster
+    BL.writeFile path jsonData
 
 -- monadic error handling for fetching and decoding
 withEither :: IO (Either String a) -> (a -> IO ()) -> IO ()
