@@ -4,7 +4,7 @@
     nixpkgs.follows = "haskell-nix/nixpkgs-unstable";
     utils.url = "github:ursi/flake-utils";
 
-    #Haskell/Plutus
+    # Haskell/Plutus
     haskell-nix.url = "github:input-output-hk/haskell.nix";
     iohk-nix.url = "github:input-output-hk/iohk-nix";
     CHaP = {
@@ -22,7 +22,7 @@
     utils.apply-systems
     {
       inherit inputs;
-      systems = ["x86_64-linux"];
+      systems = ["x86_64-linux" "x86_64-darwin"]; # Add both systems
       overlays = [
         inputs.haskell-nix.overlay
         # plutus runtime dependency
@@ -37,7 +37,7 @@
         name = "scraper";
         hixProject = pkgs.haskell-nix.hix.project {
           src = ./.;
-          evalSystem = "x86_64-linux";
+          evalSystem = system; # Use the system from the context
           inputMap = {"https://input-output-hk.github.io/cardano-haskell-packages" = inputs.CHaP;};
           modules = [
             (_: {
@@ -50,61 +50,33 @@
           ];
         };
         hixFlake = hixProject.flake {};
-        # serve-docs = import ./nix/serve-docs.nix inputs context {
-        #   inherit hixProject;
-        #   # TODO transform additionalPkgs in excludePkgs to reduce boilerplate
-        #   #  we could collect all entries from cabal build-depends
-        #   #  (maybe through hixProject.hsPkgs)
-        #   additionalPkgs = ["cardano-api"];
-        # };
-      in
-        /*
-           # Flake definition follows hello.cabal
-        flake
-        // {
-          legacyPackages = pkgs;
-        });
-        */
-        {
-          inherit (hixFlake) apps checks;
-          legacyPackages = pkgs;
+      in {
+        inherit (hixFlake) apps checks;
+        legacyPackages = pkgs;
 
-          packages =
-            hixFlake.packages
-            // {
-              # inherit serve-docs;
-            };
+        packages =
+          hixFlake.packages;
 
-          devShell = pkgs.mkShell {
-            inherit name;
-            inputsFrom = [
-              hixFlake.devShell
-            ];
-            buildInputs = [
-              # self.packages.${system}.serve-docs
-            ];
-            shellHook = ''
-              export NIX_SHELL_NAME="scraper"
-              echo "Welcome to the development shell!"
-              echo
-              echo Building the Apps...
-              echo .
-              echo ..
-              echo ...
-              cabal build
-              #cabal run fetchStats 2023-08-22 2023-08-23
-              echo .
-              echo ..
-              echo ...
-            '';
-          };
-          # apps = {
-          #   fetchStats = {
-          #     type = "app";
-          #     program = "${fetchStats}/bin/fetchStats";
-          #   };
-          # };
-        });
+        devShell = pkgs.mkShell {
+          inherit name;
+          inputsFrom = [hixFlake.devShell];
+          buildInputs = [];
+          shellHook = ''
+            export NIX_SHELL_NAME="scraper"
+            echo "Welcome to the development shell!"
+            echo
+            echo Building the Apps...
+            echo .
+            echo ..
+            echo ...
+            cabal build
+            #cabal run fetchStats 2023-08-22 2023-08-23
+            echo .
+            echo ..
+            echo ...
+          '';
+        };
+      });
 
   # --- Flake Local Nix Configuration ----------------------------
   nixConfig = {
