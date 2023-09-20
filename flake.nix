@@ -64,13 +64,30 @@
           shellHook = ''
             export NIX_SHELL_NAME="scraper"
             echo "Welcome to the development shell!"
-            echo
+            echo properly populating your folders.
+
+            if [ ! -d "appData" ]; then
+                echo creating appData folder
+                mkdir "appData"
+            fi
+
+            cd "appData"
+
+            folders=("config" "rosters" "stats" "points")
+
+            for folder in ''${folders[@]}; do
+                if [ ! -d "$folder" ]; then
+                  echo creating $folder
+                  mkdir "$folder"
+                fi
+            done
+            cd -
             echo Building the Apps...
             echo .
             echo ..
             echo ...
             cabal build
-            #cabal run fetchStats 2023-08-22 2023-08-23
+            cabal run roster
             echo .
             echo ..
             echo ...
