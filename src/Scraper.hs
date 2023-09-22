@@ -48,8 +48,6 @@ import Control.Concurrent.Async (mapConcurrently)
 
 import qualified ADT_Input as I
 
-
-
 import ADT_Input
     ( GameData(..)
     , LiveGameStatusWrapper(..)
@@ -95,17 +93,6 @@ fetchFinishedBxScore gameId = do
         Left err -> return $ Left ("Error fetching game status: " ++ err)
 
 -- [B] list of gameIds -> C status checks -> [D] list of boxscores
---maps fetchFinishedBxScore over an array of game id's and returns IO (M.Map Int ByteString)
--- fetchFinishedBxScores :: [Int] -> IO (Either String (M.Map Int I.GameData))
--- fetchFinishedBxScores gameIds = do
---     results <- mapM fetchFinishedBxScore gameIds
---     case sequence results of
---         Left err -> return $ Left err
---         Right gameDataList -> return $ Right $ M.fromList $ zip gameIds gameDataList
-
-
--- async version of above code 
--- [B] list of gameIds -> C status checks -> [D] list of boxscores
 fetchFinishedBxScores :: [Int] -> IO (Either String (M.Map Int I.GameData))
 fetchFinishedBxScores gameIds = do
     results <- mapConcurrently fetchGame gameIds
@@ -123,7 +110,7 @@ fetchFinishedBxScoresToJsonPlayerData gameIds = do
     gameDataResult <- fetchFinishedBxScores gameIds
     return $ fmap convertGameDataMapToJsonPlayerData gameDataResult
 
--- ## Very Rough Output Stuff ##
+-- ## Output Stuff ##
 
 processDate :: String -> IO ()
 processDate date = do
@@ -137,48 +124,38 @@ processDate date = do
             flattenedPlayersResult <- fetchFinishedBxScoresToJsonPlayerData gameIds
             case flattenedPlayersResult of
                 Left err -> putStrLn $ "Failed to process JSON: " ++ err
-                Right flattenedPlayers -> do
-                    putStrLn "Flattened Player Data:"
-                    print flattenedPlayers
-                    -- Writing data to file
+                Right _flattenedPlayers -> do
+                    -- The printout of flattenedPlayers has been removed
                     let filename = formatFilename date
-                    writeDataToFile filename "appData/stats" flattenedPlayers
+                    writeDataToFile filename "appData/stats" _flattenedPlayers
 
 -- Main scraper function tying everything together
 scrapeDataForDateRange :: String -> String -> IO ()
 scrapeDataForDateRange start end = do
     mapM_ processDate (generateDateRange start end)
 
-
 flattenedPlayersList :: M.Map Text MI.JsonPlayerData -> M.Map Text MI.JsonPlayerData
 flattenedPlayersList = id  -- or simply remove this function and use the map directly
 
--- # Printing 
 -- takes a list of tuples game id's and game data and prints them
 printGameData :: Either String (M.Map Int I.GameData) -> IO ()
 printGameData gameDataMapEither =
     withEither (return gameDataMapEither) $ \gameDataMap ->
         mapM_ (\(gameId, gameData) -> putStrLn $ show gameId ++ ": " ++ show gameData) (M.toList gameDataMap)
 
--- print the schedule bytestring
 processAndPrintGames :: Either String I.GameSchedule -> IO ()
 processAndPrintGames gameScheduleEither =
     withEither (return gameScheduleEither) $ \gameSchedule ->
         if hasGamesForDate gameSchedule then do
             let gameIds = extractGameIds gameSchedule
-            gameDataMap <- fetchFinishedBxScores gameIds
-            printGameData gameDataMap
+            _ <- fetchFinishedBxScores gameIds
+            return ()
         else putStrLn "No games scheduled for the provided date."
 
 -- takes a season and outputs a roster bytestring of that season
 -- fetchActiveRoster :: Int -> IO (Either String I.ActivePlayer)
 fetchActiveRoster :: Int -> IO (Either String I.ActiveRoster)
 fetchActiveRoster season = fetchAndDecodeJSON (rosterUrl season)
-
--- writeRosterToFile :: FilePath -> I.ActiveRoster -> IO ()
--- writeRosterToFile path roster = do
---     let jsonData = encode roster
---     BL.writeFile path jsonData
 
 writeRosterToFile :: FilePath -> I.ActiveRoster -> IO ()
 writeRosterToFile path roster = do
@@ -255,6 +232,7 @@ assignGameIdToPlayers gameId gameData =
                                              I.home = assignToTeam (I.home (teams gameData)) } }
 
 -- ## FileName Manipulation Stuff 
+
 -- Takes a filename, path, and the data to save, then writes to a JSON file at the specified path with the given filename.
 writeDataToFile :: FilePath -> FilePath -> M.Map Text MI.JsonPlayerData -> IO ()
 writeDataToFile filename path dataToSave = do
@@ -346,18 +324,6 @@ mergeJsonPlayerData existing new =
         , MI.fullName = MI.fullName existing  -- assuming fullNames are the same
         , MI.stats = M.unionWith mergeJsonStatsData (MI.stats existing) (MI.stats new)
         }
-
---inexplicably both of the following functions have the same result on 2023-08-23 when player "668715" played in two games
--- mergeJsonStatsData :: MI.JsonStatsData -> MI.JsonStatsData -> MI.JsonStatsData
--- mergeJsonStatsData existing new =
---     -- Modify this if you have more complex merging logic!
---     MI.JsonStatsData
---         { MI.parentTeamId = MI.parentTeamId existing  -- assuming parentTeamIds are the same
---         , MI.allPositions = MI.allPositions existing  -- TODO: Consider merging lists if they differ between games
---         , MI.statusCode = MI.statusCode existing      -- TODO: Handle if status codes differ between games
---         , MI.batting = MI.batting new  -- for this example, just taking the new stats
---         , MI.pitching = MI.pitching new  -- same here, just taking the new stats
---         }
 
 mergeJsonStatsData :: MI.JsonStatsData -> MI.JsonStatsData -> MI.JsonStatsData
 mergeJsonStatsData _ new = new
