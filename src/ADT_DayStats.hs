@@ -35,45 +35,14 @@ import qualified ADT_Middle as M
 import qualified ADT_Config as C
 import qualified ADT_Roster as R
 
+-- extract a list of players from the json using the roster id's as the keys fro players to be extracted
+getPlayerStats :: R.LgManager -> M.JsonStatsData ->  I.PlayerStats
 
--- made to calculate only one player at a time
--- takes the league point parameters, a single player's id as Text, and the day's stats and returns a double
+
 calculatePoints :: C.PointParameters -> R.LgManager -> M.JsonStatsData -> Double
-calculatePoints params playerid stats = do
-        -- get the player's stats from the day
-        let playerStats = getPlayerStats playerid stats
-            let bat_points = case (M.batting stats) of
-                    Nothing -> 0
-                    Just b -> calcBattingPoints params b
-            -- if PitchingStats are not Nothing, then calculate pitching points
-            let pit_points = case (M.pitching stats) of
-                    Nothing -> 0
-                    Just p -> calcPitchingPoints params p
-                -- add the batting and pitching points together
-                let total_points = p + b
-                -- return the total points
-                total_points
-
-calcBattingPoints :: BattingMults -> BattingStats -> Double
-calcBattingPoints BattingMults{..} BattingStats{..} =
-    let s = ((fromMaybe 0 bat_hits - (fromMaybe 0 bat_triples + fromMaybe 0 bat_doubles + fromMaybe 0 bat_homeRuns)) * lgb_single)
-        d = fromMaybe 0 bat_doubles * lgb_double
-        t = fromMaybe 0 bat_triples * lgb_triple
-        h = fromMaybe 0 bat_homeRuns * lgb_homerun
-        rbi = fromMaybe 0 bat_rbi * lgb_rbi
-        r = fromMaybe 0 bat_runs * lgb_run
-        bob = fromMaybe 0 bat_baseOnBalls * lgb_base_on_balls
-        sb = fromMaybe 0 bat_stolenBases * lgb_stolen_base
-        hbp = fromMaybe 0 bat_hitByPitch * lgb_hit_by_pitch
-        ko =  fromMaybe 0 bat_strikeOuts * lgb_strikeout
-        cs = fromMaybe 0 bat_caughtStealing * lgb_caught_stealing
-    in s + d + t + h + rbi + r + bob + sb + hbp - ko - cs
-
--- takes league point parameters and pitching stats from a single game and returns a double
-calculatePoints :: C.PointParameters -> R.LgManager -> M.JsonStatsData -> Double
-calculatePoints params playerid stats =
+calculatePoints params team stats =
     -- get the player's stats from the day (assuming a function named getPlayerStats exists)
-    let playerStats = getPlayerStats playerid stats
+    let playerStats = getPlayerStats team stats
 
         -- calculate batting points
         bat_points = case batting playerStats of
@@ -88,6 +57,38 @@ calculatePoints params playerid stats =
         -- calculate total points
         total_points = bat_points + pit_points
     in total_points
+
+calcBattingPoints :: C.BattingMults -> I.BattingStats -> Double
+calcBattingPoints C.BattingMults{..} I.BattingStats{..} =
+    let s = ((fromMaybe 0 I.bat_hits - (fromMaybe 0 I.bat_triples + fromMaybe 0 I.bat_doubles + fromMaybe 0 I.bat_homeRuns)) * C.lgb_single)
+        d = fromMaybe 0 I.bat_doubles * C.lgb_double
+        t = fromMaybe 0 I.bat_triples * C.lgb_triple
+        h = fromMaybe 0 I.bat_homeRuns * C.lgb_homerun
+        rbi = fromMaybe 0 I.bat_rbi * C.lgb_rbi
+        r = fromMaybe 0 I.bat_runs * C.lgb_run
+        bob = fromMaybe 0 I.bat_baseOnBalls * C.lgb_base_on_balls
+        sb = fromMaybe 0 I.bat_stolenBases * C.lgb_stolen_base
+        hbp = fromMaybe 0 I.bat_hitByPitch * C.lgb_hit_by_pitch
+        ko =  fromMaybe 0 I.bat_strikeOuts * C.lgb_strikeout
+        cs = fromMaybe 0 I.bat_caughtStealing * C.lgb_caught_stealing
+    in s + d + t + h + rbi + r + bob + sb + hbp - ko - cs
+
+-- takes league point parameters and pitching stats from a single game and returns a double
+calcPitchingPoints :: C.PitchingMults -> I.PitchingStats -> Double
+calcPitchingPoints C.PitchingMults{..} I.PitchingStats{..} =
+    let w = fromMaybe 0 I.pit_wins * C.lgp_win
+        s = fromMaybe 0 I.pit_saves * C.lgp_save
+        qs = (if (read (fromMaybe "0" I.pit_inningsPitched) :: Double >= 6) && fromMaybe 0 I.pit_earnedRuns <= 3 then 1 else 0) * C.lgp_quality_start
+        ip = read (fromMaybe "0" I.pit_inningsPitched) :: Double * C.lgp_inning_pitched
+        ko = fromMaybe 0 I.pit_strikeOuts * C.lgp_strikeout
+        cg = fromMaybe 0 I.pit_completeGames * C.lgp_complete_game
+        sho = fromMaybe 0 I.pit_shutouts * C.lgp_shutout
+        bob = fromMaybe 0 I.pit_baseOnBalls * C.lgp_base_on_balls
+        ha = fromMaybe 0 I.pit_hits * C.lgp_hits_allowed
+        er = fromMaybe 0 I.pit_earnedRuns * C.lgp_earned_runs
+        hbm = fromMaybe 0 I.pit_hitBatsmen * C.lgp_hit_batsman
+        l = fromMaybe 0 I.pit_losses * C.lgp_loss
+    in w + s + qs + ip + ko + cg + sho - bob - ha - er - hbm - l
 
 -- new data type to hold point totals, attributing them to each player
 data LineupPoints = LineupPoints
