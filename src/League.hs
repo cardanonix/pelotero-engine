@@ -4,21 +4,23 @@
 module Main (main) where
 
 import Data.Text (Text)
-import qualified Data.Text as Text
-import qualified Data.Map.Strict as M
-import qualified Data.ByteString as B
 import Data.ByteString ( ByteString)
 import Data.ByteString.Lazy.Char8 (pack)
 import Data.Aeson (decode, Result(Success), FromJSON(..), Value, (.:), (.:?), (.!=), fromJSON, withObject, eitherDecodeStrict)
 import Data.Aeson.Types (Parser, Result(..))
 import Control.Monad (filterM)
 import Data.Maybe (catMaybes)
-import Debug.Trace (traceShowM)
+import Debug.Trace (traceShowM, traceShow)
+import Data.List (nub, (\\))  
+import Data.Foldable (foldl')
+import qualified Data.Text as Text
+import qualified Data.Map.Strict as M
+import qualified Data.ByteString as B
 
 import ADT_Config
 import ADT_Roster 
 
-import Data.Foldable (foldl')
+
 
 main :: IO ()
 main = do
@@ -31,6 +33,9 @@ main = do
     jsonValidRoster <- B.readFile "testFiles/prototype_config/valid_roster.json"
     let parsedValidRoster = eitherDecodeStrict jsonValidRoster :: Either String LgManager
 
+    jsonInvalidLineup <- B.readFile "testFiles/prototype_config/invalid_lineup.json"
+    let parsedInvalidLineup = eitherDecodeStrict jsonInvalidLineup :: Either String LgManager
+
     case parsedConfig of
         Left errConfig -> putStrLn $ "Failed to parse Config JSON: " ++ errConfig
         Right config -> do
@@ -42,6 +47,9 @@ main = do
             putStrLn "\nTesting with Invalid Roster:"
             testRoster config parsedInvalidRoster
 
+            putStrLn "\nTesting with Invalid Lineup:"
+            testRoster config parsedInvalidLineup
+
 testRoster :: Configuration -> Either String LgManager -> IO ()
 testRoster _ (Left errRoster) = putStrLn $ "Failed to parse Roster JSON: " ++ errRoster
 testRoster config (Right lgManager) = do
@@ -51,13 +59,6 @@ testRoster config (Right lgManager) = do
     if isValid 
         then putStrLn "This Lineup is valid as fuck, yo!"
         else putStrLn "That lineup has some serious discrepancies, bro!"
-
-
--- Function to validate the current lineup with the league's roster configuration
--- Pure function that just returns Bool
-validateCurrentLineup :: LgManager -> Configuration -> Bool
-validateCurrentLineup LgManager{..} Configuration{point_parameters = PointParameters{valid_roster = rosterConfig}} =
-    null $ getDiscrepancies current_lineup rosterConfig
 
 getDiscrepancies :: CurrentLineup -> LgRoster -> [(String, Int)]
 getDiscrepancies CurrentLineup{..} LgRoster{..} =
@@ -74,8 +75,6 @@ getDiscrepancies CurrentLineup{..} LgRoster{..} =
           ]
     in filter ((/= 0) . snd) discrepancies
 
--- Function to get the discrepancies between the current lineup and the league's roster configuration
--- Function to print discrepancies
 printDiscrepancies :: CurrentLineup -> LgRoster -> IO ()
 printDiscrepancies lineup rosterConfig = do
     let discrepancies = getDiscrepancies lineup rosterConfig
@@ -87,9 +86,31 @@ printDiscrepancies lineup rosterConfig = do
 
 validateAndPrint :: LgManager -> Configuration -> IO Bool
 validateAndPrint manager config = do
-    let valid = validateCurrentLineup manager config
-    if valid
-        then return True
-        else do
-            printDiscrepancies (current_lineup manager) (valid_roster . point_parameters $ config)
+    let validPositions = null $ getDiscrepancies (current_lineup manager) (valid_roster . point_parameters $ config)
+    case hasUniquePlayers (current_lineup manager) of
+        Left successMessage -> do
+            putStrLn successMessage
+            return validPositions
+        Right duplicates -> do
+            putStrLn "Duplicate player IDs found:"
+            mapM_ (putStrLn . Text.unpack) duplicates
             return False
+
+validateCurrentLineup :: LgManager -> Configuration -> Bool
+validateCurrentLineup LgManager{..} Configuration{point_parameters = PointParameters{valid_roster = rosterConfig}} =
+    let positionalValid = null (getDiscrepancies current_lineup rosterConfig)
+    in case hasUniquePlayers current_lineup of
+        Left _ -> positionalValid
+        Right _ -> False
+
+hasUniquePlayers :: CurrentLineup -> Either String [Text]
+hasUniquePlayers lineup =
+    let allPlayers = getUniquePlayerIds lineup
+        duplicates = allPlayers \\ nub allPlayers
+    in if null duplicates
+       then Left "No duplicate players found."
+       else Right duplicates
+
+getUniquePlayerIds :: CurrentLineup -> [Text]
+getUniquePlayerIds CurrentLineup{..} =
+    cC : b1C : b2C : b3C : ssC : uC : (ofC ++ spC ++ rpC)
