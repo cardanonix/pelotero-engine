@@ -1,8 +1,7 @@
-{-# LANGUAGE OverloadedStrings, RecordWildCards, GADTs #-}
+{-# LANGUAGE OverloadedStrings, GADTs #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Redundant id" #-}
 {-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
-{-# LANGUAGE InstanceSigs #-}
 
 module ADT_Roster where
 
@@ -88,4 +87,3 @@ instance FromJSON Roster where
            <*> v .: "U"
            <*> v .: "SP"
            <*> v .: "RP"
-
