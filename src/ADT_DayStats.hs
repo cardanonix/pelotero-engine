@@ -37,7 +37,8 @@ import qualified ADT_Roster as R
 
 -- extract a list of players from the json using the roster id's as the keys fro players to be extracted
 getPlayerStats :: R.LgManager -> M.JsonStatsData ->  I.PlayerStats
-
+-- need to ponder how to properly structure this: 
+-- a list of players with a list of game stats need to be decomposed but also be accesible individually 
 
 calculatePoints :: C.PointParameters -> R.LgManager -> M.JsonStatsData -> Double
 calculatePoints params team stats =
