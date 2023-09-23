@@ -86,5 +86,6 @@ instance FromJSON Roster where
            <*> v .: "SS"
            <*> v .: "OF"
            <*> v .: "U"
-           <*> v .: "RP"
            <*> v .: "SP"
+           <*> v .: "RP"
+
