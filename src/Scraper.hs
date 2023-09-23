@@ -28,8 +28,7 @@ import qualified Data.Text as T
 import Data.Aeson
     ( eitherDecode,
       encode,
-      (.:),
-      (.:?),
+      (.:), (.:?),
       genericParseJSON,
       withObject,
       defaultOptions,
