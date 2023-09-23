@@ -31,6 +31,76 @@ import qualified Data.Aeson.Key as K
 import GHC.Arr (array)
 
 import qualified ADT_Input as I
+import qualified ADT_Middle as M
+import qualified ADT_Config as C
+import qualified ADT_Roster as R
+
+
+-- made to calculate only one player at a time
+-- takes the league point parameters, a single player's id as Text, and the day's stats and returns a double
+calculatePoints :: C.PointParameters -> R.LgManager -> M.JsonStatsData -> Double
+calculatePoints params playerid stats = do
+        -- get the player's stats from the day
+        let playerStats = getPlayerStats playerid stats
+            let bat_points = case (M.batting stats) of
+                    Nothing -> 0
+                    Just b -> calcBattingPoints params b
+            -- if PitchingStats are not Nothing, then calculate pitching points
+            let pit_points = case (M.pitching stats) of
+                    Nothing -> 0
+                    Just p -> calcPitchingPoints params p
+                -- add the batting and pitching points together
+                let total_points = p + b
+                -- return the total points
+                total_points
+
+calcBattingPoints :: BattingMults -> BattingStats -> Double
+calcBattingPoints BattingMults{..} BattingStats{..} =
+    let s = ((fromMaybe 0 bat_hits - (fromMaybe 0 bat_triples + fromMaybe 0 bat_doubles + fromMaybe 0 bat_homeRuns)) * lgb_single)
+        d = fromMaybe 0 bat_doubles * lgb_double
+        t = fromMaybe 0 bat_triples * lgb_triple
+        h = fromMaybe 0 bat_homeRuns * lgb_homerun
+        rbi = fromMaybe 0 bat_rbi * lgb_rbi
+        r = fromMaybe 0 bat_runs * lgb_run
+        bob = fromMaybe 0 bat_baseOnBalls * lgb_base_on_balls
+        sb = fromMaybe 0 bat_stolenBases * lgb_stolen_base
+        hbp = fromMaybe 0 bat_hitByPitch * lgb_hit_by_pitch
+        ko =  fromMaybe 0 bat_strikeOuts * lgb_strikeout
+        cs = fromMaybe 0 bat_caughtStealing * lgb_caught_stealing
+    in s + d + t + h + rbi + r + bob + sb + hbp - ko - cs
+
+-- takes league point parameters and pitching stats from a single game and returns a double
+calculatePoints :: C.PointParameters -> R.LgManager -> M.JsonStatsData -> Double
+calculatePoints params playerid stats =
+    -- get the player's stats from the day (assuming a function named getPlayerStats exists)
+    let playerStats = getPlayerStats playerid stats
+
+        -- calculate batting points
+        bat_points = case batting playerStats of
+            Nothing -> 0
+            Just b  -> calcBattingPoints (lg_battingMults params) b
+
+        -- calculate pitching points
+        pit_points = case pitching playerStats of
+            Nothing -> 0
+            Just p  -> calcPitchingPoints (lg_pitchingMults params) p
+
+        -- calculate total points
+        total_points = bat_points + pit_points
+    in total_points
+
+-- new data type to hold point totals, attributing them to each player
+data LineupPoints = LineupPoints
+  { cC  :: (Text, Double)
+  , b1C :: (Text, Double)
+  , b2C  :: (Text, Double)
+  , b3C  :: (Text, Double)
+  , ssC  :: (Text, Double)
+  , ofC  :: [(Text, Double)]
+  , uC   :: (Text, Double)
+  , spC  :: [(Text, Double)]
+  , rpC  :: [(Text, Double)]
+  } deriving (Show, Eq)
 
 instance FromJSON JsonPlayerData where
     parseJSON :: Value -> Parser JsonPlayerData
