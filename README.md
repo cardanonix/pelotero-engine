@@ -34,7 +34,7 @@ nix develop github:harryprayiv/scraperProto
 
 - Error Handling: Effective error handling mechanisms to ensure smooth operation.
 
-- Integration with ADTs: The module leverages Abstract Data Types (ADT_Input and ADT_Middle) for structured data processing.
+- Integration with ADTs: The module leverages Abstract Data Types (Input and Middle) for structured data processing.
 
 # Functions
 - fetchGameScheduleForDate: Fetches the game schedule for a given date.

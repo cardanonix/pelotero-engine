@@ -17,8 +17,8 @@ import qualified Data.Text as Text
 import qualified Data.Map.Strict as M
 import qualified Data.ByteString as B
 
-import qualified ADT_Config as C
-import qualified ADT_Roster as R
+import qualified Config as C
+import qualified Roster as R
 
 main :: IO ()
 main = do

@@ -5,7 +5,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE InstanceSigs #-}
 
-module ADT_DayStats where
+module DayStats where
 
 import Control.Monad (filterM)
 import Data.Aeson
@@ -30,10 +30,10 @@ import qualified Data.Vector as V
 import qualified Data.Aeson.Key as K
 import GHC.Arr (array)
 
-import qualified ADT_Input as I
-import qualified ADT_Middle as M
-import qualified ADT_Config as C
-import qualified ADT_Roster as R
+import qualified Input as I
+import qualified Middle as M
+import qualified Config as C
+import qualified Roster as R
 
 -- extract a list of players from the json using the playerids as the keys for players to be extracted
 extractPlayerStats :: Text -> M.JsonStatsData ->  I.PlayerStats
@@ -59,7 +59,7 @@ calculatePoints params team stats =
         total_points = bat_points + pit_points
     in total_points
 
-{- -- context for JsonStatsData from ADT_Middle in calculatePoints function:
+{- -- context for JsonStatsData from Middle in calculatePoints function:
 data JsonPlayerData where
   JsonPlayerData :: {playerId :: Text,
                        fullName :: Text,
@@ -84,7 +84,7 @@ data LgManager = LgManager
   , roster         :: Roster
   } deriving (Show, Eq) 
  -}
-{- -- context for CurrentLineup from ADT_Config in calculatePoints function:
+{- -- context for CurrentLineup from Config in calculatePoints function:
 data CurrentLineup = CurrentLineup
   { cC  :: Text
   , b1C :: Text

@@ -4,7 +4,7 @@
 {-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
 {-# LANGUAGE InstanceSigs #-}
 
-module ADT_Config where
+module Config where
 
 import Control.Monad (filterM)
 import Control.Applicative ((<|>))

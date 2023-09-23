@@ -3,7 +3,7 @@
 {-# HLINT ignore "Redundant id" #-}
 {-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
 
-module ADT_Roster where
+module Roster where
 
 import Control.Monad (filterM)
 import Control.Applicative ((<|>))
@@ -18,7 +18,7 @@ import Data.Text ( Text, Text )
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import Data.Scientific (toBoundedInteger)
-import ADT_Config (parseDouble, Configuration)
+import Config (parseDouble, Configuration)
 
 -- LgManager ADT
 data LgManager = LgManager

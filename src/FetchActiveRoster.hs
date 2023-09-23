@@ -20,8 +20,8 @@ import Control.Monad (filterM)
 import Data.Maybe (catMaybes)
 import Debug.Trace (traceShowM)
 import Scraper
-import ADT_Input
-import ADT_Middle
+import Input
+import Middle
 import System.Environment (getArgs)
 
 main :: IO ()

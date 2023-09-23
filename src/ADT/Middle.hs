@@ -5,7 +5,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE InstanceSigs #-}
 
-module ADT_Middle where
+module Middle where
 
 import Control.Monad (filterM)
 import Data.Aeson
@@ -28,9 +28,10 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Data.Aeson.Key as K
-import qualified ADT_Input as I
 import GHC.Arr (array)
 import Data.Aeson.Key as K
+
+import qualified Input as I
 
 data JsonPlayerData where
   JsonPlayerData :: {playerId :: Text,

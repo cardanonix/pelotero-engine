@@ -46,9 +46,9 @@ import System.Directory (createDirectoryIfMissing, doesFileExist)
 import Control.Monad (when, filterM)
 import Control.Concurrent.Async (mapConcurrently)
 
-import qualified ADT_Input as I
+import qualified Input as I
 
-import ADT_Input
+import Input
     ( GameData(..)
     , LiveGameStatusWrapper(..)
     , LiveGameWrapper(..)
@@ -61,7 +61,7 @@ import ADT_Input
     , PlayerStats (..)
     , ActivePlayer (..)
     )
-import qualified ADT_Middle as MI
+import qualified Middle as MI
 
 
 -- A (date String) -> [B] (list of gameIds/GameSchedule)
