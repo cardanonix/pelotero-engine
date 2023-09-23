@@ -40,7 +40,7 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Crypto.Hash.SHA256 as SHA256
-import Crypto.Hash
+import Crypto.Hash ( hashWith, SHA256(SHA256) )
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 import Control.Monad (when, filterM)
 import Control.Concurrent.Async (mapConcurrently)
