@@ -36,20 +36,61 @@ processConfigResults (Left errConfig) _ _ _ _ _ = putStrLn $ "Failed to parse Co
 processConfigResults (Right config) parsedValidRoster parsedInvalidRoster parsedInvalidLineup teamOneRoster teamTwoRoster = do
     putStrLn "Parsed Configuration:"
     print config
+    putStrLn ""
     putStrLn "\nTesting with Valid Roster:"
     testRoster config parsedValidRoster
-
+    putStrLn ""
     putStrLn "\nTesting with Invalid Roster:"
     testRoster config parsedInvalidRoster
-
+    putStrLn ""
     putStrLn "\nTesting with Invalid Lineup:"
     testRoster config parsedInvalidLineup
-
-    putStrLn "\nTesting with Invalid Roster:"
+    putStrLn ""
+    putStrLn "\nTesting with Player 1 Roster:"
     testRoster config teamOneRoster
-
-    putStrLn "\nTesting with Invalid Roster:"
+    putStrLn ""
+    putStrLn "\nTesting with Player 2 Roster:"
     testRoster config teamTwoRoster
+
+
+testRoster :: C.Configuration -> Either String R.LgManager -> IO ()
+testRoster _ (Left errRoster) = putStrLn $ "Failed to parse Roster JSON: " ++ errRoster
+testRoster config (Right lgManager) = do
+    print $ R.current_lineup lgManager 
+    print lgManager
+    isValid <- validateAndPrint lgManager config
+    if isValid 
+        then putStrLn "This Lineup is valid as fuck, yo!"
+        else putStrLn "That lineup has some serious discrepancies, bro!"
+
+validateRoster :: R.LgManager -> C.Configuration -> Either [String] ()
+validateRoster manager config = do
+    let discrepancies = getDiscrepancies (R.current_lineup manager) (C.valid_roster . C.point_parameters $ config)
+    let duplicateCheck = hasUniquePlayers (R.current_lineup manager)
+    case (duplicateCheck, discrepancies) of
+        (Left _, []) -> Right ()
+        (Right duplicates, []) -> Left (map Text.unpack duplicates ++ ["Duplicate player IDs found."])
+        (_, errors) -> Left (map discrepancyToString errors)
+    where
+        discrepancyToString (pos, diff) 
+          | diff > 0 = "This roster has " ++ show diff ++ " too many players at " ++ pos ++ "."
+          | diff < 0 = "This roster needs " ++ show (abs diff) ++ " more players at " ++ pos ++ "."
+
+validateAndPrint :: R.LgManager -> C.Configuration -> IO Bool
+validateAndPrint manager config = do
+    let rosterConfig = C.valid_roster . C.point_parameters $ config
+    let discrepancies = getDiscrepancies (R.current_lineup manager) rosterConfig
+    let validPositions = null discrepancies
+    let validRosterSize = all (\(_, diff) -> diff <= 0) discrepancies
+    case hasUniquePlayers (R.current_lineup manager) of
+        Left successMessage -> do
+            putStrLn successMessage
+            mapM_ (\(pos, diff) -> putStrLn $ "This roster has " ++ show diff ++ " too many players at " ++ pos ++ ".") discrepancies
+            return $ validPositions && validRosterSize
+        Right duplicates -> do
+            putStrLn "Duplicate player IDs found:"
+            mapM_ (putStrLn . Text.unpack) duplicates
+            return False
 
 readJson :: FromJSON a => FilePath -> IO (Either String a)
 readJson filePath = eitherDecodeStrict <$> B.readFile filePath
@@ -67,46 +108,6 @@ getRosterValidationErrors manager config =
     case validateRoster manager config of
         Left errors -> errors
         Right _ -> []
-
-validateRoster :: R.LgManager -> C.Configuration -> Either [String] ()
-validateRoster manager config = do
-    let discrepancies = getDiscrepancies (R.current_lineup manager) (C.valid_roster . C.point_parameters $ config)
-    let duplicateCheck = hasUniquePlayers (R.current_lineup manager)
-    case (duplicateCheck, discrepancies) of
-        (Left _, []) -> Right ()
-        (Right duplicates, []) -> Left (map Text.unpack duplicates ++ ["Duplicate player IDs found."])
-        (_, errors) -> Left (map discrepancyToString errors)
-    where
-        discrepancyToString (pos, diff) 
-          | diff > 0 = "This roster has " ++ show diff ++ " too many players at " ++ pos ++ "."
-          | diff < 0 = "This roster needs " ++ show (abs diff) ++ " more players at " ++ pos ++ "."
-
-
-testRoster :: C.Configuration -> Either String R.LgManager -> IO ()
-testRoster _ (Left errRoster) = putStrLn $ "Failed to parse Roster JSON: " ++ errRoster
-testRoster config (Right lgManager) = do
-    print $ R.current_lineup lgManager 
-    print lgManager
-    isValid <- validateAndPrint lgManager config
-    if isValid 
-        then putStrLn "This Lineup is valid as fuck, yo!"
-        else putStrLn "That lineup has some serious discrepancies, bro!"
-
-validateAndPrint :: R.LgManager -> C.Configuration -> IO Bool
-validateAndPrint manager config = do
-    let rosterConfig = C.valid_roster . C.point_parameters $ config
-    let discrepancies = getDiscrepancies (R.current_lineup manager) rosterConfig
-    let validPositions = null discrepancies
-    let validRosterSize = all (\(_, diff) -> diff <= 0) discrepancies
-    case hasUniquePlayers (R.current_lineup manager) of
-        Left successMessage -> do
-            putStrLn successMessage
-            mapM_ (\(pos, diff) -> putStrLn $ "This roster has " ++ show diff ++ " too many players at " ++ pos ++ ".") discrepancies
-            return $ validPositions && validRosterSize
-        Right duplicates -> do
-            putStrLn "Duplicate player IDs found:"
-            mapM_ (putStrLn . Text.unpack) duplicates
-            return False
 
 hasUniquePlayers :: R.CurrentLineup -> Either String [Text]
 hasUniquePlayers lineup =
@@ -143,19 +144,9 @@ validatePosition positionName players maxAllowed
     | otherwise = Nothing
     where overage = length players - maxAllowed
 
-
 totalPlayersInLineup :: R.CurrentLineup -> Int
 totalPlayersInLineup R.CurrentLineup{..} =
     1 + 1 + 1 + 1 + 1 + 1 + length ofC + length spC + length rpC  -- counting players from all positions
-
-printDiscrepancies :: R.CurrentLineup -> C.LgRoster -> IO ()
-printDiscrepancies lineup rosterConfig = do
-    let discrepancies = getDiscrepancies lineup rosterConfig
-    mapM_ printDifference discrepancies
-  where
-    printDifference (pos, diff)
-      | diff > 0 = putStrLn $ "This roster has " ++ show diff ++ " too many players at " ++ pos ++ "."
-      | diff < 0 = putStrLn $ "This roster needs " ++ show (abs diff) ++ " more players at " ++ pos ++ "."
 
 validateCurrentLineup :: R.LgManager -> C.Configuration -> Bool
 validateCurrentLineup R.LgManager{..} C.Configuration{point_parameters = C.PointParameters{valid_roster = rosterConfig}} =
