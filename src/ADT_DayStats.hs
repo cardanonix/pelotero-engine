@@ -35,8 +35,8 @@ import qualified ADT_Middle as M
 import qualified ADT_Config as C
 import qualified ADT_Roster as R
 
--- extract a list of players from the json using the roster id's as the keys fro players to be extracted
-getPlayerStats :: R.LgManager -> M.JsonStatsData ->  I.PlayerStats
+-- extract a list of players from the json using the playerids as the keys for players to be extracted
+extractPlayerStats :: Text -> M.JsonStatsData ->  I.PlayerStats
 -- need to ponder how to properly structure this: 
 -- a list of players with a list of game stats need to be decomposed but also be accesible individually 
 
@@ -58,6 +58,56 @@ calculatePoints params team stats =
         -- calculate total points
         total_points = bat_points + pit_points
     in total_points
+
+{- -- context for JsonStatsData from ADT_Middle in calculatePoints function:
+data JsonPlayerData where
+  JsonPlayerData :: {playerId :: Text,
+                       fullName :: Text,
+                       stats :: M.Map Text JsonStatsData}
+                      -> JsonPlayerData
+  deriving (Show, Eq)
+data JsonStatsData where
+  JsonStatsData :: {parentTeamId :: Int,
+                      allPositions :: [I.Position],
+                      statusCode :: Text,
+                      batting :: Maybe I.BattingStats,
+                      pitching :: Maybe I.PitchingStats}
+                     -> JsonStatsData
+  deriving (Show, Eq)
+context for 
+data LgManager = LgManager
+  { status         :: Text
+  , commissioner   :: Text
+  , teamId         :: Text
+  , leagueID       :: Text
+  , current_lineup :: CurrentLineup
+  , roster         :: Roster
+  } deriving (Show, Eq) 
+ -}
+{- -- context for CurrentLineup from ADT_Config in calculatePoints function:
+data CurrentLineup = CurrentLineup
+  { cC  :: Text
+  , b1C :: Text
+  , b2C  :: Text
+  , b3C  :: Text
+  , ssC  :: Text
+  , ofC  :: [Text]
+  , uC   :: Text
+  , spC  :: [Text]
+  , rpC  :: [Text]
+  } deriving (Show, Eq)
+data Roster = Roster
+  { cR  :: [Text]
+  , b1R :: [Text]
+  , b2R :: [Text]
+  , b3R :: [Text]
+  , ssR :: [Text]
+  , ofR :: [Text]
+  , uR  :: [Text]
+  , spR :: [Text]
+  , rpR :: [Text]
+  } deriving (Show, Eq)
+ -}
 
 calcBattingPoints :: C.BattingMults -> I.BattingStats -> Double
 calcBattingPoints C.BattingMults{..} I.BattingStats{..} =
@@ -91,8 +141,8 @@ calcPitchingPoints C.PitchingMults{..} I.PitchingStats{..} =
         l = fromMaybe 0 I.pit_losses * C.lgp_loss
     in w + s + qs + ip + ko + cg + sho - bob - ha - er - hbm - l
 
--- new data type to hold point totals, attributing them to each player
-data LineupPoints = LineupPoints
+-- new data type to hold point totals for a single team, attributing them to each player
+data Results = Results
   { cC  :: (Text, Double)
   , b1C :: (Text, Double)
   , b2C  :: (Text, Double)
