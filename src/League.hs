@@ -17,24 +17,24 @@ import qualified Data.Text as Text
 import qualified Data.Map.Strict as M
 import qualified Data.ByteString as B
 
-import ADT_Config
-import ADT_Roster 
+import qualified ADT_Config as C
+import qualified ADT_Roster as R
 
 
 
 main :: IO ()
 main = do
     jsonConfig <- B.readFile "testFiles/prototype_config/config.json"
-    let parsedConfig = eitherDecodeStrict jsonConfig :: Either String Configuration
+    let parsedConfig = eitherDecodeStrict jsonConfig :: Either String C.Configuration
 
     jsonInvalidRoster <- B.readFile "testFiles/prototype_config/invalid_roster.json"
-    let parsedInvalidRoster = eitherDecodeStrict jsonInvalidRoster :: Either String LgManager
+    let parsedInvalidRoster = eitherDecodeStrict jsonInvalidRoster :: Either String R.LgManager
 
     jsonValidRoster <- B.readFile "testFiles/prototype_config/valid_roster.json"
-    let parsedValidRoster = eitherDecodeStrict jsonValidRoster :: Either String LgManager
+    let parsedValidRoster = eitherDecodeStrict jsonValidRoster :: Either String R.LgManager
 
     jsonInvalidLineup <- B.readFile "testFiles/prototype_config/invalid_lineup.json"
-    let parsedInvalidLineup = eitherDecodeStrict jsonInvalidLineup :: Either String LgManager
+    let parsedInvalidLineup = eitherDecodeStrict jsonInvalidLineup :: Either String R.LgManager
 
     case parsedConfig of
         Left errConfig -> putStrLn $ "Failed to parse Config JSON: " ++ errConfig
@@ -50,18 +50,18 @@ main = do
             putStrLn "\nTesting with Invalid Lineup:"
             testRoster config parsedInvalidLineup
 
-testRoster :: Configuration -> Either String LgManager -> IO ()
+testRoster :: C.Configuration -> Either String R.LgManager -> IO ()
 testRoster _ (Left errRoster) = putStrLn $ "Failed to parse Roster JSON: " ++ errRoster
 testRoster config (Right lgManager) = do
-    print $ current_lineup lgManager 
+    print $ R.current_lineup lgManager 
     print lgManager
     isValid <- validateAndPrint lgManager config
     if isValid 
         then putStrLn "This Lineup is valid as fuck, yo!"
         else putStrLn "That lineup has some serious discrepancies, bro!"
 
-getDiscrepancies :: CurrentLineup -> LgRoster -> [(String, Int)]
-getDiscrepancies CurrentLineup{..} LgRoster{..} =
+getDiscrepancies :: R.CurrentLineup -> C.LgRoster -> [(String, Int)]
+getDiscrepancies R.CurrentLineup{..} C.LgRoster{..} =
     let discrepancies =
           [ ("Catcher", length [cC] - lg_catcher)
           , ("First Base", length [b1C] - lg_first)
@@ -75,7 +75,7 @@ getDiscrepancies CurrentLineup{..} LgRoster{..} =
           ]
     in filter ((/= 0) . snd) discrepancies
 
-printDiscrepancies :: CurrentLineup -> LgRoster -> IO ()
+printDiscrepancies :: R.CurrentLineup -> C.LgRoster -> IO ()
 printDiscrepancies lineup rosterConfig = do
     let discrepancies = getDiscrepancies lineup rosterConfig
     mapM_ printDifference discrepancies
@@ -84,10 +84,10 @@ printDiscrepancies lineup rosterConfig = do
       | diff > 0 = putStrLn $ "This roster has " ++ show diff ++ " too many players at " ++ pos ++ "."
       | diff < 0 = putStrLn $ "This roster needs " ++ show (abs diff) ++ " more players at " ++ pos ++ "."
 
-validateAndPrint :: LgManager -> Configuration -> IO Bool
+validateAndPrint :: R.LgManager -> C.Configuration -> IO Bool
 validateAndPrint manager config = do
-    let validPositions = null $ getDiscrepancies (current_lineup manager) (valid_roster . point_parameters $ config)
-    case hasUniquePlayers (current_lineup manager) of
+    let validPositions = null $ getDiscrepancies (R.current_lineup manager) (C.valid_roster . C.point_parameters $ config)
+    case hasUniquePlayers (R.current_lineup manager) of
         Left successMessage -> do
             putStrLn successMessage
             return validPositions
@@ -96,14 +96,14 @@ validateAndPrint manager config = do
             mapM_ (putStrLn . Text.unpack) duplicates
             return False
 
-validateCurrentLineup :: LgManager -> Configuration -> Bool
-validateCurrentLineup LgManager{..} Configuration{point_parameters = PointParameters{valid_roster = rosterConfig}} =
+validateCurrentLineup :: R.LgManager -> C.Configuration -> Bool
+validateCurrentLineup R.LgManager{..} C.Configuration{point_parameters = C.PointParameters{valid_roster = rosterConfig}} =
     let positionalValid = null (getDiscrepancies current_lineup rosterConfig)
     in case hasUniquePlayers current_lineup of
         Left _ -> positionalValid
         Right _ -> False
 
-hasUniquePlayers :: CurrentLineup -> Either String [Text]
+hasUniquePlayers :: R.CurrentLineup -> Either String [Text]
 hasUniquePlayers lineup =
     let allPlayers = getUniquePlayerIds lineup
         duplicates = allPlayers \\ nub allPlayers
@@ -111,6 +111,6 @@ hasUniquePlayers lineup =
        then Left "No duplicate players found."
        else Right duplicates
 
-getUniquePlayerIds :: CurrentLineup -> [Text]
-getUniquePlayerIds CurrentLineup{..} =
+getUniquePlayerIds :: R.CurrentLineup -> [Text]
+getUniquePlayerIds R.CurrentLineup{..} =
     cC : b1C : b2C : b3C : ssC : uC : (ofC ++ spC ++ rpC)
