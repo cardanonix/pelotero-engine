@@ -24,7 +24,7 @@ import Data.Maybe (catMaybes)
 import Debug.Trace (traceShowM)
 -- import Scraper ( scrapeDataForDateRange )
 import System.Environment (getArgs)
-import DayStats
+-- import DayStats
 
 main :: IO ()
 main = do

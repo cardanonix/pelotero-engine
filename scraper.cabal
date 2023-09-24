@@ -10,7 +10,7 @@ executable head2head
   hs-source-dirs: src, src/ADT
   main-is: Head2Head.hs
   ghc-options: -O2
-  other-modules:  DayStats, Scraper, Input, Middle, Roster 
+  other-modules:  Scraper, Input, Middle, Roster, Config
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
