@@ -124,25 +124,26 @@ getUniquePlayerIds R.CurrentLineup{..} =
 getDiscrepancies :: R.CurrentLineup -> C.LgRoster -> [(String, Int)]
 getDiscrepancies R.CurrentLineup{..} C.LgRoster{..} =
     let discrepancies =
-          [ validatePosition "Catcher" [cC] lg_catcher
-          , validatePosition "First Base" [b1C] lg_first
-          , validatePosition "Second Base" [b2C] lg_second
-          , validatePosition "Third Base" [b3C] lg_third
-          , validatePosition "Shortstop" [ssC] lg_shortstop
-          , validatePosition "Outfield" ofC lg_outfield
-          , validatePosition "Utility" [uC] lg_utility
-          , validatePosition "Starting Pitcher" spC lg_s_pitcher
-          , validatePosition "Relief Pitcher" rpC lg_r_pitcher
+          [ validatePositionCount "Catcher" [cC] lg_catcher
+          , validatePositionCount "First Base" [b1C] lg_first
+          , validatePositionCount "Second Base" [b2C] lg_second
+          , validatePositionCount "Third Base" [b3C] lg_third
+          , validatePositionCount "Shortstop" [ssC] lg_shortstop
+          , validatePositionCount "Outfield" ofC lg_outfield
+          , validatePositionCount "Utility" [uC] lg_utility
+          , validatePositionCount "Starting Pitcher" spC lg_s_pitcher
+          , validatePositionCount "Relief Pitcher" rpC lg_r_pitcher
           ]
         totalSizeDiscrepancy = totalPlayersInLineup R.CurrentLineup{..} - lg_max_size
         rosterSizeDiscrepancy = ([("Roster Size", totalSizeDiscrepancy) | totalSizeDiscrepancy > 0])
     in catMaybes discrepancies ++ rosterSizeDiscrepancy
 
-validatePosition :: String -> [a] -> Int -> Maybe (String, Int)
-validatePosition positionName players maxAllowed
+validatePositionCount :: String -> [a] -> Int -> Maybe (String, Int)
+validatePositionCount positionName players maxAllowed
     | overage > 0 = Just (positionName, overage)
     | otherwise = Nothing
     where overage = length players - maxAllowed
+
 
 totalPlayersInLineup :: R.CurrentLineup -> Int
 totalPlayersInLineup R.CurrentLineup{..} =
@@ -154,3 +155,42 @@ validateCurrentLineup R.LgManager{..} C.Configuration{point_parameters = C.Point
     in case hasUniquePlayers current_lineup of
         Left _ -> positionalValid
         Right _ -> False
+
+-- takes a playerId as a String and a LgManager and returns the player's position or fails with an error message
+-- addded failure cases to protect against players being in multiple positions or not being found in the lineup
+-- even though this should be impossible if I make the lineup-setting tools correctly
+findPlayerPosition :: Text -> R.LgManager -> Either Text Text
+findPlayerPosition playerId mgr =
+    case matchingPositions of
+        []     -> Left "Player not found in current lineup."
+        [pos]  -> Right pos
+        _      -> Left "Player found in multiple positions in the lineup."
+    where
+        lineup = R.current_lineup mgr
+        checks = [ ((playerId ==), "C", R.cC)
+                 , ((playerId ==), "1B", R.b1C)
+                 , ((playerId ==), "2B", R.b2C)
+                 , ((playerId ==), "3B", R.b3C)
+                 , ((playerId ==), "SS", R.ssC)
+                 , ((playerId ==), "U", R.uC)
+                 , (\x -> x `elem` R.ofC lineup, "OF", const playerId)
+                 , (\x -> x `elem` R.spC lineup, "SP", const playerId)
+                 , (\x -> x `elem` R.rpC lineup, "RP", const playerId)
+                 ]
+
+        matchingPositions = [ pos | (check, pos, access) <- checks, check (access lineup) ]
+
+-- takes a playerId as a String and a LgManager 
+-- and returns whether the player is to be fielded as a batter or pitcher for points calculation purposes
+batterOrPitcher :: Text -> R.LgManager -> Either Text Text
+batterOrPitcher playerName mgr
+    | isBatter   = Right "Batter"
+    | isPitcher  = Right "Pitcher"
+    | otherwise  = Left "Player not found in current lineup."
+    where
+        lineup = R.current_lineup mgr
+        batterPositions = [R.cC lineup, R.b1C lineup, R.b2C lineup, R.b3C lineup, R.ssC lineup, R.uC lineup] ++ R.ofC lineup
+        pitcherPositions = R.spC lineup ++ R.rpC lineup
+
+        isBatter = playerName `elem` batterPositions
+        isPitcher = playerName `elem` pitcherPositions
