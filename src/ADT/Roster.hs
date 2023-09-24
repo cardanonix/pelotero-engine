@@ -88,26 +88,34 @@ instance FromJSON Roster where
            <*> v .: "SP"
            <*> v .: "RP"
 
+-- takes a playerId as a String and a LgManager and returns the player's position or fails with an error message
+-- addded failure cases to protect against players being in multiple positions or not being found in the lineup
+-- even though this should be impossible if I make the lineup-setting tools correctly
 findPlayerPosition :: Text -> LgManager -> Either Text Text
 findPlayerPosition playerName mgr =
-    case currentPlayerPosition of
-        Just pos -> Right pos
-        Nothing  -> Left "Player not found in current lineup."
+    case matchingPositions of
+        []     -> Left "Player not found in current lineup."
+        [pos]  -> Right pos
+        _      -> Left "Player found in multiple positions in the lineup."
     where
         lineup = current_lineup mgr
-        currentPlayerPosition
-          | playerName == cC lineup = Just "C"
-          | playerName == b1C lineup = Just "1B"
-          | playerName == b2C lineup = Just "2B"
-          | playerName == b3C lineup = Just "3B"
-          | playerName == ssC lineup = Just "SS"
-          | playerName == uC lineup = Just "U"
-          | playerName `elem` ofC lineup = Just "OF"
-          | playerName `elem` spC lineup = Just "SP"
-          | playerName `elem` rpC lineup = Just "RP"
+        checks = [ ((playerName ==), "C", cC)
+                 , ((playerName ==), "1B", b1C)
+                 , ((playerName ==), "2B", b2C)
+                 , ((playerName ==), "3B", b3C)
+                 , ((playerName ==), "SS", ssC)
+                 , ((playerName ==), "U", uC)
+                 , (\x -> x `elem` ofC lineup, "OF", const playerName)
+                 , (\x -> x `elem` spC lineup, "SP", const playerName)
+                 , (\x -> x `elem` rpC lineup, "RP", const playerName)
+                 ]
 
+        matchingPositions = [ pos | (check, pos, access) <- checks, check (access lineup) ]
+
+-- takes a playerId as a String and a LgManager 
+-- and returns whether the player is to be fielded as a batter or pitcher for points calculation purposes
 batterOrPitcher :: Text -> LgManager -> Either Text Text
-batterOrPitcher playerName mgr 
+batterOrPitcher playerName mgr
     | isBatter   = Right "Batter"
     | isPitcher  = Right "Pitcher"
     | otherwise  = Left "Player not found in current lineup."
