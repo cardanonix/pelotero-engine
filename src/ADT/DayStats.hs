@@ -4,6 +4,8 @@
 {-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE RecordWildCards #-}
+
 
 module DayStats where
 
@@ -24,6 +26,7 @@ import Data.ByteString.Lazy.Char8 (pack)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Map.Strict as M
 import Data.Maybe (catMaybes, fromMaybe)
+import Text.Read (readMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as V
@@ -36,9 +39,26 @@ import qualified Config as C
 import qualified Roster as R
 
 -- extract a list of players from the json using the playerids as the keys for players to be extracted
-extractPlayerStats :: Text -> M.JsonStatsData ->  I.PlayerStats
+-- extractPlayerStats :: Text -> M.JsonStatsData ->  I.PlayerStats
 -- need to ponder how to properly structure this: 
 -- a list of players with a list of game stats need to be decomposed but also be accesible individually 
+
+-- currently needs a lot of work
+--  I may create a new temporary type for testing the calculation functions because testing this thoroughly revolves around the rest
+-- of the project
+
+-- create a function that takes a String Position string (to decide whether to pull the pitching or batting stats for that player) and uses that to search through the json for the player's stats and returns an array of each of the games stats as batter or pitcher
+
+queryPlayerId :: Text -> Text -> M.JsonPlayerData -> Either (Maybe I.BattingStats) (Maybe I.PitchingStats)
+queryPlayerId playerId position playerData
+    | playerId /= playerId' = Left Nothing
+    | position == "batter"  = Left $ batting statsData
+    | position == "pitcher" = Right $ pitching statsData
+    | otherwise             = error "Invalid position"
+    where
+        playerId' = playerId playerData
+        statsData = stats playerData
+
 
 calculatePoints :: C.PointParameters -> R.LgManager -> M.JsonStatsData -> Double
 calculatePoints params team stats =
@@ -129,8 +149,13 @@ calcPitchingPoints :: C.PitchingMults -> I.PitchingStats -> Double
 calcPitchingPoints C.PitchingMults{..} I.PitchingStats{..} =
     let w = fromMaybe 0 I.pit_wins * C.lgp_win
         s = fromMaybe 0 I.pit_saves * C.lgp_save
-        qs = (if (read (fromMaybe "0" I.pit_inningsPitched) :: Double >= 6) && fromMaybe 0 I.pit_earnedRuns <= 3 then 1 else 0) * C.lgp_quality_start
-        ip = read (fromMaybe "0" I.pit_inningsPitched) :: Double * C.lgp_inning_pitched
+        inningsPitched = fromMaybe "0" I.pit_inningsPitched
+        parsedInnings = readMaybe (Text.unpack inningsPitched) :: Maybe Double
+        actualInnings = fromMaybe 0 parsedInnings
+        qs = if actualInnings >= 6 && fromMaybe 0 I.pit_earnedRuns <= 3 
+             then C.lgp_quality_start 
+             else 0
+        ip = actualInnings * C.lgp_inning_pitched
         ko = fromMaybe 0 I.pit_strikeOuts * C.lgp_strikeout
         cg = fromMaybe 0 I.pit_completeGames * C.lgp_complete_game
         sho = fromMaybe 0 I.pit_shutouts * C.lgp_shutout
@@ -140,6 +165,7 @@ calcPitchingPoints C.PitchingMults{..} I.PitchingStats{..} =
         hbm = fromMaybe 0 I.pit_hitBatsmen * C.lgp_hit_batsman
         l = fromMaybe 0 I.pit_losses * C.lgp_loss
     in w + s + qs + ip + ko + cg + sho - bob - ha - er - hbm - l
+
 
 -- new data type to hold point totals for a single team, attributing them to each player
 data Results = Results
