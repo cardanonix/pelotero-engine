@@ -81,7 +81,6 @@ data LgRoster = LgRoster
   , lg_max_size   :: Int
   } deriving (Show, Eq)
 
-
 data DraftRoster = DraftRoster
   { dr_catcher    :: Int
   , dr_first      :: Int
