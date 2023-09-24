@@ -18,7 +18,18 @@ import Data.Aeson
       ToJSON(..),
       Value(..),
       object,
-      (.=) )
+      (.=),
+      FromJSON(..),
+      Result(Success),
+      Value,
+      decode,
+      eitherDecodeStrict,
+      fromJSON,
+      withObject,
+      (.!=),
+      (.:),
+      (.:?) )
+
 import Data.Aeson.Types (Parser, Result (..))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B (writeFile)
@@ -152,8 +163,8 @@ calcPitchingPoints C.PitchingMults{..} I.PitchingStats{..} =
         inningsPitched = fromMaybe "0" I.pit_inningsPitched
         parsedInnings = readMaybe (Text.unpack inningsPitched) :: Maybe Double
         actualInnings = fromMaybe 0 parsedInnings
-        qs = if actualInnings >= 6 && fromMaybe 0 I.pit_earnedRuns <= 3 
-             then C.lgp_quality_start 
+        qs = if actualInnings >= 6 && fromMaybe 0 I.pit_earnedRuns <= 3
+             then C.lgp_quality_start
              else 0
         ip = actualInnings * C.lgp_inning_pitched
         ko = fromMaybe 0 I.pit_strikeOuts * C.lgp_strikeout
@@ -180,16 +191,16 @@ data Results = Results
   , rpC  :: [(Text, Double)]
   } deriving (Show, Eq)
 
-instance FromJSON JsonPlayerData where
-    parseJSON :: Value -> Parser JsonPlayerData
+instance FromJSON M.JsonPlayerData where
+    parseJSON :: Value -> Parser M.JsonPlayerData
     parseJSON (Object v) = JsonPlayerData
         <$> v .: "player_id"
         <*> v .: "fullName"
         <*> v .: "stats"
     parseJSON _ = fail "Expected an object for JsonPlayerData"
 
-instance FromJSON JsonStatsData where
-    parseJSON :: Value -> Parser JsonStatsData
+instance FromJSON M.JsonStatsData where
+    parseJSON :: Value -> Parser M.JsonStatsData
     parseJSON (Object v) = JsonStatsData
         <$> v .: "parentTeamId"
         <*> v .: "allPositions"
@@ -200,8 +211,8 @@ instance FromJSON JsonStatsData where
 
 instance FromJSON I.Position where
     parseJSON :: Value -> Parser I.Position
-    parseJSON (Number n) = 
-        let positionString = Text.pack $ show $ round n 
+    parseJSON (Number n) =
+        let positionString = Text.pack $ show $ round n
         in pure $ I.Position positionString
     parseJSON _ = fail "Expected a number for I.Position"
 
@@ -251,7 +262,7 @@ instance FromJSON I.PitchingStats where
         <*> v .:? "pit_inheritedRunners"
         <*> v .:? "pit_inheritedRunnersScored"
         <*> v .:? "pit_catchersInterference"
-        <*> v .:? "pit_sacBunts" 
+        <*> v .:? "pit_sacBunts"
         <*> v .:? "pit_sacFlies"
         <*> v .:? "pit_passedBall"
     parseJSON _ = fail "Expected an object for I.PitchingStats"
@@ -261,16 +272,16 @@ instance FromJSON I.BattingStats where
     parseJSON (Object v) = I.BattingStats
         <$> v .:? "bat_gamesPlayed"
         <*> v .:? "bat_flyOuts"
-        <*> v .:? "bat_groundOuts" 
+        <*> v .:? "bat_groundOuts"
         <*> v .:? "bat_runs"
         <*> v .:? "bat_doubles"
-        <*> v .:? "bat_triples" 
-        <*> v .:? "bat_homeRuns" 
-        <*> v .:? "bat_strikeOuts" 
-        <*> v .:? "bat_baseOnBalls" 
-        <*> v .:? "bat_intentionalWalks" 
-        <*> v .:? "bat_hits" 
-        <*> v .:? "bat_hitByPitch" 
+        <*> v .:? "bat_triples"
+        <*> v .:? "bat_homeRuns"
+        <*> v .:? "bat_strikeOuts"
+        <*> v .:? "bat_baseOnBalls"
+        <*> v .:? "bat_intentionalWalks"
+        <*> v .:? "bat_hits"
+        <*> v .:? "bat_hitByPitch"
         <*> v .:? "bat_atBats"
         <*> v .:? "bat_caughtStealing"
         <*> v .:? "bat_stolenBases"
