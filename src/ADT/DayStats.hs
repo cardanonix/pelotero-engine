@@ -71,7 +71,9 @@ queryPlayerId playerId position playerData
         statsData = stats playerData
 
 
-calculatePoints :: C.PointParameters -> R.LgManager -> M.JsonStatsData -> Double
+
+-- generalizing this so it is the top-level function
+calculatePoints :: C.Configuration -> R.LgManager -> M.JsonPlayerData -> Double
 calculatePoints params team stats =
     -- get the player's stats from the day (assuming a function named getPlayerStats exists)
     let playerStats = getPlayerStats team stats
@@ -105,7 +107,6 @@ data JsonStatsData where
                       pitching :: Maybe I.PitchingStats}
                      -> JsonStatsData
   deriving (Show, Eq)
-context for 
 data LgManager = LgManager
   { status         :: Text
   , commissioner   :: Text
@@ -140,6 +141,7 @@ data Roster = Roster
   } deriving (Show, Eq)
  -}
 
+-- takes league point parameters and batting stats from a single game and returns a double
 calcBattingPoints :: C.BattingMults -> I.BattingStats -> Double
 calcBattingPoints C.BattingMults{..} I.BattingStats{..} =
     let s = ((fromMaybe 0 I.bat_hits - (fromMaybe 0 I.bat_triples + fromMaybe 0 I.bat_doubles + fromMaybe 0 I.bat_homeRuns)) * C.lgb_single)
