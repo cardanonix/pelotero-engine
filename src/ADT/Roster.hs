@@ -87,3 +87,34 @@ instance FromJSON Roster where
            <*> v .: "U"
            <*> v .: "SP"
            <*> v .: "RP"
+
+findPlayerPosition :: Text -> LgManager -> Either Text Text
+findPlayerPosition playerName mgr =
+    case currentPlayerPosition of
+        Just pos -> Right pos
+        Nothing  -> Left "Player not found in current lineup."
+    where
+        lineup = current_lineup mgr
+        currentPlayerPosition
+          | playerName == cC lineup = Just "C"
+          | playerName == b1C lineup = Just "1B"
+          | playerName == b2C lineup = Just "2B"
+          | playerName == b3C lineup = Just "3B"
+          | playerName == ssC lineup = Just "SS"
+          | playerName == uC lineup = Just "U"
+          | playerName `elem` ofC lineup = Just "OF"
+          | playerName `elem` spC lineup = Just "SP"
+          | playerName `elem` rpC lineup = Just "RP"
+
+batterOrPitcher :: Text -> LgManager -> Either Text Text
+batterOrPitcher playerName mgr 
+    | isBatter   = Right "Batter"
+    | isPitcher  = Right "Pitcher"
+    | otherwise  = Left "Player not found in current lineup."
+    where
+        lineup = current_lineup mgr
+        batterPositions = [cC lineup, b1C lineup, b2C lineup, b3C lineup, ssC lineup, uC lineup] ++ ofC lineup
+        pitcherPositions = spC lineup ++ rpC lineup
+
+        isBatter = playerName `elem` batterPositions
+        isPitcher = playerName `elem` pitcherPositions
