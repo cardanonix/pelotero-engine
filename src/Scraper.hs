@@ -21,7 +21,7 @@ import Data.Time.Clock
 import Data.Time.Format
 import Data.ByteString (ByteString, empty)
 import qualified Data.Vector as V
-import Data.Maybe (isJust, fromMaybe, maybeToList)
+import Data.Maybe (isJust, fromMaybe, mapMaybe, maybeToList)
 import qualified Data.Map as M
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -62,7 +62,6 @@ import Input
     )
 import qualified Middle as MI
 
-
 -- A (date String) -> [B] (list of gameIds/GameSchedule)
 -- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule
 fetchGameScheduleForDate :: String -> IO (Either String GameSchedule)
@@ -77,7 +76,32 @@ fetchGameStatus gameId = fetchAndDecodeJSON (gameStatusUrl gameId)
 
 -- B (gameId) -> C (status) -> D (boxscore)
 -- takes a gameId and returns IO (Either String GameData)
-fetchFinishedBxScore :: Int -> IO (Either String I.GameData)
+-- fetchFinishedBxScore :: Int -> IO (Either String I.GameData)
+-- fetchFinishedBxScore gameId = do
+--     gameStatusResult <- fetchGameStatus gameId
+--     case gameStatusResult of
+--         Right gameDataWrapper -> do
+--             let liveStatusWrapper = gameData gameDataWrapper
+--             let liveStatus = gameStatus liveStatusWrapper
+--             if codedGameState liveStatus == "F"
+--                then do
+--                    boxscoreResult <- fetchAndDecodeJSON (boxScoreUrl gameId)
+--                    return $ fmap (assignGameIdToPlayers gameId) boxscoreResult -- *adds gameId attribute to corresponding stats
+--                else return $ Left "Game isn't finished yet"
+--         Left err -> return $ Left ("Error fetching game status: " ++ err)
+
+-- -- [B] list of gameIds -> C status checks -> [D] list of boxscores
+-- fetchFinishedBxScores :: [Int] -> IO (Either String (M.Map Int I.GameData))
+-- fetchFinishedBxScores gameIds = do
+--     results <- mapConcurrently fetchGame gameIds
+--     let combinedResults = sequenceA results -- Change the structure from [Either] to Either [..]
+--     return $ fmap M.fromList combinedResults
+--     where 
+--         fetchGame gameId = do
+--             result <- fetchFinishedBxScore gameId
+--             return $ fmap (\d -> (gameId, d)) result
+
+fetchFinishedBxScore :: Int -> IO (Either String (Maybe I.GameData))
 fetchFinishedBxScore gameId = do
     gameStatusResult <- fetchGameStatus gameId
     case gameStatusResult of
@@ -87,20 +111,21 @@ fetchFinishedBxScore gameId = do
             if codedGameState liveStatus == "F"
                then do
                    boxscoreResult <- fetchAndDecodeJSON (boxScoreUrl gameId)
-                   return $ fmap (assignGameIdToPlayers gameId) boxscoreResult -- *adds gameId attribute to corresponding stats
-               else return $ Left "Game isn't finished yet"
+                   return $ fmap (Just . assignGameIdToPlayers gameId) boxscoreResult -- *adds gameId attribute to corresponding stats
+               else return $ Right Nothing
         Left err -> return $ Left ("Error fetching game status: " ++ err)
 
--- [B] list of gameIds -> C status checks -> [D] list of boxscores
-fetchFinishedBxScores :: [Int] -> IO (Either String (M.Map Int I.GameData))
+fetchFinishedBxScores :: [Int] -> IO (Either String (M.Map Int (Maybe I.GameData)))
 fetchFinishedBxScores gameIds = do
     results <- mapConcurrently fetchGame gameIds
     let combinedResults = sequenceA results -- Change the structure from [Either] to Either [..]
-    return $ fmap M.fromList combinedResults
+    return $ fmap (M.fromList . filter finishedGames) combinedResults
     where 
         fetchGame gameId = do
             result <- fetchFinishedBxScore gameId
             return $ fmap (\d -> (gameId, d)) result
+        finishedGames (_, Nothing) = False
+        finishedGames (_, Just _) = True
 
 -- ## OUTPUT CONVERSION ##
 -- [B] list of gameIds -> C status checks -> [D] (list of box scores) -> [E] (list of player data)
@@ -110,7 +135,6 @@ fetchFinishedBxScoresToJsonPlayerData gameIds = do
     return $ fmap convertGameDataMapToJsonPlayerData gameDataResult
 
 -- ## Output Stuff ##
-
 processDate :: String -> IO ()
 processDate date = do
     putStrLn $ "Processing " ++ date
@@ -172,12 +196,7 @@ writeRosterToFile path roster = do
     -- Write to file
     BL.writeFile path jsonData
 
-computeChecksum :: BL.ByteString -> Text
-computeChecksum bs = T.pack . show . hashWith SHA256 $ BL.toStrict bs
-
-getCurrentDate :: IO Text
-getCurrentDate = T.pack . formatTime defaultTimeLocale "%Y_%m_%d_%H_%M" <$> getCurrentTime
-
+-- Edge Cases Handling
 -- monadic error handling for fetching and decoding
 withEither :: IO (Either String a) -> (a -> IO ()) -> IO ()
 withEither action successHandler = do
@@ -185,36 +204,6 @@ withEither action successHandler = do
     case result of
         Left err       -> putStrLn err
         Right dataPacket -> successHandler dataPacket
-
--- Takes a schedule bytestring and outputs true if games are happening, false otherwise.
-hasGamesForDate :: I.GameSchedule -> Bool
-hasGamesForDate schedule = any (isJust . games) (dates schedule)
-
--- Takes a schedule bytestring and outputs an array of gameId's or errors
-extractGameIds :: I.GameSchedule -> [Int]
-extractGameIds gameData = concatMap (maybe [] (V.toList . fmap gamePk) . games) (dates gameData)
-
--- Generate the API URL for a single day's schedule
-scheduleUrl :: String -> String
-scheduleUrl date = "https://statsapi.mlb.com/api/v1/schedule/games/?language=en&sportId=1&startDate=" ++ date ++ "&endDate=" ++ date
-
--- Generate the API URL for live game status
-gameStatusUrl :: Int -> String
-gameStatusUrl gameId = "https://statsapi.mlb.com//api/v1.1/game/" ++ show gameId ++ "/feed/live"
-
--- Generate the API URL for finished boxscore
-boxScoreUrl :: Int -> String
-boxScoreUrl gameId = "http://statsapi.mlb.com/api/v1/game/" ++ show gameId ++ "/boxscore"
-
--- Generate the API URL for specific year 
-rosterUrl :: Int -> String
-rosterUrl season = "https://statsapi.mlb.com/api/v1/sports/1/players?activeStatus=ACTIVE&season=" ++ show season
-
--- Fetch and decode utility
-fetchAndDecodeJSON :: FromJSON a => String -> IO (Either String a)
-fetchAndDecodeJSON url = do
-    response <- httpBS (parseRequest_ url)
-    return $ eitherDecodeStrict $ getResponseBody response
 
 -- Special Enhancement of fromJSON types that gets called as post-processing in the fetch functions
 assignDateToSchedule :: Text -> GameSchedule -> GameSchedule
@@ -230,8 +219,21 @@ assignGameIdToPlayers gameId gameData =
     in gameData { teams = (teams gameData) { I.away = assignToTeam (I.away (teams gameData)),
                                              I.home = assignToTeam (I.home (teams gameData)) } }
 
--- ## FileName Manipulation Stuff 
+-- Fetch and decode utility
+fetchAndDecodeJSON :: FromJSON a => String -> IO (Either String a)
+fetchAndDecodeJSON url = do
+    response <- httpBS (parseRequest_ url)
+    return $ eitherDecodeStrict $ getResponseBody response
 
+-- Takes a schedule bytestring and outputs true if games are happening, false otherwise.
+hasGamesForDate :: I.GameSchedule -> Bool
+hasGamesForDate schedule = any (isJust . games) (dates schedule)
+
+-- Takes a schedule bytestring and outputs an array of gameId's or errors
+extractGameIds :: I.GameSchedule -> [Int]
+extractGameIds gameData = concatMap (maybe [] (V.toList . fmap gamePk) . games) (dates gameData)
+
+-- ## FileName Manipulation Stuff 
 -- Takes a filename, path, and the data to save, then writes to a JSON file at the specified path with the given filename.
 writeDataToFile :: FilePath -> FilePath -> M.Map Text MI.JsonPlayerData -> IO ()
 writeDataToFile filename path dataToSave = do
@@ -239,36 +241,9 @@ writeDataToFile filename path dataToSave = do
     let fullpath = path ++ "/" ++ filename
     BL.writeFile fullpath (encode dataToSave)
     
--- Takes a date string and formats it as a filename, like "2023_08_22.json".
-formatFilename :: String -> String
-formatFilename date = replace '-' '_' date ++ ".json"
-  where
-    replace old new = T.unpack . T.replace (T.pack [old]) (T.pack [new]) . T.pack
-
 -- Write Player to JSON File
 writePlayerToJsonFile :: FilePath -> I.Player -> IO ()
 writePlayerToJsonFile path player = B.writeFile path (convertPlayerToJson player)
-
--- Create output directory
-createOutputDirectory :: FilePath -> IO ()
-createOutputDirectory = createDirectoryIfMissing True
-
--- ## Dates ##
--- Converts a String of format "YYYY-MM-DD" to a Day
-stringToDay :: String -> Day
-stringToDay = parseTimeOrError True defaultTimeLocale "%Y-%m-%d"
-
--- Increments the Day by one
-incrementDay :: Day -> Day
-incrementDay = addDays 1
-
--- Generates a list of dates from the start to the end
-generateDateRange :: String -> String -> [String]
-generateDateRange start end = map (formatTime defaultTimeLocale "%Y-%m-%d") dates
-  where
-    startDate = stringToDay start
-    endDate = stringToDay end
-    dates = takeWhile (<= endDate) $ iterate incrementDay startDate
 
 -- Stat-Mutation stuff
 playerToJsonPlayerData :: I.Player -> MI.JsonPlayerData
@@ -292,12 +267,12 @@ playerToJsonStatsData p =
 convertPlayerToJson :: I.Player -> ByteString
 convertPlayerToJson = BL.toStrict . encode . playerToJsonPlayerData
 
-convertGameDataMapToJsonPlayerData :: M.Map Int I.GameData -> M.Map Text MI.JsonPlayerData
-convertGameDataMapToJsonPlayerData gameDataMap =
+convertGameDataMapToJsonPlayerData :: M.Map Int (Maybe I.GameData) -> M.Map Text MI.JsonPlayerData
+convertGameDataMapToJsonPlayerData maybeGameDataMap =
     foldl mergePlayerData M.empty allPlayerDataPairs
   where
     allPlayerDataPairs :: [(Text, MI.JsonPlayerData)]
-    allPlayerDataPairs = concatMap gameDataToPlayerDataPairs (M.elems gameDataMap)
+    allPlayerDataPairs = concatMap gameDataToPlayerDataPairs (mapMaybe id (M.elems maybeGameDataMap))
 
     gameDataToPlayerDataPairs :: I.GameData -> [(Text, MI.JsonPlayerData)]
     gameDataToPlayerDataPairs gameData =
@@ -326,3 +301,53 @@ mergeJsonPlayerData existing new =
 
 mergeJsonStatsData :: MI.JsonStatsData -> MI.JsonStatsData -> MI.JsonStatsData
 mergeJsonStatsData _ new = new
+
+
+-- Takes a date string and formats it as a filename, like "2023_08_22.json".
+formatFilename :: String -> String
+formatFilename date = replace '-' '_' date ++ ".json"
+  where
+    replace old new = T.unpack . T.replace (T.pack [old]) (T.pack [new]) . T.pack
+
+-- Create output directory
+createOutputDirectory :: FilePath -> IO ()
+createOutputDirectory = createDirectoryIfMissing True
+
+-- ## Dates ##
+-- Converts a String of format "YYYY-MM-DD" to a Day
+stringToDay :: String -> Day
+stringToDay = parseTimeOrError True defaultTimeLocale "%Y-%m-%d"
+
+-- Increments the Day by one
+incrementDay :: Day -> Day
+incrementDay = addDays 1
+
+-- Generates a list of dates from the start to the end
+generateDateRange :: String -> String -> [String]
+generateDateRange start end = map (formatTime defaultTimeLocale "%Y-%m-%d") dates
+  where
+    startDate = stringToDay start
+    endDate = stringToDay end
+    dates = takeWhile (<= endDate) $ iterate incrementDay startDate
+
+-- Generate the API URL for a single day's schedule
+scheduleUrl :: String -> String
+scheduleUrl date = "https://statsapi.mlb.com/api/v1/schedule/games/?language=en&sportId=1&startDate=" ++ date ++ "&endDate=" ++ date
+
+-- Generate the API URL for live game status
+gameStatusUrl :: Int -> String
+gameStatusUrl gameId = "https://statsapi.mlb.com//api/v1.1/game/" ++ show gameId ++ "/feed/live"
+
+-- Generate the API URL for finished boxscore
+boxScoreUrl :: Int -> String
+boxScoreUrl gameId = "http://statsapi.mlb.com/api/v1/game/" ++ show gameId ++ "/boxscore"
+
+-- Generate the API URL for specific year 
+rosterUrl :: Int -> String
+rosterUrl season = "https://statsapi.mlb.com/api/v1/sports/1/players?activeStatus=ACTIVE&season=" ++ show season
+
+computeChecksum :: BL.ByteString -> Text
+computeChecksum bs = T.pack . show . hashWith SHA256 $ BL.toStrict bs
+
+getCurrentDate :: IO Text
+getCurrentDate = T.pack . formatTime defaultTimeLocale "%Y_%m_%d_%H_%M" <$> getCurrentTime
