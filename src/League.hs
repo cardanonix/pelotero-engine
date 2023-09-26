@@ -12,7 +12,7 @@ import Control.Monad (filterM)
 import Data.Maybe (catMaybes)
 import Debug.Trace (traceShowM, traceShow)
 import Data.List (nub, (\\))  
-import Data.Foldable (foldl')
+import Data.Foldable (foldl', forM_)
 import qualified Data.Text as Text
 import qualified Data.Map.Strict as M
 import qualified Data.ByteString as B
@@ -20,37 +20,36 @@ import qualified Data.ByteString as B
 import qualified Config as C
 import qualified Roster as R
 
+type FileName = String
+type FileContent = Either String R.LgManager
+
 main :: IO ()
 main = do
     parsedConfig <- readJson "testFiles/prototype_config/config.json" :: IO (Either String C.Configuration)
-    parsedInvalidRoster <- readJson "testFiles/prototype_config/invalid_roster.json" :: IO (Either String R.LgManager)
-    parsedValidRoster <- readJson "testFiles/prototype_config/valid_roster.json" :: IO (Either String R.LgManager)
-    parsedInvalidLineup <- readJson "testFiles/prototype_config/invalid_lineup.json" :: IO (Either String R.LgManager)
-    teamOneRoster <- readJson "appData/rosters/team_001.json" :: IO (Either String R.LgManager)
-    teamTwoRoster <- readJson "appData/rosters/team_002.json" :: IO (Either String R.LgManager)
+    let fileNames = [
+            "testFiles/prototype_config/valid_roster.json",
+            "testFiles/prototype_config/invalid_roster.json",
+            "testFiles/prototype_config/invalid_lineup.json",
+            "testFiles/appData/rosters/team_001.json",
+            "testFiles/appData/rosters/team_002.json",
+            "testFiles/appData/rosters/team_003.json" -- <-- too many outfielders
+            ]
+    filesContent <- mapM (\path -> readJson path :: IO FileContent) fileNames
 
-    processConfigResults parsedConfig parsedValidRoster parsedInvalidRoster parsedInvalidLineup teamOneRoster teamTwoRoster
+    case parsedConfig of 
+        Left err -> putStrLn $ "Failed to parse Config JSON: " ++ err
+        Right config -> processConfigResults config (zip fileNames filesContent)
 
-processConfigResults :: Either String C.Configuration -> Either String R.LgManager -> Either String R.LgManager -> Either String R.LgManager -> Either String R.LgManager -> Either String R.LgManager -> IO ()
-processConfigResults (Left errConfig) _ _ _ _ _ = putStrLn $ "Failed to parse Config JSON: " ++ errConfig
-processConfigResults (Right config) parsedValidRoster parsedInvalidRoster parsedInvalidLineup teamOneRoster teamTwoRoster = do
-    putStrLn "Parsed Configuration:"
-    print config
-    putStrLn ""
-    putStrLn "\nTesting with Valid Roster:"
-    testRoster config parsedValidRoster
-    putStrLn ""
-    putStrLn "\nTesting with Invalid Roster:"
-    testRoster config parsedInvalidRoster
-    putStrLn ""
-    putStrLn "\nTesting with Invalid Lineup:"
-    testRoster config parsedInvalidLineup
-    putStrLn ""
-    putStrLn "\nTesting with Player 1 Roster:"
-    testRoster config teamOneRoster
-    putStrLn ""
-    putStrLn "\nTesting with Player 2 Roster:"
-    testRoster config teamTwoRoster
+
+
+processConfigResults :: C.Configuration -> [(FileName, FileContent)] -> IO ()
+processConfigResults config files = 
+    forM_ files $ \(fname, content) -> do
+        putStrLn $ "\nTesting with " ++ extractNameFromPath fname ++ ":"
+        testRoster config content
+
+extractNameFromPath :: FileName -> String
+extractNameFromPath = reverse . takeWhile (/= '/') . reverse
 
 
 testRoster :: C.Configuration -> Either String R.LgManager -> IO ()
