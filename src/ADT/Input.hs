@@ -181,8 +181,6 @@ data ActivePlayer where
                     -> ActivePlayer
   deriving (Show, Eq)
   
-
-
 -- ## Game Status ADT's ##
 data LiveGameStatus where
   LiveGameStatus :: {codedGameState :: Text} -> LiveGameStatus

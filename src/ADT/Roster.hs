@@ -2,6 +2,7 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Redundant id" #-}
 {-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
+{-# LANGUAGE InstanceSigs #-}
 
 module Roster where
 
@@ -56,6 +57,7 @@ data Roster = Roster
 
 -- FromJSON Instances
 instance FromJSON LgManager where
+  parseJSON :: Value -> Parser LgManager
   parseJSON = withObject "LgManager" $ \v ->
     LgManager <$> v .: "status"
               <*> v .: "comissioner"
@@ -65,6 +67,7 @@ instance FromJSON LgManager where
               <*> v .: "roster"
 
 instance FromJSON CurrentLineup where
+  parseJSON :: Value -> Parser CurrentLineup
   parseJSON = withObject "CurrentLineup" $ \v ->
     CurrentLineup <$> v .: "C"
                   <*> v .: "1B"
@@ -77,6 +80,7 @@ instance FromJSON CurrentLineup where
                   <*> v .: "RP"
 
 instance FromJSON Roster where
+  parseJSON :: Value -> Parser Roster
   parseJSON = withObject "Roster" $ \v ->
     Roster <$> v .: "C"
            <*> v .: "1B"

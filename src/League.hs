@@ -11,7 +11,7 @@ import Data.Aeson.Types (Parser, Result(..))
 import Control.Monad (filterM)
 import Data.Maybe (catMaybes)
 import Debug.Trace (traceShowM, traceShow)
-import Data.List (nub, (\\))  
+import Data.List (nub, (\\))
 import Data.Foldable (foldl', forM_)
 import qualified Data.Text as Text
 import qualified Data.Map.Strict as M
@@ -19,6 +19,9 @@ import qualified Data.ByteString as B
 
 import qualified Config as C
 import qualified Roster as R
+import qualified Input as I
+import qualified GHC.Generics as R
+
 
 type FileName = String
 type FileContent = Either String R.LgManager
@@ -37,14 +40,14 @@ main = do
             ]
     filesContent <- mapM (\path -> readJson path :: IO FileContent) fileNames
 
-    case parsedConfig of 
+    case parsedConfig of
         Left err -> putStrLn $ "Failed to parse Config JSON: " ++ err
         Right config -> processConfigResults config (zip fileNames filesContent)
 
 
 
 processConfigResults :: C.Configuration -> [(FileName, FileContent)] -> IO ()
-processConfigResults config files = 
+processConfigResults config files =
     forM_ files $ \(fname, content) -> do
         putStrLn $ "\nTesting with " ++ extractNameFromPath fname ++ ":"
         testRoster config content
@@ -56,10 +59,10 @@ extractNameFromPath = reverse . takeWhile (/= '/') . reverse
 testRoster :: C.Configuration -> Either String R.LgManager -> IO ()
 testRoster _ (Left errRoster) = putStrLn $ "Failed to parse Roster JSON: " ++ errRoster
 testRoster config (Right lgManager) = do
-    print $ R.current_lineup lgManager 
+    print $ R.current_lineup lgManager
     print lgManager
     isValid <- validateAndPrint lgManager config
-    if isValid 
+    if isValid
         then putStrLn "This Lineup is valid."
         else putStrLn "That lineup has discrepancies."
 
@@ -72,7 +75,7 @@ validateRoster manager config = do
         (Right duplicates, []) -> Left (map Text.unpack duplicates ++ ["Duplicate player IDs found."])
         (_, errors) -> Left (map discrepancyToString errors)
     where
-        discrepancyToString (pos, diff) 
+        discrepancyToString (pos, diff)
           | diff > 0 = "This roster has " ++ show diff ++ " too many players at " ++ pos ++ "."
           | diff < 0 = "This roster needs " ++ show (abs diff) ++ " more players at " ++ pos ++ "."
 
@@ -82,15 +85,23 @@ validateAndPrint manager config = do
     let discrepancies = getDiscrepancies (R.current_lineup manager) rosterConfig
     let validPositions = null discrepancies
     let validRosterSize = all (\(_, diff) -> diff <= 0) discrepancies
-    case hasUniquePlayers (R.current_lineup manager) of
-        Left successMessage -> do
+
+    playerIdValidation <- validatePlayerId (R.current_lineup manager)
+
+    case (playerIdValidation, hasUniquePlayers (R.current_lineup manager)) of
+        (Left successMessage, Left _) -> do
             putStrLn successMessage
             mapM_ (\(pos, diff) -> putStrLn $ "This roster has " ++ show diff ++ " too many players at " ++ pos ++ ".") discrepancies
             return $ validPositions && validRosterSize
-        Right duplicates -> do
+        (Right nonexistent, _) -> do
+            putStrLn "Invalid player IDs found:"
+            mapM_ (putStrLn . Text.unpack) nonexistent
+            return False
+        (_, Right duplicates) -> do
             putStrLn "Duplicate player IDs found:"
             mapM_ (putStrLn . Text.unpack) duplicates
             return False
+
 
 readJson :: FromJSON a => FilePath -> IO (Either String a)
 readJson filePath = eitherDecodeStrict <$> B.readFile filePath
@@ -116,6 +127,25 @@ hasUniquePlayers lineup =
     in if null duplicates
        then Left "No duplicate players found."
        else Right duplicates
+
+validatePlayerId :: R.CurrentLineup -> IO (Either String [Text])
+validatePlayerId lineup = do
+    let allPlayers = getUniquePlayerIds lineup
+    nonexistent <- filterM (fmap not . lookupPlayerId) allPlayers
+    if null nonexistent
+       then return $ Left "All Players are valid."
+       else return $ Right nonexistent
+
+-- we need to cross reference the playerid given with the player 
+lookupPlayerId :: Text -> IO Bool
+lookupPlayerId playerId = do
+    parsedRoster <- readJson "appData/rosters/activePlayers.json" :: IO (Either String I.ActiveRoster)
+    case parsedRoster of
+        Left _ -> return False
+        Right activeRoster -> return $ playerIdExists playerId (I.people activeRoster)
+
+playerIdExists :: Text -> [I.ActivePlayer] -> Bool
+playerIdExists pid = any (\player -> Text.pack (show $ I.playerId player) == pid)
 
 getUniquePlayerIds :: R.CurrentLineup -> [Text]
 getUniquePlayerIds R.CurrentLineup{..} =
@@ -143,7 +173,6 @@ validatePositionCount positionName players maxAllowed
     | overage > 0 = Just (positionName, overage)
     | otherwise = Nothing
     where overage = length players - maxAllowed
-
 
 totalPlayersInLineup :: R.CurrentLineup -> Int
 totalPlayersInLineup R.CurrentLineup{..} =

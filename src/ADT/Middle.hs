@@ -148,6 +148,7 @@ instance ToJSON I.BattingStats where
 
 -- toJSON for ActiveRoster
 instance ToJSON I.ActivePlayer where
+    toJSON :: I.ActivePlayer -> Value
     toJSON (I.ActivePlayer playerId useName useLastName nameSlug currentTeam primaryPosition batSide pitchHand active) =
         object ["id" .= playerId,
                 "useName" .= useName,
@@ -160,6 +161,7 @@ instance ToJSON I.ActivePlayer where
                 "active" .= active]
 
 instance ToJSON I.ActiveRoster where
+    toJSON :: I.ActiveRoster -> Value
     toJSON (I.ActiveRoster people dataPulled checksum) =
         let playerPairs = [(K.fromText (T.pack (show playerId)), playerJSON) | player@(I.ActivePlayer playerId _ _ _ _ _ _ _ _) <- people, let playerJSON = toJSON player]
         in object $ playerPairs ++ ["dataPulled" .= dataPulled, "checksum" .= checksum]
