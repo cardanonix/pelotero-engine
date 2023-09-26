@@ -22,7 +22,7 @@
     utils.apply-systems
     {
       inherit inputs;
-      systems = ["x86_64-linux" "x86_64-darwin"]; # Add both systems
+      systems = ["x86_64-linux" "x86_64-darwin"];
       overlays = [
         inputs.haskell-nix.overlay
         # plutus runtime dependency
@@ -97,7 +97,7 @@
 
   # --- Flake Local Nix Configuration ----------------------------
   nixConfig = {
-    extra-experimental-features = "nix-command flakes";
+    extra-experimental-features = ["nix-command flakes" "ca-derivations"];
     allow-import-from-derivation = "true";
     # This sets the flake to use nix cache.
     # Nix should ask for permission before using it,
