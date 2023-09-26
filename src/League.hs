@@ -32,7 +32,8 @@ main = do
             "testFiles/prototype_config/invalid_lineup.json",
             "testFiles/appData/rosters/team_001.json",
             "testFiles/appData/rosters/team_002.json",
-            "testFiles/appData/rosters/team_003.json" -- <-- too many outfielders
+            "testFiles/appData/rosters/team_003.json", -- <-- too many outfielders
+            "testFiles/appData/rosters/team_004.json" -- <-- too many outfielders
             ]
     filesContent <- mapM (\path -> readJson path :: IO FileContent) fileNames
 
@@ -59,8 +60,8 @@ testRoster config (Right lgManager) = do
     print lgManager
     isValid <- validateAndPrint lgManager config
     if isValid 
-        then putStrLn "This Lineup is valid as fuck, yo!"
-        else putStrLn "That lineup has some serious discrepancies, bro!"
+        then putStrLn "This Lineup is valid."
+        else putStrLn "That lineup has discrepancies."
 
 validateRoster :: R.LgManager -> C.Configuration -> Either [String] ()
 validateRoster manager config = do
@@ -134,7 +135,7 @@ getDiscrepancies R.CurrentLineup{..} C.LgRoster{..} =
           , validatePositionCount "Relief Pitcher" rpC lg_r_pitcher
           ]
         totalSizeDiscrepancy = totalPlayersInLineup R.CurrentLineup{..} - lg_max_size
-        rosterSizeDiscrepancy = ([("Roster Size", totalSizeDiscrepancy) | totalSizeDiscrepancy > 0])
+        rosterSizeDiscrepancy = ([("Team Total", totalSizeDiscrepancy) | totalSizeDiscrepancy > 0])
     in catMaybes discrepancies ++ rosterSizeDiscrepancy
 
 validatePositionCount :: String -> [a] -> Int -> Maybe (String, Int)
