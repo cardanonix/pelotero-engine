@@ -20,6 +20,7 @@ import qualified Data.ByteString as B
 import qualified Config as C
 import qualified Roster as R
 import qualified Input as I
+import OfficialRoster as O
 import qualified OfficialRoster as O
 import qualified GHC.Generics as R
 
@@ -127,24 +128,29 @@ hasUniquePlayers lineup =
        then Left "No duplicate players found."
        else Right duplicates
 
--- validatePlayerId :: R.CurrentLineup -> IO (Either String [Text])
--- validatePlayerId lineup = do
---     let allPlayers = getUniquePlayerIds lineup
---     nonexistent <- filterM (fmap not . lookupPlayerId) allPlayers
---     if null nonexistent
---        then return $ Left "All Players are valid."
---        else return $ Right nonexistent
+-- Lookup a playerId in an OfficialRoster
+lookupPlayerInRoster :: Text -> O.OfficialRoster -> Bool
+lookupPlayerInRoster pid roster = 
+    any (\player -> Text.pack (show $ playerId player) == pid) (people roster)
 
--- we need to cross reference the playerid given with the player 
--- lookupPlayerId :: Text -> IO Bool
--- lookupPlayerId playerId = do
---     parsedRoster <- readJson "appData/rosters/activePlayers.json" :: IO (Either String O.OfficialRoster)
---     case parsedRoster of
---         Left _ -> return False
---         Right activeRoster -> return $ M.member playerId (O.people activeRoster)
+lookupPlayerId :: Text -> IO Bool
+lookupPlayerId playerId = do
+    parsedRoster <- readJson "appData/rosters/activePlayers.json" :: IO (Either String O.OfficialRoster)
+    case parsedRoster of
+        Left _ -> return False
+        Right activeRoster -> return $ lookupPlayerInRoster playerId activeRoster
 
-playerIdExists :: Text -> [I.ActivePlayer] -> Bool
-playerIdExists pid = any (\player -> Text.pack (show $ I.playerId player) == pid)
+validatePlayerId :: R.CurrentLineup -> IO (Either String [Text])
+validatePlayerId lineup = do
+    let allPlayers = getUniquePlayerIds lineup
+    nonexistent <- filterM (fmap not . lookupPlayerId) allPlayers
+    if null nonexistent
+       then return $ Left "All Players are valid."
+       else return $ Right nonexistent
+
+-- Utility function to convert an Int ID to Text
+intToText :: Int -> Text
+intToText = Text.pack . show
 
 getUniquePlayerIds :: R.CurrentLineup -> [Text]
 getUniquePlayerIds R.CurrentLineup{..} =
