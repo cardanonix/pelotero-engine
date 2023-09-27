@@ -6,7 +6,7 @@
   "current_lineup": {
       "C":  "empty",
       "1B": "empty",
-      "2B": "empty",
+      "2B": "1234",
       "3B": "empty",
       "SS": "empty",
       "OF": [ "empty", "empty", "empty" ],
