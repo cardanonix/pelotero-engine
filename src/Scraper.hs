@@ -325,7 +325,7 @@ rosterUrl season = "https://statsapi.mlb.com/api/v1/sports/1/players?activeStatu
 
 -- Generate the API URL for specific year's stat leaders in either batting or pitching
 seasonStatsUrl :: Int -> D.StatType -> String 
-seasonStatsUrl season statType = "http://statsapi.mlb.com/api/v1/stats?stats=season&sportId=1&season=" ++ show season ++ "&group=" ++ statTypeToString statType
+seasonStatsUrl season statType = "http://statsapi.mlb.com/api/v1/stats?stats=season&sportId=1&season=" ++ show season ++ "&group=" ++ D.statTypeToString statType
 
 computeChecksum :: BL.ByteString -> Text
 computeChecksum bs = T.pack . show . hashWith SHA256 $ BL.toStrict bs
