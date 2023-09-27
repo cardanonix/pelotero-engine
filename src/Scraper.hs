@@ -76,31 +76,6 @@ fetchGameStatus gameId = fetchAndDecodeJSON (gameStatusUrl gameId)
 
 -- B (gameId) -> C (status) -> D (boxscore)
 -- takes a gameId and returns IO (Either String GameData)
--- fetchFinishedBxScore :: Int -> IO (Either String I.GameData)
--- fetchFinishedBxScore gameId = do
---     gameStatusResult <- fetchGameStatus gameId
---     case gameStatusResult of
---         Right gameDataWrapper -> do
---             let liveStatusWrapper = gameData gameDataWrapper
---             let liveStatus = gameStatus liveStatusWrapper
---             if codedGameState liveStatus == "F"
---                then do
---                    boxscoreResult <- fetchAndDecodeJSON (boxScoreUrl gameId)
---                    return $ fmap (assignGameIdToPlayers gameId) boxscoreResult -- *adds gameId attribute to corresponding stats
---                else return $ Left "Game isn't finished yet"
---         Left err -> return $ Left ("Error fetching game status: " ++ err)
-
--- -- [B] list of gameIds -> C status checks -> [D] list of boxscores
--- fetchFinishedBxScores :: [Int] -> IO (Either String (M.Map Int I.GameData))
--- fetchFinishedBxScores gameIds = do
---     results <- mapConcurrently fetchGame gameIds
---     let combinedResults = sequenceA results -- Change the structure from [Either] to Either [..]
---     return $ fmap M.fromList combinedResults
---     where 
---         fetchGame gameId = do
---             result <- fetchFinishedBxScore gameId
---             return $ fmap (\d -> (gameId, d)) result
-
 fetchFinishedBxScore :: Int -> IO (Either String (Maybe I.GameData))
 fetchFinishedBxScore gameId = do
     gameStatusResult <- fetchGameStatus gameId
@@ -115,6 +90,8 @@ fetchFinishedBxScore gameId = do
                else return $ Right Nothing
         Left err -> return $ Left ("Error fetching game status: " ++ err)
 
+-- -- [B] list of gameIds -> C status checks -> [D] list of boxscores
+-- fetchFinishedBxScores :: [Int] -> IO (Either String (M.Map Int I.GameData))
 fetchFinishedBxScores :: [Int] -> IO (Either String (M.Map Int (Maybe I.GameData)))
 fetchFinishedBxScores gameIds = do
     results <- mapConcurrently fetchGame gameIds
@@ -301,7 +278,6 @@ mergeJsonPlayerData existing new =
 
 mergeJsonStatsData :: MI.JsonStatsData -> MI.JsonStatsData -> MI.JsonStatsData
 mergeJsonStatsData _ new = new
-
 
 -- Takes a date string and formats it as a filename, like "2023_08_22.json".
 formatFilename :: String -> String

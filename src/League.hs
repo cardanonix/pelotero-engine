@@ -6,9 +6,9 @@ module Main (main) where
 import Data.Text (Text)
 import Data.ByteString ( ByteString)
 import Data.ByteString.Lazy.Char8 (pack)
-import Data.Aeson (decode, Result(Success), FromJSON(..), Value, (.:), (.:?), (.!=), fromJSON, withObject, eitherDecodeStrict)
+import Data.Aeson (decode, Result(Success), ToJSON (..), FromJSON(..), Value, (.:), (.:?), (.!=), fromJSON, withObject, eitherDecodeStrict)
 import Data.Aeson.Types (Parser, Result(..))
-import Control.Monad (filterM)
+import Control.Monad (filterM, forM)
 import Data.Maybe (catMaybes)
 import Debug.Trace (traceShowM, traceShow)
 import Data.List (nub, (\\))
@@ -20,6 +20,7 @@ import qualified Data.ByteString as B
 import qualified Config as C
 import qualified Roster as R
 import qualified Input as I
+import qualified OfficialRoster as O
 import qualified GHC.Generics as R
 
 
@@ -43,7 +44,6 @@ main = do
     case parsedConfig of
         Left err -> putStrLn $ "Failed to parse Config JSON: " ++ err
         Right config -> processConfigResults config (zip fileNames filesContent)
-
 
 
 processConfigResults :: C.Configuration -> [(FileName, FileContent)] -> IO ()
@@ -102,7 +102,6 @@ validateAndPrint manager config = do
             mapM_ (putStrLn . Text.unpack) duplicates
             return False
 
-
 readJson :: FromJSON a => FilePath -> IO (Either String a)
 readJson filePath = eitherDecodeStrict <$> B.readFile filePath
 
@@ -128,21 +127,21 @@ hasUniquePlayers lineup =
        then Left "No duplicate players found."
        else Right duplicates
 
-validatePlayerId :: R.CurrentLineup -> IO (Either String [Text])
-validatePlayerId lineup = do
-    let allPlayers = getUniquePlayerIds lineup
-    nonexistent <- filterM (fmap not . lookupPlayerId) allPlayers
-    if null nonexistent
-       then return $ Left "All Players are valid."
-       else return $ Right nonexistent
+-- validatePlayerId :: R.CurrentLineup -> IO (Either String [Text])
+-- validatePlayerId lineup = do
+--     let allPlayers = getUniquePlayerIds lineup
+--     nonexistent <- filterM (fmap not . lookupPlayerId) allPlayers
+--     if null nonexistent
+--        then return $ Left "All Players are valid."
+--        else return $ Right nonexistent
 
 -- we need to cross reference the playerid given with the player 
-lookupPlayerId :: Text -> IO Bool
-lookupPlayerId playerId = do
-    parsedRoster <- readJson "appData/rosters/activePlayers.json" :: IO (Either String I.ActiveRoster)
-    case parsedRoster of
-        Left _ -> return False
-        Right activeRoster -> return $ playerIdExists playerId (I.people activeRoster)
+-- lookupPlayerId :: Text -> IO Bool
+-- lookupPlayerId playerId = do
+--     parsedRoster <- readJson "appData/rosters/activePlayers.json" :: IO (Either String O.OfficialRoster)
+--     case parsedRoster of
+--         Left _ -> return False
+--         Right activeRoster -> return $ M.member playerId (O.people activeRoster)
 
 playerIdExists :: Text -> [I.ActivePlayer] -> Bool
 playerIdExists pid = any (\player -> Text.pack (show $ I.playerId player) == pid)

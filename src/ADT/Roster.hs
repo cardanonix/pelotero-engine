@@ -91,4 +91,3 @@ instance FromJSON Roster where
            <*> v .: "U"
            <*> v .: "SP"
            <*> v .: "RP"
-

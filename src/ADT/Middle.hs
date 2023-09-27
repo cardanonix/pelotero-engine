@@ -147,6 +147,19 @@ instance ToJSON I.BattingStats where
         ]
 
 -- toJSON for ActiveRoster
+-- instance ToJSON I.ActiveRoster where
+--     toJSON :: I.ActiveRoster -> Value
+--     toJSON (I.ActiveRoster people dataPulled checksum) =
+--         let playerPairs = [(K.fromText (T.pack (show playerId)), playerJSON) | player@(I.ActivePlayer playerId _ _ _ _ _ _ _ _) <- people, let playerJSON = toJSON player]
+--         in object $ playerPairs ++ ["dataPulled" .= dataPulled, "checksum" .= checksum]
+
+-- toJSON for ActiveRoster
+instance ToJSON I.ActiveRoster where
+    toJSON :: I.ActiveRoster -> Value
+    toJSON (I.ActiveRoster people dataPulled checksum) =
+        let playerPairs = [(K.fromText (T.pack (show playerId)), playerJSON) | player@(I.ActivePlayer playerId _ _ _ _ _ _ _ _) <- people, let playerJSON = toJSON player]
+        in object ["officialPlayers" .= object playerPairs, "dataPulled" .= dataPulled, "checksum" .= checksum]
+
 instance ToJSON I.ActivePlayer where
     toJSON :: I.ActivePlayer -> Value
     toJSON (I.ActivePlayer playerId useName useLastName nameSlug currentTeam primaryPosition batSide pitchHand active) =
@@ -159,9 +172,3 @@ instance ToJSON I.ActivePlayer where
                 "batSide" .= batSide,
                 "pitchHand" .= pitchHand,
                 "active" .= active]
-
-instance ToJSON I.ActiveRoster where
-    toJSON :: I.ActiveRoster -> Value
-    toJSON (I.ActiveRoster people dataPulled checksum) =
-        let playerPairs = [(K.fromText (T.pack (show playerId)), playerJSON) | player@(I.ActivePlayer playerId _ _ _ _ _ _ _ _) <- people, let playerJSON = toJSON player]
-        in object $ playerPairs ++ ["dataPulled" .= dataPulled, "checksum" .= checksum]
