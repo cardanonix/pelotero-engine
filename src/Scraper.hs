@@ -61,6 +61,7 @@ import Input
     , ActivePlayer (..)
     )
 import qualified Middle as MI
+import qualified DayStats as D
 
 -- A (date String) -> [B] (list of gameIds/GameSchedule)
 -- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule
@@ -318,9 +319,13 @@ gameStatusUrl gameId = "https://statsapi.mlb.com//api/v1.1/game/" ++ show gameId
 boxScoreUrl :: Int -> String
 boxScoreUrl gameId = "http://statsapi.mlb.com/api/v1/game/" ++ show gameId ++ "/boxscore"
 
--- Generate the API URL for specific year 
+-- Generate the API URL for specific years rosters
 rosterUrl :: Int -> String
 rosterUrl season = "https://statsapi.mlb.com/api/v1/sports/1/players?activeStatus=ACTIVE&season=" ++ show season
+
+-- Generate the API URL for specific year's stat leaders in either batting or pitching
+seasonStatsUrl :: Int -> D.StatType -> String 
+seasonStatsUrl season statType = "http://statsapi.mlb.com/api/v1/stats?stats=season&sportId=1&season=" ++ show season ++ "&group=" ++ statTypeToString statType
 
 computeChecksum :: BL.ByteString -> Text
 computeChecksum bs = T.pack . show . hashWith SHA256 $ BL.toStrict bs

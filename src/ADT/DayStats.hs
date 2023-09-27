@@ -190,6 +190,15 @@ data Results = Results
   , rpC  :: [(Text, Double)]
   } deriving (Show, Eq)
 
+-- data type to codify the dinstinction between batting and pitching with boolean logic 
+data StatType = Batting | Pitching deriving (Show, Eq)
+
+-- Convert StatType to a string representation
+statTypeToString :: StatType -> String
+statTypeToString Batting = "batting"
+statTypeToString Pitching = "pitching"
+
+
 instance FromJSON M.JsonPlayerData where
     parseJSON :: Value -> Parser M.JsonPlayerData
     parseJSON (Object v) = JsonPlayerData

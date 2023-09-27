@@ -20,6 +20,7 @@ import qualified Data.ByteString as B
 import qualified Config as C
 import qualified Roster as R
 import qualified Input as I
+import qualified DayStats as D
 import OfficialRoster as O
 import qualified OfficialRoster as O
 import qualified GHC.Generics as R
@@ -46,6 +47,9 @@ main = do
         Left err -> putStrLn $ "Failed to parse Config JSON: " ++ err
         Right config -> processConfigResults config (zip fileNames filesContent)
 
+
+
+data StatType = Batting | Pitching deriving (Show, Eq)
 
 processConfigResults :: C.Configuration -> [(FileName, FileContent)] -> IO ()
 processConfigResults config files =
@@ -216,10 +220,10 @@ findPlayerPosition playerId mgr =
 
 -- takes a playerId as a String and a LgManager 
 -- and returns whether the player is to be fielded as a batter or pitcher for points calculation purposes
-batterOrPitcher :: Text -> R.LgManager -> Either Text Text
+batterOrPitcher :: Text -> R.LgManager -> Either Text D.StatType
 batterOrPitcher playerName mgr
-    | isBatter   = Right "Batter"
-    | isPitcher  = Right "Pitcher"
+    | isBatter   = Right D.Batting
+    | isPitcher  = Right D.Pitching
     | otherwise  = Left "Player not found in current lineup."
     where
         lineup = R.current_lineup mgr
