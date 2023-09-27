@@ -70,8 +70,6 @@ queryPlayerId playerId position playerData
         playerId' = playerId playerData
         statsData = stats playerData
 
-
-
 -- generalizing this so it is the top-level function
 calculatePoints :: C.Configuration -> R.LgManager -> M.JsonPlayerData -> Double
 calculatePoints params team stats =
@@ -178,7 +176,6 @@ calcPitchingPoints C.PitchingMults{..} I.PitchingStats{..} =
         hbm = fromMaybe 0 I.pit_hitBatsmen * C.lgp_hit_batsman
         l = fromMaybe 0 I.pit_losses * C.lgp_loss
     in w + s + qs + ip + ko + cg + sho - bob - ha - er - hbm - l
-
 
 -- new data type to hold point totals for a single team, attributing them to each player
 data Results = Results
