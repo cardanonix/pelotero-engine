@@ -27,20 +27,6 @@ import qualified Data.ByteString as B
 
 import qualified GHC.Generics as R
 
-
--- instance FromJSON OfficialRoster where
---     parseJSON :: Value -> Parser OfficialRoster
---     parseJSON = withObject "OfficialRoster" $ \v -> do
---         -- Extracting the meta information
---         dataPulled <- v .: "dataPulled"
---         checksum <- v .: "checksum"
---         -- Filtering out the non-player keys
---         let playerObj = HM.filterWithKey (\k _ -> k `notElem` ["dataPulled", "checksum"]) (v :: HM.HashMap Text Value)
---         -- Parsing the player data
---         players <- mapM parseJSON (HM.elems playerObj)
-
---         return $ OfficialRoster players dataPulled checksum
-
 instance FromJSON OfficialRoster where
     parseJSON :: Value -> Parser OfficialRoster
     parseJSON = withObject "OfficialRoster" $ \v -> do
@@ -56,7 +42,6 @@ instance FromJSON OfficialRoster where
               Just playerValue -> parseJSON playerValue
 
         return $ OfficialRoster players dataPulled checksum
-
 
 instance FromJSON OfficialPlayer where
   parseJSON :: Value -> Parser OfficialPlayer
