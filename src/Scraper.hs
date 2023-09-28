@@ -62,6 +62,7 @@ import Input
     )
 import qualified Middle as MI
 import qualified DayStats as D
+import qualified Leaderboard as L
 
 -- A (date String) -> [B] (list of gameIds/GameSchedule)
 -- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule
@@ -90,6 +91,7 @@ fetchFinishedBxScore gameId = do
                    return $ fmap (Just . assignGameIdToPlayers gameId) boxscoreResult -- *adds gameId attribute to corresponding stats
                else return $ Right Nothing
         Left err -> return $ Left ("Error fetching game status: " ++ err)
+
 
 -- -- [B] list of gameIds -> C status checks -> [D] list of boxscores
 -- fetchFinishedBxScores :: [Int] -> IO (Either String (M.Map Int I.GameData))
@@ -323,7 +325,7 @@ boxScoreUrl gameId = "http://statsapi.mlb.com/api/v1/game/" ++ show gameId ++ "/
 rosterUrl :: Int -> String
 rosterUrl season = "https://statsapi.mlb.com/api/v1/sports/1/players?activeStatus=ACTIVE&season=" ++ show season
 
--- Generate the API URL for specific year's stat leaders in either batting or pitching
+-- Generate the API URL for specific year's stat leaders in either batting or pitching (not working well)
 seasonStatsUrl :: Int -> D.StatType -> String 
 seasonStatsUrl season statType = "http://statsapi.mlb.com/api/v1/stats?stats=season&sportId=1&season=" ++ show season ++ "&group=" ++ D.statTypeToString statType
 
@@ -332,3 +334,4 @@ computeChecksum bs = T.pack . show . hashWith SHA256 $ BL.toStrict bs
 
 getCurrentDate :: IO Text
 getCurrentDate = T.pack . formatTime defaultTimeLocale "%Y_%m_%d_%H_%M" <$> getCurrentTime
+
