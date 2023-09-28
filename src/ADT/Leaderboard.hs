@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE InstanceSigs #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Redundant id" #-}
 {-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
@@ -17,47 +19,81 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as V
 
+-- A Mofified Version of the Input fromJson stuff.
+data SeasonData where
+  SeasonData :: {teams :: Teams} -> SeasonData
+  deriving (Show, Eq)
 
--- Regular stats to modify:
--- ## Boxscore Stats data type
--- data GameData where
---   GameData :: {teams :: Teams} -> GameData
---   deriving (Show, Eq)
+instance FromJSON SeasonData where
+  parseJSON :: Value -> Parser SeasonData
+  parseJSON = withObject "SeasonData" $ \v ->
+    SeasonData <$> v .: "teams"
 
--- data Teams where
---   Teams :: {away :: TeamData, home :: TeamData} -> Teams
---   deriving (Show, Eq)
+data Teams where
+  Teams :: {away :: TeamData, home :: TeamData} -> Teams
+  deriving (Show, Eq)
 
--- data TeamData where
---   TeamData :: {players :: M.Map Text Player} -> TeamData
---   deriving (Show, Eq)
+instance FromJSON Teams where
+  parseJSON :: Value -> Parser Teams
+  parseJSON = withObject "Teams" $ \v ->
+    Teams
+      <$> v
+      .: "away"
+      <*> v
+      .: "home"
 
--- type Players = [(Text, Player)]
+data TeamData where
+  TeamData :: {players :: M.Map Text Player} -> TeamData
+  deriving (Show, Eq)
 
--- data Player where
---   Player :: {  person :: Person,
---                gameid :: Maybe Int,
---                parentTeamId :: Int,
---                allPositions :: Maybe [Position],
---                status :: Status,
---                seasonStats :: PlayerSeasonStats
---                }
---               -> Player
---   deriving (Show, Eq)
+instance FromJSON TeamData where
+  parseJSON :: Value -> Parser TeamData
+  parseJSON = withObject "TeamData" $ \v -> do
+    playersMap <- v .: "players"
+    validPlayers <- traverse parseJSON playersMap
+    pure TeamData {players = validPlayers}
 
--- data Person where
---   Person :: {personId :: Int, fullName :: Text} -> Person
---   deriving (Show, Eq)
+type Players = [(Text, Player)]
 
--- data Position where
---   Position :: {pos_code :: Text} -> Position
---   deriving (Show, Eq)
+data Player where
+  Player :: {  person :: Person,
+               status :: Status,
+               seasonStats :: PlayerSeasonStats
+               }
+              -> Player
+  deriving (Show, Eq)
 
--- data Status where
---   Status :: {status_code :: Text} -> Status
---   deriving (Show, Eq)
+instance FromJSON Player where
+  parseJSON :: Value -> Parser Player
+  parseJSON = withObject "Player" $ \v -> do
+    person <- v .: "person"
+    status <- v .: "status"
+    seasonStats <- v .: "seasonStats"
+    return $ Player person status seasonStats
 
--- ## Season Leaderboard ADT's ##
+data Person where
+  Person :: {personId :: Int, fullName :: Text} -> Person
+  deriving (Show, Eq)
+
+instance FromJSON Person where
+  parseJSON :: Value -> Parser Person
+  parseJSON = withObject "Person" $ \v ->
+    Person
+      <$> v
+      .: "id"
+      <*> v
+      .: "fullName"
+
+data Status where
+  Status :: {status_code :: Text} -> Status
+  deriving (Show, Eq)
+
+instance FromJSON Status where
+  parseJSON :: Value -> Parser Status
+  parseJSON = withObject "Status" $ \v ->
+    Status
+      <$> v
+      .: "code"
 
 data PlayerSeasonStats where
   PlayerSeasonStats :: {  
@@ -65,6 +101,13 @@ data PlayerSeasonStats where
                     pitching :: Maybe PitchingTotals}
                    -> PlayerSeasonStats
   deriving (Show, Eq)
+
+instance FromJSON PlayerSeasonStats where
+  parseJSON :: Value -> Parser PlayerSeasonStats
+  parseJSON = withObject "PlayerSeasonStats" $ \v ->
+    PlayerSeasonStats
+      <$> v .:? "batting"
+      <*> v .:? "pitching"
 
 data BattingTotals where
   BattingTotals :: {  
@@ -170,128 +213,12 @@ data PitchingTotals where
                     -> PitchingTotals
   deriving (Show, Eq)
 
--- ## Working JSON instances from Input to modify ##
-{- 
-instance FromJSON GameData where
-  parseJSON :: Value -> Parser GameData
-  parseJSON = withObject "GameData" $ \v ->
-    GameData <$> v .: "teams"
-
-instance FromJSON Teams where
-  parseJSON :: Value -> Parser Teams
-  parseJSON = withObject "Teams" $ \v ->
-    Teams
-      <$> v
-      .: "away"
-      <*> v
-      .: "home"
-
-hasValidPositions :: Value -> Bool
-hasValidPositions val = case fromJSON val :: Result Player of
-  Success player -> case allPositions player of
-    Just positions -> not (null positions)
-    Nothing -> False
-  _ -> False
-
-instance FromJSON TeamData where
-  parseJSON :: Value -> Parser TeamData
-  parseJSON = withObject "TeamData" $ \v -> do
-    playersMap <- v .: "players" :: Parser (M.Map Text Value)
-    let maybePlayersList =
-          map
-            ( \(k, v) ->
-                if hasValidPositions v
-                  then case fromJSON v of
-                    Success player -> Just (k, player)
-                    _ -> Nothing
-                  else Nothing
-            )
-            (M.toList playersMap)
-
-    let validPlayers = M.fromList $ catMaybes maybePlayersList
-    pure TeamData {players = validPlayers}
-
-instance FromJSON Player where
-  parseJSON :: Value -> Parser Player
-  parseJSON = withObject "Player" $ \v -> do
-    person <- v .: "person"
-    teamId <- v .: "parentTeamId"
-    positions <- v .:? "allPositions"
-    let validPositions = case positions of
-          Just ps -> if null ps then Nothing else Just ps
-          Nothing -> Nothing
-    status <- v .: "status"
-    stats <- v .: "stats"
-    let gameid = Nothing -- skips nonexistent (but necessary) gameId field, which is later added in Scraper.assignGameIdToPlayers
-    return $ Player person gameid teamId validPositions status stats
-
-instance FromJSON Person where
-  parseJSON :: Value -> Parser Person
-  parseJSON = withObject "Person" $ \v ->
-    Person
-      <$> v
-      .: "id"
-      <*> v
-      .: "fullName"
-
-instance FromJSON Position where
-  parseJSON :: Value -> Parser Position
-  parseJSON = withObject "Position" $ \v ->
-    Position
-      <$> v
-      .: "code"
-
-instance FromJSON Status where
-  parseJSON :: Value -> Parser Status
-  parseJSON = withObject "Status" $ \v ->
-    Status
-      <$> v
-      .: "code"
-
-instance FromJSON PlayerStats where
-  parseJSON :: Value -> Parser PlayerStats
-  parseJSON = withObject "PlayerStats" $ \v ->
-    PlayerStats
-      <$> v .:? "batting"
-      <*> v .:? "pitching"
-
-instance FromJSON BattingStats where
-  parseJSON :: Value -> Parser BattingStats
-  parseJSON = withObject "BattingStats" $ \v ->
-    BattingStats
-      <$> v .:? "gamesPlayed"
-      <*> v .:? "flyOuts"
-      <*> v .:? "groundOuts"
-      <*> v .:? "runs"
-      <*> v .:? "doubles"
-      <*> v .:? "triples"
-      <*> v .:? "homeRuns"
-      <*> v .:? "strikeOuts"
-      <*> v .:? "baseOnBalls"
-      <*> v .:? "intentionalWalks"
-      <*> v .:? "hits"
-      <*> v .:? "hitByPitch"
-      <*> v .:? "atBats"
-      <*> v .:? "caughtStealing"
-      <*> v .:? "stolenBases"
-      <*> v .:? "groundIntoDoublePlay"
-      <*> v .:? "groundIntoTriplePlay"
-      <*> v .:? "plateAppearances"
-      <*> v .:? "totalBases"
-      <*> v .:? "rbi"
-      <*> v .:? "leftOnBase"
-      <*> v .:? "sacBunts"
-      <*> v .:? "sacFlies"
-      <*> v .:? "catchersInterference"
-      <*> v .:? "pickoffs"
-
-instance FromJSON PitchingStats where
-  parseJSON :: Value -> Parser PitchingStats
-  parseJSON = withObject "PitchingStats" $ \v ->
-    PitchingStats
+instance FromJSON PitchingTotals where
+  parseJSON :: Value -> Parser PitchingTotals
+  parseJSON = withObject "PitchingTotals" $ \v ->
+    PitchingTotals
       <$> v .:? "gamesPlayed"
       <*> v .:? "gamesStarted"
-      <*> v .:? "flyOuts"
       <*> v .:? "groundOuts"
       <*> v .:? "airOuts"
       <*> v .:? "runs"
@@ -304,9 +231,12 @@ instance FromJSON PitchingStats where
       <*> v .:? "hits"
       <*> v .:? "hitByPitch"
       <*> v .:? "atBats"
+      <*> v .:? "obp"
       <*> v .:? "caughtStealing"
       <*> v .:? "stolenBases"
+      <*> v .:? "stolenBasePercentage"
       <*> v .:? "numberOfPitches"
+      <*> v .:? "era"
       <*> v .:? "inningsPitched"
       <*> v .:? "wins"
       <*> v .:? "losses"
@@ -315,6 +245,7 @@ instance FromJSON PitchingStats where
       <*> v .:? "holds"
       <*> v .:? "blownSaves"
       <*> v .:? "earnedRuns"
+      <*> v .:? "whip"
       <*> v .:? "battersFaced"
       <*> v .:? "outs"
       <*> v .:? "gamesPitched"
@@ -323,17 +254,62 @@ instance FromJSON PitchingStats where
       <*> v .:? "pitchesThrown"
       <*> v .:? "balls"
       <*> v .:? "strikes"
+      <*> v .:? "strikePercentage"
       <*> v .:? "hitBatsmen"
       <*> v .:? "balks"
       <*> v .:? "wildPitches"
       <*> v .:? "pickoffs"
+      <*> v .:? "groundOutsToAirouts"
       <*> v .:? "rbi"
+      <*> v .:? "winPercentage"
+      <*> v .:? "pitchesPerInning"
       <*> v .:? "gamesFinished"
+      <*> v .:? "strikeoutWalkRatio"
+      <*> v .:? "strikeoutsPer9Inn"
+      <*> v .:? "walksPer9Inn"
+      <*> v .:? "hitsPer9Inn"
+      <*> v .:? "runsScoredPer9"
+      <*> v .:? "homeRunsPer9"
       <*> v .:? "inheritedRunners"
       <*> v .:? "inheritedRunnersScored"
       <*> v .:? "catchersInterference"
       <*> v .:? "sacBunts"
       <*> v .:? "sacFlies"
-      <*> v .:? "passedBall" 
-      
--}
+      <*> v .:? "passedBall"
+
+instance FromJSON BattingTotals where
+  parseJSON :: Value -> Parser BattingTotals
+  parseJSON = withObject "BattingTotals" $ \v ->
+    BattingTotals
+      <$> v .:? "gamesPlayed"
+      <*> v .:? "flyOuts"
+      <*> v .:? "groundOuts"
+      <*> v .:? "runs"
+      <*> v .:? "doubles"
+      <*> v .:? "triples"
+      <*> v .:? "homeRuns"
+      <*> v .:? "strikeOuts"
+      <*> v .:? "baseOnBalls"
+      <*> v .:? "intentionalWalks"
+      <*> v .:? "hits"
+      <*> v .:? "hitByPitch"
+      <*> v .:? "avg"
+      <*> v .:? "atBats"
+      <*> v .:? "obp"
+      <*> v .:? "slg"
+      <*> v .:? "ops"
+      <*> v .:? "caughtStealing"
+      <*> v .:? "stolenBases"
+      <*> v .:? "stolenBasePercentage"
+      <*> v .:? "groundIntoDoublePlay"
+      <*> v .:? "groundIntoTriplePlay"
+      <*> v .:? "plateAppearances"
+      <*> v .:? "totalBases"
+      <*> v .:? "rbi"
+      <*> v .:? "leftOnBase"
+      <*> v .:? "sacBunts"
+      <*> v .:? "sacFlies"
+      <*> v .:? "babip"
+      <*> v .:? "catchersInterference"
+      <*> v .:? "pickoffs"
+      <*> v .:? "atBatsPerHomeRun"
