@@ -147,6 +147,43 @@ data BattingTotals where
                     -> BattingTotals
   deriving (Show, Eq)
 
+instance FromJSON BattingTotals where
+  parseJSON :: Value -> Parser BattingTotals
+  parseJSON = withObject "BattingTotals" $ \v ->
+    BattingTotals
+      <$> v .:? "gamesPlayed"
+      <*> v .:? "flyOuts"
+      <*> v .:? "groundOuts"
+      <*> v .:? "runs"
+      <*> v .:? "doubles"
+      <*> v .:? "triples"
+      <*> v .:? "homeRuns"
+      <*> v .:? "strikeOuts"
+      <*> v .:? "baseOnBalls"
+      <*> v .:? "intentionalWalks"
+      <*> v .:? "hits"
+      <*> v .:? "hitByPitch"
+      <*> v .:? "avg"
+      <*> v .:? "atBats"
+      <*> v .:? "obp"
+      <*> v .:? "slg"
+      <*> v .:? "ops"
+      <*> v .:? "caughtStealing"
+      <*> v .:? "stolenBases"
+      <*> v .:? "stolenBasePercentage"
+      <*> v .:? "groundIntoDoublePlay"
+      <*> v .:? "groundIntoTriplePlay"
+      <*> v .:? "plateAppearances"
+      <*> v .:? "totalBases"
+      <*> v .:? "rbi"
+      <*> v .:? "leftOnBase"
+      <*> v .:? "sacBunts"
+      <*> v .:? "sacFlies"
+      <*> v .:? "babip"
+      <*> v .:? "catchersInterference"
+      <*> v .:? "pickoffs"
+      <*> v .:? "atBatsPerHomeRun"
+
 -- Pitching Season Stuff (seasonStats.pitching inside of boxscore)
 data PitchingTotals where
   PitchingTotals :: {  
@@ -276,40 +313,3 @@ instance FromJSON PitchingTotals where
       <*> v .:? "sacBunts"
       <*> v .:? "sacFlies"
       <*> v .:? "passedBall"
-
-instance FromJSON BattingTotals where
-  parseJSON :: Value -> Parser BattingTotals
-  parseJSON = withObject "BattingTotals" $ \v ->
-    BattingTotals
-      <$> v .:? "gamesPlayed"
-      <*> v .:? "flyOuts"
-      <*> v .:? "groundOuts"
-      <*> v .:? "runs"
-      <*> v .:? "doubles"
-      <*> v .:? "triples"
-      <*> v .:? "homeRuns"
-      <*> v .:? "strikeOuts"
-      <*> v .:? "baseOnBalls"
-      <*> v .:? "intentionalWalks"
-      <*> v .:? "hits"
-      <*> v .:? "hitByPitch"
-      <*> v .:? "avg"
-      <*> v .:? "atBats"
-      <*> v .:? "obp"
-      <*> v .:? "slg"
-      <*> v .:? "ops"
-      <*> v .:? "caughtStealing"
-      <*> v .:? "stolenBases"
-      <*> v .:? "stolenBasePercentage"
-      <*> v .:? "groundIntoDoublePlay"
-      <*> v .:? "groundIntoTriplePlay"
-      <*> v .:? "plateAppearances"
-      <*> v .:? "totalBases"
-      <*> v .:? "rbi"
-      <*> v .:? "leftOnBase"
-      <*> v .:? "sacBunts"
-      <*> v .:? "sacFlies"
-      <*> v .:? "babip"
-      <*> v .:? "catchersInterference"
-      <*> v .:? "pickoffs"
-      <*> v .:? "atBatsPerHomeRun"
