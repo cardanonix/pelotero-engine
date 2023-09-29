@@ -7,7 +7,7 @@ name: scraper
 version: 0.0.3.0
 
 executable playground
-  hs-source-dirs: src, src/ADT
+  hs-source-dirs: src, src/ADT, src/League
   main-is: Playground.hs
   ghc-options: -O2
   other-modules:  Config, DayStats, Input, Leaderboard, Middle, OfficialRoster, Roster, Scraper, Validators
@@ -34,7 +34,7 @@ executable playground
                 , async
 
 executable head2head
-  hs-source-dirs: src, src/ADT
+  hs-source-dirs: src, src/ADT, src/League
   main-is: Head2Head.hs
   ghc-options: -O2
   other-modules:  Scraper, Input, Middle, Roster, Config, DayStats
@@ -61,7 +61,7 @@ executable head2head
                 , async
 
 executable fetchStats
-  hs-source-dirs: src, src/ADT
+  hs-source-dirs: src, src/ADT, src/League
   main-is: FetchStats.hs
   ghc-options: -O2
   other-modules:  Input, Middle, Scraper, DayStats, Config, Roster
@@ -88,10 +88,10 @@ executable fetchStats
                 , async
                 
 executable roster
-  hs-source-dirs: src, src/ADT
+  hs-source-dirs: src, src/ADT, src/League
   main-is: FetchActiveRoster.hs
   ghc-options: -O2
-  other-modules:  Input, Middle, Scraper, DayStats, Roster, Config
+  other-modules:  Input, Middle, Scraper, DayStats, Roster, Config, Leaderboard
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -115,7 +115,7 @@ executable roster
                 , async
 
 executable league
-  hs-source-dirs: src, src/ADT
+  hs-source-dirs: src, src/ADT, src/League
   main-is: League.hs
   ghc-options: -O2
   other-modules:  Validators, Config, DayStats, Input, Middle, OfficialRoster, Roster
@@ -142,7 +142,7 @@ executable league
                 , async
 
 executable test_adt
-  hs-source-dirs: src
+  hs-source-dirs: src, src/ADT, src/League
   main-is: Test.hs
   ghc-options: -O2
   other-modules:  Input_trace
@@ -169,7 +169,7 @@ executable test_adt
                 , async
 
 executable official
-  hs-source-dirs: src, src/ADT
+  hs-source-dirs: src, src/ADT, src/League
   main-is: OfficialTest.hs
   ghc-options: -O2
   other-modules:  Roster, Config, Input, OfficialRoster, DayStats, Middle
