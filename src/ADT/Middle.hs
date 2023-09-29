@@ -156,7 +156,7 @@ instance ToJSON I.ActiveRoster where
 instance ToJSON I.ActivePlayer where
     toJSON :: I.ActivePlayer -> Value
     toJSON (I.ActivePlayer playerId useName useLastName nameSlug currentTeam primaryPosition batSide pitchHand active) =
-        object ["id" .= playerId,
+        object ["playerId" .= playerId,
                 "useName" .= useName,
                 "useLastName" .= useLastName,
                 "nameSlug" .= nameSlug,

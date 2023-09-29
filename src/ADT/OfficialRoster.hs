@@ -46,7 +46,7 @@ instance FromJSON OfficialRoster where
 instance FromJSON OfficialPlayer where
   parseJSON :: Value -> Parser OfficialPlayer
   parseJSON = withObject "OfficialPlayer" $ \v -> do
-    playerId <- v .: "id"
+    playerId <- v .: "playerId"
     useName <- v .: "useName"
     useLastName <- v .: "useLastName"
     nameSlug <- v .: "nameSlug"
