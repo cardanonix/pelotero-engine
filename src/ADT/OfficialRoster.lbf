@@ -1,0 +1,44 @@
+module OfficialRoster
+
+-- OfficialRoster
+record OfficialRoster = {
+  people : List OfficialPlayer,
+  dataPulled : String,
+  checksum : String
+}
+
+-- OfficialPlayer
+record OfficialPlayer = {
+  playerId : Int,
+  useName : String,
+  useLastName : String,
+  nameSlug : String,
+  currentTeam : Int,
+  primaryPosition : String,
+  batSide : String,
+  pitchHand : String,
+  active : Bool
+}
+
+-- Additional data types
+
+-- A basic boolean
+sum Bool = True | False
+
+-- # Some basic types
+
+-- ## We need a list type
+sum List a = Nil | Cons a (List a)
+
+-- ## String
+prod String = (List Char)
+
+-- ## Char
+sum Char = Letter Letter | Number Number | Punctuation Punctuation
+
+sum Letter = A | B | C | ... -- You can continue with other letters if necessary
+
+sum Number = Num0 | Num1 | Num2 | ... -- You can continue with other numbers if necessary
+
+sum Punctuation = Dot | Question -- Extend with other punctuation if necessary
+
