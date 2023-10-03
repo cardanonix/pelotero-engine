@@ -61,7 +61,8 @@ import Input
     , ActivePlayer (..)
     )
 import qualified Middle as MI
-import qualified DayStats as D
+import qualified Points as P
+import Validators
 -- import qualified Leaderboard as L
 
 -- A (date String) -> [B] (list of gameIds/GameSchedule)
@@ -301,6 +302,11 @@ stringToDay = parseTimeOrError True defaultTimeLocale "%Y-%m-%d"
 incrementDay :: Day -> Day
 incrementDay = addDays 1
 
+-- Convert StatType to a string representation for reasons????
+statTypeToString :: P.StatType -> String
+statTypeToString P.Batting = "batting"
+statTypeToString P.Pitching = "pitching"
+
 -- Generates a list of dates from the start to the end
 generateDateRange :: String -> String -> [String]
 generateDateRange start end = map (formatTime defaultTimeLocale "%Y-%m-%d") dates
@@ -326,8 +332,8 @@ rosterUrl :: Int -> String
 rosterUrl season = "https://statsapi.mlb.com/api/v1/sports/1/players?activeStatus=ACTIVE&season=" ++ show season
 
 -- Generate the API URL for specific year's stat leaders in either batting or pitching (not working well)
-seasonStatsUrl :: Int -> D.StatType -> String 
-seasonStatsUrl season statType = "http://statsapi.mlb.com/api/v1/stats?stats=season&sportId=1&season=" ++ show season ++ "&group=" ++ D.statTypeToString statType
+seasonStatsUrl :: Int -> P.StatType -> String 
+seasonStatsUrl season statType = "http://statsapi.mlb.com/api/v1/stats?stats=season&sportId=1&season=" ++ show season ++ "&group=" ++ statTypeToString statType
 
 computeChecksum :: BL.ByteString -> Text
 computeChecksum bs = T.pack . show . hashWith SHA256 $ BL.toStrict bs

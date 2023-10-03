@@ -46,7 +46,7 @@ import Control.Concurrent.Async (mapConcurrently)
 
 
 import qualified Config as C
-import qualified DayStats as D
+import qualified Points as P
 import qualified Input as I
 import qualified Leaderboard as L
 import qualified Middle as MI

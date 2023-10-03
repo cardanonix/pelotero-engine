@@ -20,23 +20,26 @@ import qualified Data.ByteString as B
 import qualified Config as C
 import qualified Roster as R
 import qualified Input as I
-import qualified DayStats as D
+import qualified Points as P
 import OfficialRoster as O
 import qualified OfficialRoster as O
 import qualified GHC.Generics as R
 
 type FileName = String
 type FileContent = Either String R.LgManager
-data StatType = Batting | Pitching deriving (Show, Eq)
+-- data StatType = Batting | Pitching deriving (Show, Eq)
+
+readJson :: FromJSON a => FilePath -> IO (Either String a)
+readJson filePath = eitherDecodeStrict <$> B.readFile filePath
+
+extractNameFromPath :: FileName -> String
+extractNameFromPath = reverse . takeWhile (/= '/') . reverse
 
 processConfigResults :: C.Configuration -> [(FileName, FileContent)] -> IO ()
 processConfigResults config files =
     forM_ files $ \(fname, content) -> do
         putStrLn $ "\nTesting with " ++ extractNameFromPath fname ++ ":"
         testRoster config content
-
-extractNameFromPath :: FileName -> String
-extractNameFromPath = reverse . takeWhile (/= '/') . reverse
 
 testRoster :: C.Configuration -> Either String R.LgManager -> IO ()
 testRoster _ (Left errRoster) = putStrLn $ "Failed to parse Roster JSON: " ++ errRoster
@@ -83,9 +86,6 @@ validateAndPrint manager config = do
             putStrLn "Duplicate player IDs found:"
             mapM_ (putStrLn . Text.unpack) duplicates
             return False
-
-readJson :: FromJSON a => FilePath -> IO (Either String a)
-readJson filePath = eitherDecodeStrict <$> B.readFile filePath
 
 -- This function validates a roster and returns True or False.
 isRosterValid :: R.LgManager -> C.Configuration -> Bool
@@ -205,10 +205,10 @@ findPlayerPosition playerId mgr =
 
 -- takes a playerId as a String and a LgManager 
 -- and returns whether the player is to be fielded as a batter or pitcher for points calculation purposes
-batterOrPitcher :: Text -> R.LgManager -> Either Text D.StatType
+batterOrPitcher :: Text -> R.LgManager -> Either Text P.StatType
 batterOrPitcher playerName mgr
-    | isBatter   = Right D.Batting
-    | isPitcher  = Right D.Pitching
+    | isBatter   = Right P.Batting
+    | isPitcher  = Right P.Pitching
     | otherwise  = Left "Player not found in current lineup."
     where
         lineup = R.current_lineup mgr

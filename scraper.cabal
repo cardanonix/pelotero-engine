@@ -4,13 +4,13 @@ cabal-version: 3.6
 --   http://haskell.org/cabal/release/cabal-latest/doc/users-guide/
 
 name: scraper
-version: 0.0.3.0
+version: 0.0.4.0
 
 executable playground
   hs-source-dirs: src, src/ADT, src/League
   main-is: Playground.hs
   ghc-options: -O2
-  other-modules:  Config, DayStats, Input, Leaderboard, Middle, OfficialRoster, Roster, Scraper, Validators
+  other-modules:  Config, Points, Input, Leaderboard, Middle, OfficialRoster, Roster, Scraper, Validators
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -37,7 +37,7 @@ executable head2head
   hs-source-dirs: src, src/ADT, src/League
   main-is: Head2Head.hs
   ghc-options: -O2
-  other-modules:  Scraper, Input, Middle, Roster, Config, DayStats
+  other-modules:  Scraper, Input, Middle, Roster, Config, Points, OfficialRoster, Validators
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -64,7 +64,7 @@ executable fetchStats
   hs-source-dirs: src, src/ADT, src/League
   main-is: FetchStats.hs
   ghc-options: -O2
-  other-modules:  Input, Middle, Scraper, DayStats, Config, Roster
+  other-modules:  Input, Middle, Scraper, Points, Config, Roster, OfficialRoster, Validators
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -91,7 +91,7 @@ executable roster
   hs-source-dirs: src, src/ADT, src/League
   main-is: FetchActiveRoster.hs
   ghc-options: -O2
-  other-modules:  Input, Middle, Scraper, DayStats, Roster, Config, Leaderboard
+  other-modules:  Input, Middle, Scraper, Points, Roster, Config, Leaderboard, OfficialRoster, Validators
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -118,7 +118,7 @@ executable league
   hs-source-dirs: src, src/ADT, src/League
   main-is: League.hs
   ghc-options: -O2
-  other-modules:  Validators, Config, DayStats, Input, Middle, OfficialRoster, Roster
+  other-modules:  Validators, Config, Points, Input, Middle, OfficialRoster, Roster
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -172,7 +172,7 @@ executable official
   hs-source-dirs: src, src/ADT, src/League
   main-is: OfficialTest.hs
   ghc-options: -O2
-  other-modules:  Roster, Config, Input, OfficialRoster, DayStats, Middle
+  other-modules:  Roster, Config, Input, OfficialRoster, Points, Middle
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
