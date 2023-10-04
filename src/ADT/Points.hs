@@ -52,7 +52,7 @@ data PlayerResults
     | NoStats
     deriving (Show, Eq)
 
--- data type to hold point totals for a single team, attributing them to each player
+-- data type to hold point totals for a single team, attributing them to each active player
 data Results = Results
   { cC  :: (Text, Double)
   , b1C :: (Text, Double)

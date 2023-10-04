@@ -61,6 +61,7 @@
           inherit name;
           inputsFrom = [hixFlake.devShell];
           buildInputs = [];
+          packages = [];
           shellHook = ''
             export NIX_SHELL_NAME="scraper"
             echo "Welcome to the development shell!"
