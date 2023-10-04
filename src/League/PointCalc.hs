@@ -53,10 +53,14 @@ import Validators
 
 
 calculateAllPoints :: C.Configuration -> R.LgManager -> [M.JsonPlayerData] -> [(Text, Either Text Double)]
-calculateAllPoints config lgManager allPlayerStats =
-    map (\playerData -> let playerId = M.playerId playerData 
-                        in (playerId, calculatePointsForGivenPlayer config playerId lgManager playerData)) 
-        allPlayerStats
+calculateAllPoints config lgManager
+  = map
+      (\ playerData
+         -> let playerId = M.playerId playerData
+            in
+              (playerId, 
+               calculatePointsForGivenPlayer
+                 config playerId lgManager playerData))
 
 
 calculatePointsForGivenPlayer :: C.Configuration -> Text -> R.LgManager -> M.JsonPlayerData -> Either Text Double
