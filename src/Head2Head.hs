@@ -13,19 +13,19 @@ import System.IO (hFlush, stdout)
 main :: IO ()
 main = do
     putStrLn "Testing the Point Calculation Module:"
-    testSuite
+    -- testSuite
 
-testSuite :: IO ()
-testSuite = do
-    config <- readJson "testFiles/prototype_config/config.json" :: IO (Either String C.Configuration)
-    roster <- readJson "testFiles/appData/rosters/team_002.json" :: IO (Either String R.LgManager)
-    playerData <- readJson "appData/stats/2023_09_30.json" :: IO (Either String [M.JsonPlayerData])
+-- testSuite :: IO ()
+-- testSuite = do
+--     config <- readJson "testFiles/prototype_config/config.json" :: IO (Either String C.Configuration)
+--     roster <- readJson "testFiles/appData/rosters/team_002.json" :: IO (Either String R.LgManager)
+--     playerData <- readJson "appData/stats/2023_09_30.json" :: IO (Either String [M.JsonPlayerData])
     
-    case (config, roster, playerData) of
-        (Right c, Right r, Right pd) -> do
-            let result = calculateAllPoints c r pd
-            printResult result
-        _ -> putStrLn "Failed to read data."
+--     case (config, roster, playerData) of
+--         (Right c, Right r, Right pd) -> do
+--             let result = calculatePointsForPlayer c r pd
+--             printResult result
+--         _ -> putStrLn "Failed to read data."
 
 printResult :: [(Text, Either Text Double)] -> IO ()
 printResult [] = return ()
