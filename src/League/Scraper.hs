@@ -63,7 +63,6 @@ import Input
 import qualified Middle as MI
 import qualified Points as P
 import Validators
--- import qualified Leaderboard as L
 
 -- A (date String) -> [B] (list of gameIds/GameSchedule)
 -- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule
@@ -115,7 +114,6 @@ fetchFinishedBxScoresToJsonPlayerData gameIds = do
     gameDataResult <- fetchFinishedBxScores gameIds
     return $ fmap convertGameDataMapToJsonPlayerData gameDataResult
 
--- ## Output Stuff ##
 processDate :: String -> IO ()
 processDate date = do
     putStrLn $ "Processing " ++ date
