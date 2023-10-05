@@ -1,71 +1,149 @@
 {
-  # Haskell Hix dApp Dev Environment
+  description = "Haskell Hix dApp Dev Environment";
+
   inputs = {
-    nixpkgs.follows = "haskell-nix/nixpkgs-unstable";
-    utils.url = "github:ursi/flake-utils";
-
-    # Haskell/Plutus
-    haskell-nix.url = "github:input-output-hk/haskell.nix";
+    nixpkgs.follows = "haskellNix/nixpkgs-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
+    haskellNix.url = "github:input-output-hk/haskell.nix";
     iohk-nix.url = "github:input-output-hk/iohk-nix";
-
     CHaP = {
       url = "github:input-output-hk/cardano-haskell-packages?ref=repo";
       flake = false;
     };
     plutus.url = "github:input-output-hk/plutus";
-    fourmolu.url = "github:freckle/fourmolu";
   };
 
   outputs = {
     self,
-    utils,
-    ...
-  } @ inputs:
-    utils.apply-systems
-    {
-      inherit inputs;
-      systems = ["x86_64-linux" "x86_64-darwin"];
-      overlays = [
-        inputs.haskell-nix.overlay
-        # plutus runtime dependency
-        inputs.iohk-nix.overlays.crypto
-      ];
-    }
-    ({
-        pkgs,
-        system,
-        ...
-      } @ context: let
-        name = "scraper";
+    nixpkgs,
+    flake-utils,
+    haskellNix,
+    iohk-nix,
+    CHaP,
+    plutus,
+  }: let
+    # front_EndResults = flake-utils.lib.eachSystem ["x86_64-linux" "x86_64-darwin"] (
+    #   system: let
+    #     overlays = [
+    #       haskellNix.overlay
+    #       iohk-nix.overlays.crypto
+    #       (final: prev: {
+    #         helloProject = final.haskell-nix.project' {
+    #           src = ./.;
+    #           compiler-nix-name = "ghc925";
+    #           shell.tools = {
+    #             cabal = "latest";
+    #             hlint = "latest";
+    #             haskell-language-server = "latest";
+    #           };
+    #         };
+    #       })
+    #     ];
+    #     pkgs = import nixpkgs {
+    #       inherit system overlays;
+    #       inherit (haskellNix) config;
+    #     };
+    #     hixProject = pkgs.haskell-nix.hix.project {
+    #       src = ./.;
+    #       evalSystem = system;
+    #       inputMap = {"https://input-output-hk.github.io/cardano-haskell-packages" = CHaP;};
+    #       modules = [
+    #         (_: {
+    #           packages.cardano-crypto-praos.components.library.pkgconfig = pkgs.lib.mkForce [pkgs.libsodium-vrf];
+    #           packages.cardano-crypto-class.components.library.pkgconfig = pkgs.lib.mkForce [pkgs.libsodium-vrf pkgs.secp256k1];
+    #         })
+    #       ];
+    #     };
+    #     hixFlake = hixProject.flake {};
+    #   in {
+    #     apps = hixFlake.apps;
+    #     checks = hixFlake.checks;
+    #     packages = hixFlake.packages;
+    #     legacyPackages = pkgs;
+    #     devShell = pkgs.mkShell {
+    #       name = "scraper";
+    #       inputsFrom = [hixFlake.devShell];
+    #       buildInputs = [];
+    #       packages = [pkgs.haskellPackages.hls-fourmolu-plugin pkgs.zlib];
+    #       shellHook = ''
+    #         export NIX_SHELL_NAME="scraper"
+    #         echo "Welcome to the development shell!"
+    #         echo properly populating your folders.
+    #         if [ ! -d "appData" ]; then
+    #             echo creating appData folder
+    #             mkdir "appData"
+    #         fi
+    #         cd "appData"
+    #         folders=("config" "rosters" "stats" "points")
+    #         for folder in ''${folders[@]}; do
+    #             if [ ! -d "$folder" ]; then
+    #               echo creating $folder
+    #               mkdir "$folder"
+    #             fi
+    #         done
+    #         cd -
+    #         echo Building the Apps...
+    #         echo .
+    #         echo ..
+    #         echo ...
+    #         cabal build
+    #         cabal run roster
+    #         echo .
+    #         echo ..
+    #         echo ...
+    #       '';
+    #     };
+    #   }
+    # );
+    back_EndResults = flake-utils.lib.eachSystem ["x86_64-linux" "x86_64-darwin"] (
+      system: let
+        overlays = [
+          haskellNix.overlay
+          iohk-nix.overlays.crypto
+          (final: prev: {
+            helloProject = final.haskell-nix.project' {
+              src = ./.;
+              compiler-nix-name = "ghc925";
+              shell.tools = {
+                cabal = "latest";
+                hlint = "latest";
+                haskell-language-server = "latest";
+              };
+            };
+          })
+        ];
+
+        pkgs = import nixpkgs {
+          inherit system overlays;
+          inherit (haskellNix) config;
+        };
+
         hixProject = pkgs.haskell-nix.hix.project {
           src = ./.;
-          evalSystem = system; # Use the system from the context
-          inputMap = {"https://input-output-hk.github.io/cardano-haskell-packages" = inputs.CHaP;};
+          evalSystem = system;
+          inputMap = {"https://input-output-hk.github.io/cardano-haskell-packages" = CHaP;};
           modules = [
             (_: {
-              # See input-output-hk/iohk-nix#488
-              packages.cardano-crypto-praos.components.library.pkgconfig =
-                pkgs.lib.mkForce [[pkgs.libsodium-vrf]];
-              packages.cardano-crypto-class.components.library.pkgconfig =
-                pkgs.lib.mkForce [[pkgs.libsodium-vrf pkgs.secp256k1]];
+              packages.cardano-crypto-praos.components.library.pkgconfig = pkgs.lib.mkForce [pkgs.libsodium-vrf];
+              packages.cardano-crypto-class.components.library.pkgconfig = pkgs.lib.mkForce [pkgs.libsodium-vrf pkgs.secp256k1];
             })
           ];
         };
+
         hixFlake = hixProject.flake {};
       in {
-        inherit (hixFlake) apps checks;
+        apps = hixFlake.apps;
+        checks = hixFlake.checks;
+        packages = hixFlake.packages;
         legacyPackages = pkgs;
 
-        packages =
-          hixFlake.packages;
-
         devShell = pkgs.mkShell {
-          inherit name;
+          name = "scraper";
           inputsFrom = [hixFlake.devShell];
           buildInputs = [];
-          packages = with inputs; [
-            # inputs.fourmolu.packages.${system}.fourmolu-0-13
-            # pkgs.haskellPackages.hls-fourmolu-plugin
+          packages = [
+            pkgs.haskellPackages.hls-fourmolu-plugin
+            pkgs.zlib
           ];
           shellHook = ''
             export NIX_SHELL_NAME="scraper"
@@ -99,9 +177,15 @@
             echo ...
           '';
         };
-      });
+      }
+    );
+  in
+    {
+      # inherit description;
+    }
+    # front_EndResults
+    // back_EndResults;
 
-  # --- Flake Local Nix Configuration ----------------------------
   nixConfig = {
     extra-experimental-features = ["nix-command flakes" "ca-derivations"];
     allow-import-from-derivation = "true";
