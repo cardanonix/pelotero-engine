@@ -7,11 +7,13 @@
     # Haskell/Plutus
     haskell-nix.url = "github:input-output-hk/haskell.nix";
     iohk-nix.url = "github:input-output-hk/iohk-nix";
+
     CHaP = {
       url = "github:input-output-hk/cardano-haskell-packages?ref=repo";
       flake = false;
     };
     plutus.url = "github:input-output-hk/plutus";
+    fourmolu.url = "github:freckle/fourmolu";
   };
 
   outputs = {
@@ -61,7 +63,10 @@
           inherit name;
           inputsFrom = [hixFlake.devShell];
           buildInputs = [];
-          packages = [];
+          packages = with inputs; [
+            # inputs.fourmolu.packages.${system}.fourmolu-0-13
+            # pkgs.haskellPackages.hls-fourmolu-plugin
+          ];
           shellHook = ''
             export NIX_SHELL_NAME="scraper"
             echo "Welcome to the development shell!"
