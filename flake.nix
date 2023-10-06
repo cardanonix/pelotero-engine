@@ -1,5 +1,5 @@
 {
-  description = "Haskell Hix dApp Dev Environment";
+  description = "Pelotero Hix/Pix/Plutus dApp DevEnv";
 
   inputs = {
     nixpkgs.follows = "haskellNix/nixpkgs-unstable";
@@ -22,6 +22,21 @@
     CHaP,
     plutus,
   }: let
+    overlays = [
+      haskellNix.overlay
+      iohk-nix.overlays.crypto
+      (final: prev: {
+        helloProject = final.haskell-nix.project' {
+          src = ./.;
+          compiler-nix-name = "ghc925";
+          shell.tools = {
+            cabal = "latest";
+            hlint = "latest";
+            haskell-language-server = "latest";
+          };
+        };
+      })
+    ];
     # front_EndResults = flake-utils.lib.eachSystem ["x86_64-linux" "x86_64-darwin"] (
     #   system: let
     #     overlays = [
@@ -61,58 +76,18 @@
     #     packages = hixFlake.packages;
     #     legacyPackages = pkgs;
     #     devShell = pkgs.mkShell {
-    #       name = "scraper";
+    #       name = "frontEnd";
     #       inputsFrom = [hixFlake.devShell];
     #       buildInputs = [];
-    #       packages = [pkgs.haskellPackages.hls-fourmolu-plugin pkgs.zlib];
+    #       packages = [];
     #       shellHook = ''
     #         export NIX_SHELL_NAME="scraper"
-    #         echo "Welcome to the development shell!"
-    #         echo properly populating your folders.
-    #         if [ ! -d "appData" ]; then
-    #             echo creating appData folder
-    #             mkdir "appData"
-    #         fi
-    #         cd "appData"
-    #         folders=("config" "rosters" "stats" "points")
-    #         for folder in ''${folders[@]}; do
-    #             if [ ! -d "$folder" ]; then
-    #               echo creating $folder
-    #               mkdir "$folder"
-    #             fi
-    #         done
-    #         cd -
-    #         echo Building the Apps...
-    #         echo .
-    #         echo ..
-    #         echo ...
-    #         cabal build
-    #         cabal run roster
-    #         echo .
-    #         echo ..
-    #         echo ...
     #       '';
     #     };
     #   }
     # );
     back_EndResults = flake-utils.lib.eachSystem ["x86_64-linux" "x86_64-darwin"] (
       system: let
-        overlays = [
-          haskellNix.overlay
-          iohk-nix.overlays.crypto
-          (final: prev: {
-            helloProject = final.haskell-nix.project' {
-              src = ./.;
-              compiler-nix-name = "ghc925";
-              shell.tools = {
-                cabal = "latest";
-                hlint = "latest";
-                haskell-language-server = "latest";
-              };
-            };
-          })
-        ];
-
         pkgs = import nixpkgs {
           inherit system overlays;
           inherit (haskellNix) config;
@@ -145,47 +120,87 @@
             pkgs.haskellPackages.hls-fourmolu-plugin
             pkgs.zlib
           ];
-          shellHook = ''
-            export NIX_SHELL_NAME="scraper"
-            echo "Welcome to the development shell!"
-            echo properly populating your folders.
+          # shellHook = ''
+          #   export NIX_SHELL_NAME="scraper"
+          #   echo "Welcome to the development shell!"
+          #   echo properly populating your folders.
 
-            if [ ! -d "appData" ]; then
-                echo creating appData folder
-                mkdir "appData"
-            fi
+          #   if [ ! -d "appData" ]; then
+          #       echo creating appData folder
+          #       mkdir "appData"
+          #   fi
 
-            cd "appData"
+          #   cd "appData"
 
-            folders=("config" "rosters" "stats" "points")
+          #   folders=("config" "rosters" "stats" "points")
 
-            for folder in ''${folders[@]}; do
-                if [ ! -d "$folder" ]; then
-                  echo creating $folder
-                  mkdir "$folder"
-                fi
-            done
-            cd -
-            echo Building the Apps...
-            echo .
-            echo ..
-            echo ...
-            cabal build
-            cabal run roster
-            echo .
-            echo ..
-            echo ...
-          '';
+          #   for folder in ''${folders[@]}; do
+          #       if [ ! -d "$folder" ]; then
+          #         echo creating $folder
+          #         mkdir "$folder"
+          #       fi
+          #   done
+          #   cd -
+          #   echo Building the Apps...
+          #   echo .
+          #   echo ..
+          #   echo ...
+          #   cabal build
+          #   cabal run roster
+          #   echo .
+          #   echo ..
+          #   echo ...
+          # '';
         };
       }
     );
-  in
-    {
-      # inherit description;
-    }
-    # front_EndResults
-    // back_EndResults;
+    oci_ImageResult = flake-utils.lib.eachDefaultSystem (system: let
+      overlayPkgs = import nixpkgs {
+        inherit system overlays;
+      };
+      linuxPkgs = import nixpkgs {
+        system = "x86_64-linux";
+        overlays = overlays;
+      };
+    in {
+      packages.dev-env-docker = overlayPkgs.dockerTools.buildImage {
+        name = "dev-env-docker";
+        tag = "0.1.0";
 
+        # The packFunction ensures all packages are accessible inside the container.
+        packFunction = overlayPkgs.callPackage ({
+          writeScriptBin,
+          bash,
+          coreutils,
+        }:
+          writeScriptBin "setup-environment" ''
+            #!${bash}/bin/bash
+            export PATH="${coreutils}/bin:${overlayPkgs.haskellPackages.hls-fourmolu-plugin}/bin:${overlayPkgs.zlib}/bin:$PATH"
+          '' {});
+
+        contents = [
+          overlayPkgs.haskellPackages.hls-fourmolu-plugin
+          overlayPkgs.zlib
+        ];
+
+        config = {
+          Cmd = ["setup-environment"];
+        };
+
+        created = "2023_10_06_10_22_00";
+      };
+
+      devShells.default = overlayPkgs.mkShell {
+        buildInputs = with overlayPkgs; [bat vim];
+      };
+    });
+  in {
+    apps = back_EndResults.apps // oci_ImageResult.apps;
+    checks = back_EndResults.checks // oci_ImageResult.checks;
+    packages = back_EndResults.packages // oci_ImageResult.packages;
+    legacyPackages = back_EndResults.legacyPackages;
+    devShell = back_EndResults.devShell;
+  };
   nixConfig = {
     extra-experimental-features = ["nix-command flakes" "ca-derivations"];
     allow-import-from-derivation = "true";
