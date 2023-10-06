@@ -26,10 +26,18 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+nixos/home/result
+result
+generated-plutus-scripts
+.vscode/
+.vscode/settings.json
+.direnv/
+.unisonHistory
+*.qcow2
+flake.nix.bak
+.DS_Store
 
 *.local
-
-# Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
