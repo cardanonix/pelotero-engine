@@ -1,59 +1,66 @@
+{-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Redundant id" #-}
 {-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE DoAndIfThenElse #-}
-
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
 module Main (main) where
 
-
-import Network.HTTP.Simple
-    ( parseRequest_,
-      getResponseBody,
-      httpBS )
-import Data.Time
-    ( Day, addDays, diffDays, parseTimeOrError, defaultTimeLocale, formatTime )
-import Data.Time.Clock.POSIX ()
-import Data.Time.Clock ()
-import Data.Time.Format ()
+import Control.Concurrent.Async (mapConcurrently)
+import Control.Monad (filterM, when)
+import Crypto.Hash (SHA256 (SHA256), hashWith)
+import qualified Crypto.Hash.SHA256 as SHA256
+import Data.Aeson (
+    FromJSON (parseJSON),
+    Options (fieldLabelModifier),
+    defaultOptions,
+    eitherDecode,
+    eitherDecodeStrict,
+    encode,
+    genericParseJSON,
+    withObject,
+    (.:),
+    (.:?),
+ )
 import Data.ByteString (ByteString, empty)
-import qualified Data.Vector as V
-import Data.Maybe (isJust, fromMaybe, mapMaybe, maybeToList)
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Data.Map as M
+import Data.Maybe (fromMaybe, isJust, mapMaybe, maybeToList)
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Aeson
-    ( eitherDecode,
-      encode,
-      (.:), (.:?),
-      genericParseJSON,
-      withObject,
-      defaultOptions,
-      FromJSON(parseJSON),
-      Options(fieldLabelModifier),
-      eitherDecodeStrict )
-import GHC.Generics ( Generic )
-import qualified Data.ByteString.Lazy as BL
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy.Char8 as BS
-import qualified Crypto.Hash.SHA256 as SHA256
-import Crypto.Hash ( hashWith, SHA256(SHA256) )
+import Data.Time (
+    Day,
+    addDays,
+    defaultTimeLocale,
+    diffDays,
+    formatTime,
+    parseTimeOrError,
+ )
+import Data.Time.Clock ()
+import Data.Time.Clock.POSIX ()
+import Data.Time.Format ()
+import qualified Data.Vector as V
+import GHC.Generics (Generic)
+import Network.HTTP.Simple (
+    getResponseBody,
+    httpBS,
+    parseRequest_,
+ )
 import System.Directory (createDirectoryIfMissing, doesFileExist)
-import Control.Monad (when, filterM)
-import Control.Concurrent.Async (mapConcurrently)
-
 
 import qualified Config as C
-import qualified Points as P
 import qualified Input as I
 import qualified Leaderboard as L
 import qualified Middle as MI
-import qualified OfficialRoster as O 
-import qualified Roster as R  
-import Validators -- contains a lot of functionality
+import qualified OfficialRoster as O
+import qualified Points as P
+import qualified Roster as R
+-- contains a lot of functionality
 import Scraper
+import Validators
 
 main :: IO ()
 main = do
@@ -82,7 +89,7 @@ main = do
     putStrLn ""
     putStrLn "Disbursing Winnings to Higher Score"
 
-{- 
+{-
 
 -- A (date String) -> [B] (list of gameIds/GameSchedule)
 -- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule
@@ -112,7 +119,6 @@ fetchFinishedBxScore gameId = do
                else return $ Right Nothing
         Left err -> return $ Left ("Error fetching game status: " ++ err)
 
-
 -- -- [B] list of gameIds -> C status checks -> [D] list of boxscores
 -- fetchFinishedBxScores :: [Int] -> IO (Either String (M.Map Int L.GameData))
 fetchFinishedBxScores :: [Int] -> IO (Either String (M.Map Int (Maybe L.GameData)))
@@ -120,7 +126,7 @@ fetchFinishedBxScores gameIds = do
     results <- mapConcurrently fetchGame gameIds
     let combinedResults = sequenceA results -- Change the structure from [Either] to Either [..]
     return $ fmap (M.fromList . filter finishedGames) combinedResults
-    where 
+    where
         fetchGame gameId = do
             result <- fetchFinishedBxScore gameId
             return $ fmap (\d -> (gameId, d)) result
@@ -165,7 +171,7 @@ convertGameDataMapToJsonPlayerSeasonData maybeGameDataMap =
         in M.insert playerId mergedData acc
 
 mergeJsonPlayerSeasonData :: MI.JsonPlayerData -> MI.JsonPlayerData -> MI.JsonPlayerData
-mergeJsonPlayerSeasonData existing new = 
+mergeJsonPlayerSeasonData existing new =
     MI.JsonPlayerData
         { MI.playerId = MI.playerId existing  -- assuming playerIds are the same, else there's a bigger problem!
         , MI.fullName = MI.fullName existing  -- assuming fullNames are the same
@@ -257,15 +263,15 @@ writeRosterToFile :: FilePath -> I.ActiveRoster -> IO ()
 writeRosterToFile path roster = do
     -- Original player data encoding
     let playerData = encode (I.people roster)
-    
+
     -- Compute checksum and get date stamp
     dateStamp <- getCurrentDate
     let checksumValue = computeChecksum playerData
     let fullRoster = I.ActiveRoster (I.people roster) (Just dateStamp) (Just checksumValue)
-    
+
     -- Encode the full roster including the checksum and date stamp
     let jsonData = encode fullRoster
-    
+
     -- Write to file
     BL.writeFile path jsonData
 
@@ -285,7 +291,6 @@ assignDateToSchedule date schedule =
         assignToDate gameID = gameID { game_date = Just date }
     in schedule { dates = map assignToDateEntry (dates schedule) }
 
-
 -- Takes a schedule bytestring and outputs true if games are happening, false otherwise.
 hasGamesForDate :: I.GameSchedule -> Bool
 hasGamesForDate schedule = any (isJust . games) (dates schedule)
@@ -294,18 +299,17 @@ hasGamesForDate schedule = any (isJust . games) (dates schedule)
 extractGameIds :: I.GameSchedule -> [Int]
 extractGameIds gameData = concatMap (maybe [] (V.toList . fmap gamePk) . games) (dates gameData)
 
--- ## FileName Manipulation Stuff 
+-- ## FileName Manipulation Stuff
 -- Takes a filename, path, and the data to save, then writes to a JSON file at the specified path with the given filename.
 writeDataToFile :: FilePath -> FilePath -> M.Map Text MI.JsonPlayerData -> IO ()
 writeDataToFile filename path dataToSave = do
     createOutputDirectory path
     let fullpath = path ++ "/" ++ filename
     BL.writeFile fullpath (encode dataToSave)
-    
+
 -- Write Player to JSON File
 writePlayerToJsonFile :: FilePath -> L.Player -> IO ()
 writePlayerToJsonFile path player = B.writeFile path (convertPlayerToJson player)
-
 
 -- Takes a date string and formats it as a filename, like "2023_08_22.json".
 formatFilename :: String -> String
@@ -351,7 +355,7 @@ rosterUrl :: Int -> String
 rosterUrl season = "https://statsapi.mlb.com/api/v1/sports/1/players?activeStatus=ACTIVE&season=" ++ show season
 
 -- Generate the API URL for specific year's stat leaders in either batting or pitching (not working well)
-seasonStatsUrl :: Int -> D.StatType -> String 
+seasonStatsUrl :: Int -> D.StatType -> String
 seasonStatsUrl season statType = "http://statsapi.mlb.com/api/v1/stats?stats=season&sportId=1&season=" ++ show season ++ "&group=" ++ D.statTypeToString statType
 
 computeChecksum :: BL.ByteString -> Text

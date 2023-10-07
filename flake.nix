@@ -115,10 +115,22 @@
         devShell = pkgs.mkShell {
           name = "scraper";
           inputsFrom = [hixFlake.devShell];
-          buildInputs = [];
+          buildInputs = [
+            pkgs.haskell-language-server
+            (pkgs.haskellPackages.ghcWithPackages
+              (hsPkgs:
+                with hsPkgs; [
+                  ad
+                  normaldistribution
+                  lens
+                  random-fu
+                ]))
+          ];
+          # buildInputs = [];
           packages = [
+            # pkgs.scraper
             pkgs.haskellPackages.hls-fourmolu-plugin
-            pkgs.zlib
+            # pkgs.zlib
           ];
           # shellHook = ''
           #   export NIX_SHELL_NAME="scraper"
