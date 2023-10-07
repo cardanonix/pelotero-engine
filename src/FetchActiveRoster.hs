@@ -30,7 +30,7 @@ import System.Environment (getArgs)
 main :: IO ()
 main = do
     let rosterPath = "appData/rosters/activePlayers.json"
-    activeRoster <- fetchActiveRoster 2023 -- assuming 2023 is the season you're fetching for
+    activeRoster <- fetchActiveRoster 2023
     case activeRoster of
         Left err -> putStrLn $ "Failed to fetch active roster: " ++ err
         Right rosterData -> writeRosterToFile rosterPath rosterData
