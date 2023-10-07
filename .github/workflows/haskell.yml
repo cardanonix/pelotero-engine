@@ -1,64 +1,107 @@
 name: Haskell CI
 
 on:
-  pull_request: 
-    branches: [main]
+  workflow_dispatch:
+  pull_request:
+    branches: [main, unstable]
   push:
-    branches: [unstable]
+    branches: [main, unstable]
+  schedule:
+    # additionally run once per week (At 00:00 on Sunday) to maintain cache
+    - cron: '0 0 * * 0'
 
 jobs:
-  build:
+  cabal:
+    name: ${{ matrix.os }} / ghc ${{ matrix.ghc }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        ghc: ['9.2.8']
-        cabal: ['3.10.1.0']
-        os: [ubuntu-latest]
-        resolver: [lts-3.22 , lts-18,]
+        os: [ubuntu-latest, macOS-latest, windows-latest]
+        cabal: ["3.6.2.0"]
+        ghc:
+          - "9.2.8"
         exclude:
-          # GHC 8.8+ only works with cabal v3+
-          - ghc: 8.10.7
-            cabal: 2.4.1.0
-    name: ${{ matrix.resolver }} (${{ matrix.ghc }}/${{ matrix.cabal }})
+          - os: macOS-latest
+            ghc: 9.0.2
+          - os: macOS-latest
+            ghc: 8.10.7
+
+          - os: windows-latest
+            ghc: 9.0.2
+          - os: windows-latest
+            ghc: 8.10.7
+
     steps:
+    - uses: actions/checkout@v2
 
-      - name: Check out
-        uses: actions/checkout@v2
+    - uses: haskell/actions/setup@v1.2
+      id: setup-haskell-cabal
+      name: Setup Haskell
+      with:
+        ghc-version: ${{ matrix.ghc }}
+        cabal-version: ${{ matrix.cabal }}
 
-      - name: Setup Haskell
-        uses: haskell/actions/setup@v1
-        with:
-          ghc-version: ${{ matrix.ghc }}
-          cabal-version: ${{ matrix.cabal }}
-          enable-stack: true
+    - name: Configure
+      run: |
+        cabal configure --enable-tests --enable-benchmarks --enable-documentation --test-show-details=direct --write-ghc-environment-files=always
 
-      - name: Versions
-        run: |
-          stack --version
-          cabal --version
-          ghc --version
+    - name: Freeze
+      run: |
+        cabal freeze
 
-      - name: Initalize stack for LTS
-        run: |
-          stack update
-          stack init --resolver ${{ matrix.resolver }} --force
+    - uses: actions/cache@v2
+      name: Cache ~/.cabal/store
+      with:
+        path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
+        key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
 
-      - name: Build package dependencies
-        run: |
-          stack --resolver ${{ matrix.resolver }} build --no-run-tests --no-run-benchmarks --only-dependencies
+    - name: Install dependencies
+      run: |
+        cabal build all --only-dependencies
 
-      - name: Build package
-        run: |
-          stack --resolver ${{ matrix.resolver }} build --no-run-tests --no-run-benchmarks
+    - name: Build
+      run: |
+        cabal build all
 
-      - name: Build testing dependencies
-        run: |
-          stack --resolver ${{ matrix.resolver }} build --no-run-tests --no-run-benchmarks --test --bench
+    - name: Test
+      run: |
+        cabal test all
 
-      - name: Run tests
-        run: |
-          stack --resolver ${{ matrix.resolver }} build --test --no-run-benchmarks
+    - name: Documentation
+      run: |
+        cabal haddock
 
-      - name: Package list
-        run: |
-          stack --resolver ${{ matrix.resolver }} exec ghc-pkg list || true
+  stack:
+    name: stack / ghc ${{ matrix.ghc }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        stack: ["2.7.3"]
+        ghc: ["9.2.8"]
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - uses: haskell/actions/setup@v1.2
+      name: Setup Haskell Stack
+      with:
+        ghc-version: ${{ matrix.ghc }}
+        stack-version: ${{ matrix.stack }}
+
+    - uses: actions/cache@v2
+      name: Cache ~/.stack
+      with:
+        path: ~/.stack
+        key: ${{ runner.os }}-${{ matrix.ghc }}-stack
+
+    - name: Install dependencies
+      run: |
+        stack build --system-ghc --test --bench --no-run-tests --no-run-benchmarks --only-dependencies
+
+    - name: Build
+      run: |
+        stack build --system-ghc --test --bench --no-run-tests --no-run-benchmarks
+
+    - name: Test
+      run: |
+        stack test --system-ghc
