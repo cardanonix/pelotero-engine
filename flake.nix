@@ -28,9 +28,9 @@
       haskellNix.overlay
       iohk-nix.overlays.crypto
       (final: prev: {
-        helloProject = final.haskell-nix.project' {
+        pelotero-engine = final.haskell-nix.project' {
           src = ./.;
-          compiler-nix-name = "ghc925";
+          compiler-nix-name = "ghc928";
           shell.tools = {
             cabal = "latest";
             hlint = "latest";
@@ -124,49 +124,43 @@
             (pkgs.haskellPackages.ghcWithPackages
               (hsPkgs:
                 with hsPkgs; [
-                  ad
-                  normaldistribution
-                  lens
-                  random-fu
                 ]))
           ];
-          # buildInputs = [];
           packages = [
-            # pkgs.scraper
+            # pkgs.haskellPackages.pelotero-engine
             pkgs.haskellPackages.hls-fourmolu-plugin
-            # pkgs.zlib
           ];
-          # shellHook = ''
-          #   export NIX_SHELL_NAME="scraper"
-          #   echo "Welcome to the development shell!"
-          #   echo properly populating your folders.
+          shellHook = ''
+            export NIX_SHELL_NAME="scraper"
+            echo "Welcome to the development shell!"
+            echo properly populating your folders.
 
-          #   if [ ! -d "appData" ]; then
-          #       echo creating appData folder
-          #       mkdir "appData"
-          #   fi
+            if [ ! -d "appData" ]; then
+                echo creating appData folder
+                mkdir "appData"
+            fi
 
-          #   cd "appData"
+            cd "appData"
 
-          #   folders=("config" "rosters" "stats" "points")
+            folders=("config" "rosters" "stats" "points")
 
-          #   for folder in ''${folders[@]}; do
-          #       if [ ! -d "$folder" ]; then
-          #         echo creating $folder
-          #         mkdir "$folder"
-          #       fi
-          #   done
-          #   cd -
-          #   echo Building the Apps...
-          #   echo .
-          #   echo ..
-          #   echo ...
-          #   cabal build
-          #   cabal run roster
-          #   echo .
-          #   echo ..
-          #   echo ...
-          # '';
+            for folder in ''${folders[@]}; do
+                if [ ! -d "$folder" ]; then
+                  echo creating $folder
+                  mkdir "$folder"
+                fi
+            done
+            cd -
+            echo Building the Apps...
+            echo .
+            echo ..
+            echo ...
+            cabal build
+            cabal run roster
+            echo .
+            echo ..
+            echo ...
+          '';
         };
       }
     );

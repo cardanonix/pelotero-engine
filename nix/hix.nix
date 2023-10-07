@@ -1,10 +1,10 @@
 {pkgs, ...}: {
-  name = "scraper";
+  name = "pelotero_engine";
 
   # We use the latest supported and cached version
   # from github:input-output-hk/haskell.nix
 
-  compiler-nix-name = "ghc925";
+  compiler-nix-name = "ghc928";
 
   # Enable for cross-platform build
   # crossPlatforms = p: pkgs.lib.optionals pkgs.stdenv.hostPlatform.isx86_64 ([
