@@ -117,7 +117,7 @@
         legacyPackages = pkgs;
 
         devShell = pkgs.mkShell {
-          name = "scraper";
+          name = "pelotero-engine";
           inputsFrom = [hixFlake.devShell];
           buildInputs = [
             pkgs.haskell-language-server
