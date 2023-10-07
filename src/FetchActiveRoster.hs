@@ -45,6 +45,7 @@ import Text.Read (readMaybe)
 
 main :: IO ()
 main = do
+<<<<<<< HEAD
     args <- getArgs
     case args of
         (yearStr:_) -> case readMaybe yearStr of
@@ -56,6 +57,10 @@ processYear :: Int -> IO ()
 processYear year = do
     let rosterPath = "appData/rosters/" ++ show year ++ "_activePlayers.json"
     activeRoster <- fetchActiveRoster year -- now using the year parameter
+=======
+    let rosterPath = "appData/rosters/activePlayers.json"
+    activeRoster <- fetchActiveRoster 2023
+>>>>>>> 33bdd0f (submitting something just to test code.)
     case activeRoster of
         Left err -> putStrLn $ "Failed to fetch active roster: " ++ err
         Right rosterData -> writeRosterToFile rosterPath rosterData
