@@ -58,6 +58,7 @@ import qualified Middle as MI
 import qualified OfficialRoster as O
 import qualified Points as P
 import qualified Roster as R
+
 -- contains a lot of functionality
 import Scraper
 import Validators
