@@ -8,24 +8,6 @@ on:
   push:
     branches: [main, unstable]
   schedule:
-<<<<<<< HEAD
-    # Run once per week (At 00:00 on Sunday) to maintain cache
-    - cron: '0 0 * * 0'
-
-jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-      name: Checkout code
-
-    - name: Setup Nix
-      uses: cachix/install-nix-action@v14
-      with:
-        install_url: https://nixos-nix-install-tests.cachix.org/serve/3g0jw47z2ms7gwm2q5q3b4j2b2vrpq5j/install
-        extra_nix_config: |
-          experimental-features = nix-command flakes
-=======
     # additionally run once per week (At 00:00 on Sunday) to maintain cache
     - cron: '0 0 * * 0'
 
@@ -73,22 +55,9 @@ jobs:
       with:
         path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
         key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
->>>>>>> 8801db8 (thanks)
 
-    - name: Build and Test with Nix Flake
+    - name: Install dependencies
       run: |
-<<<<<<< HEAD
-        nix build .#checks.x86_64-linux
-        nix run .#roster
-
-    # Optional: Cache Nix store to speed up builds
-    - uses: actions/cache@v2
-      with:
-        path: /nix/store
-        key: ${{ runner.os }}-nix-${{ hashFiles('flake.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-nix-
-=======
         cabal build all --only-dependencies
 
     - name: Build
@@ -137,7 +106,6 @@ jobs:
     - name: Test
       run: |
         stack test --system-ghc
->>>>>>> 8801db8 (thanks)
 =======
   pull_request: 
     branches: [main]
@@ -200,4 +168,4 @@ jobs:
       - name: Package list
         run: |
           stack --resolver ${{ matrix.resolver }} exec ghc-pkg list || true
->>>>>>> 6671425 (Update haskell.yml)
+>>>>>>> 6671425cee209e8587d788feb79cbf8371493115
