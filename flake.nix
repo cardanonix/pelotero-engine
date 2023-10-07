@@ -11,6 +11,7 @@
       flake = false;
     };
     plutus.url = "github:input-output-hk/plutus";
+    styleguide.url = "github:cardanonix/styleguide";
   };
 
   outputs = {
@@ -21,6 +22,7 @@
     iohk-nix,
     CHaP,
     plutus,
+    styleguide,
   }: let
     overlays = [
       haskellNix.overlay
@@ -89,7 +91,7 @@
     back_EndResults = flake-utils.lib.eachSystem ["x86_64-linux" "x86_64-darwin"] (
       system: let
         pkgs = import nixpkgs {
-          inherit system overlays;
+          inherit system overlays styleguide;
           inherit (haskellNix) config;
         };
 
@@ -103,6 +105,8 @@
               packages.cardano-crypto-class.components.library.pkgconfig = pkgs.lib.mkForce [pkgs.libsodium-vrf pkgs.secp256k1];
             })
           ];
+          checks.format = styleguide.lib.${system}.mkCheck self;
+          formatter = styleguide.lib.${system}.mkFormatter self;
         };
 
         hixFlake = hixProject.flake {};
