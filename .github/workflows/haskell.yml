@@ -1,43 +1,64 @@
 name: Haskell CI
 
 on:
+  pull_request: 
+    branches: [main]
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-
-permissions:
-  contents: read
+    branches: [unstable]
 
 jobs:
   build:
-
-    runs-on: ubuntu-latest
-
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        ghc: ['9.2.8']
+        cabal: ['3.10.1.0']
+        os: [ubuntu-latest]
+        resolver: [lts-3.22 , lts-18,]
+        exclude:
+          # GHC 8.8+ only works with cabal v3+
+          - ghc: 8.10.7
+            cabal: 2.4.1.0
+    name: ${{ matrix.resolver }} (${{ matrix.ghc }}/${{ matrix.cabal }})
     steps:
-    - uses: actions/checkout@v3
-    - uses: actions/setup-haskell@v1
-      with:
-        ghc-version: '8.10.3'
-        cabal-version: '3.2'
 
-    - name: Cache
-      uses: actions/cache@v3
-      env:
-        cache-name: cache-cabal
-      with:
-        path: ~/.cabal
-        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
-        restore-keys: |
-          ${{ runner.os }}-build-${{ env.cache-name }}-
-          ${{ runner.os }}-build-
-          ${{ runner.os }}-
+      - name: Check out
+        uses: actions/checkout@v2
 
-    - name: Install dependencies
-      run: |
-        cabal update
-        cabal build --only-dependencies --enable-tests --enable-benchmarks
-    - name: Build
-      run: cabal build --enable-tests --enable-benchmarks all
-    - name: Run tests
-      run: cabal test all
+      - name: Setup Haskell
+        uses: haskell/actions/setup@v1
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          cabal-version: ${{ matrix.cabal }}
+          enable-stack: true
+
+      - name: Versions
+        run: |
+          stack --version
+          cabal --version
+          ghc --version
+
+      - name: Initalize stack for LTS
+        run: |
+          stack update
+          stack init --resolver ${{ matrix.resolver }} --force
+
+      - name: Build package dependencies
+        run: |
+          stack --resolver ${{ matrix.resolver }} build --no-run-tests --no-run-benchmarks --only-dependencies
+
+      - name: Build package
+        run: |
+          stack --resolver ${{ matrix.resolver }} build --no-run-tests --no-run-benchmarks
+
+      - name: Build testing dependencies
+        run: |
+          stack --resolver ${{ matrix.resolver }} build --no-run-tests --no-run-benchmarks --test --bench
+
+      - name: Run tests
+        run: |
+          stack --resolver ${{ matrix.resolver }} build --test --no-run-benchmarks
+
+      - name: Package list
+        run: |
+          stack --resolver ${{ matrix.resolver }} exec ghc-pkg list || true
