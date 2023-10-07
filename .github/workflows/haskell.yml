@@ -8,6 +8,7 @@ on:
     branches: [main, unstable]
   schedule:
     # additionally run once per week (At 00:00 on Sunday) to maintain cache
+    # add this somewhere? /home/bismuth/.cabal-devx
     - cron: '0 0 * * 0'
 
 jobs:
