@@ -91,10 +91,10 @@
     back_EndResults = flake-utils.lib.eachSystem ["x86_64-linux" "x86_64-darwin"] (
       system: let
         pkgs = import nixpkgs {
-          inherit system overlays styleguide;
+          inherit system overlays;
           inherit (haskellNix) config;
         };
-
+        inherit styleguide;
         hixProject = pkgs.haskell-nix.hix.project {
           src = ./.;
           evalSystem = system;
@@ -105,14 +105,14 @@
               packages.cardano-crypto-class.components.library.pkgconfig = pkgs.lib.mkForce [pkgs.libsodium-vrf pkgs.secp256k1];
             })
           ];
-          checks.format = styleguide.lib.${system}.mkCheck self;
-          formatter = styleguide.lib.${system}.mkFormatter self;
         };
 
         hixFlake = hixProject.flake {};
       in {
         apps = hixFlake.apps;
         checks = hixFlake.checks;
+        # checks.format = styleguide.lib.${system}.mkCheck self; # these are for CI but they depend on ‘terraform-1.6.0’
+        # formatter = styleguide.lib.${system}.mkFormatter self; # these are for CI but they depend on ‘terraform-1.6.0’
         packages = hixFlake.packages;
         legacyPackages = pkgs;
 
