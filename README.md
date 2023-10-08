@@ -1,5 +1,6 @@
 # ⚾ Pelotero Engine ⚾
 
+
 [![Haskell CI](https://github.com/cardanonix/pelotero-engine/actions/workflows/haskell.yml/badge.svg?branch=unstable)](https://github.com/cardanonix/pelotero-engine/actions/workflows/haskell.yml)
 
 This app provides functions to scrape game data from a baseball API for a given date range and process the retrieved data.
@@ -21,7 +22,7 @@ Ensure that you have the necessary Haskell libraries installed, such as:
 
 If you use nix, making sure all dependencies are covered is as simple as cloning and running:
 ```
-nix develop github:harryprayiv/scraperProto
+nix develop github:cardanonix/pelotero-engine
 ```
 
 
@@ -58,7 +59,7 @@ nix develop github:harryprayiv/scraperProto
 To scrape data for a specific date range, you can use the scrapeDataForDateRange function, providing the start and end date:
 
 ```
-nix develop github:harryprayiv/scraperProto
+nix develop github:cardanonix/scraperProto
 cabal run fetchStats 2023-08-22 2023-08-22
 ```
 
