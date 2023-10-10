@@ -15,6 +15,7 @@ jobs:
   cabal:
     name: ${{ matrix.os }} / ghc ${{ matrix.ghc }}
     runs-on: ${{ matrix.os }}
+    packages: [ zlib ]
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
@@ -75,6 +76,7 @@ jobs:
   stack:
     name: stack / ghc ${{ matrix.ghc }}
     runs-on: ubuntu-latest
+    packages: [ zlib ]
     strategy:
       matrix:
         stack: ["2.7.3"]
