@@ -123,20 +123,21 @@
             (pkgs.haskellPackages.ghcWithPackages
               (hsPkgs:
                 with hsPkgs; [
+                  # pkgs.haskellPackages.pelotero-engine
                 ]))
             pkgs.haskellPackages.haskell-language-server
             pkgs.haskellPackages.hoogle
             pkgs.zlib
           ];
-          packages = [
-            # pkgs.haskellPackages.pelotero-engine
-            pkgs.haskellPackages.haskell-language-server
-            pkgs.haskellPackages.hoogle
-            pkgs.haskellPackages.hls-fourmolu-plugin
-            pkgs.haskellPackages.fourmolu
-            pkgs.zlib
-            # pkgs.haskellPackages.nix-tree # visualize nix dependencies
-            # hackage-mirror
+          packages = with pkgs; [
+            # haskellPackages.pelotero-engine
+            haskellPackages.haskell-language-server
+            haskellPackages.hoogle
+            haskellPackages.hls-fourmolu-plugin
+            haskellPackages.fourmolu
+            zlib
+            haskellPackages.nix-tree # visualize nix dependencies
+            hackage-mirror
           ];
           shellHook = ''
             export NIX_SHELL_NAME="scraper"
