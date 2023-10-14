@@ -51,7 +51,7 @@ data PlayerResults
     | NoStats
     deriving (Show, Eq)
 
--- data type to hold final point totals for a single team, attributing them to each active player
+-- data type to hold final point totals for a single team, attributing them to each active playerId
 data Results = Results
     { cC :: (Text, Double)
     , b1C :: (Text, Double)
@@ -67,8 +67,9 @@ data Results = Results
 
 -- data type for storing the top level unsummed points for that player for a given day which may contain many games as a batter or pitching or both
 data GmPoints = GmPoints
-    { gmb_batting :: [Maybe BattingGmPoints]
-    , gmb_pitching :: [Maybe PitchingGmPoints]
+    { gmpts_Id :: Text  -- newly added playerId
+    , gmpts_batting :: [Maybe BattingGmPoints]
+    , gmpts_pitching :: [Maybe PitchingGmPoints]
     }
     deriving (Show, Eq)
 

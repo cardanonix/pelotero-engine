@@ -47,27 +47,34 @@ import qualified Roster as R
 
 import Validators
 
+-- mergeGmPoints :: P.GmPoints -> P.GmPoints -> P.GmPoints
+-- mergeGmPoints (P.GmPoints b1 p1) (P.GmPoints b2 p2) = P.GmPoints (b1 ++ b2) (p1 ++ p2)
 mergeGmPoints :: P.GmPoints -> P.GmPoints -> P.GmPoints
-mergeGmPoints (P.GmPoints b1 p1) (P.GmPoints b2 p2) = P.GmPoints (b1 ++ b2) (p1 ++ p2)
+mergeGmPoints (P.GmPoints id1 b1 p1) (P.GmPoints id2 b2 p2) = 
+    P.GmPoints (id1 <> ", " <> id2) (b1 ++ b2) (p1 ++ p2)
+
 
 calculatePointsForPlayer :: C.Configuration -> Text -> R.LgManager -> M.JsonPlayerData -> Either Text P.GmPoints
 calculatePointsForPlayer config playerId lgManager stats = do
     playerType <- batterOrPitcher playerId lgManager
     let maybeStatsData = MS.lookup playerId (M.stats stats)
+    let battingMults = C.lg_battingMults $ C.point_parameters config
+    let pitchingMults = C.lg_pitchingMults $ C.point_parameters config
     case playerType of
         P.Batting -> case maybeStatsData >>= M.batting of
-            Just battingStats -> Right $ calculateBattingPoints battingStats
+            Just battingStats -> Right $ calcBattingPoints playerId battingMults battingStats
             Nothing -> Left "Batting stats not found"
         P.Pitching -> case maybeStatsData >>= M.pitching of
-            Just pitchingStats -> Right $ calculatePitchingPoints pitchingStats
+            Just pitchingStats -> Right $ calcPitchingPoints playerId pitchingMults pitchingStats
             Nothing -> Left "Pitching stats not found"
-  where
-    calculateBattingPoints = calcBattingPoints (C.lg_battingMults $ C.point_parameters config)
-    calculatePitchingPoints = calcPitchingPoints (C.lg_pitchingMults $ C.point_parameters config)
+  -- where
+  --   calculateBattingPoints = calcBattingPoints (C.lg_battingMults $ C.point_parameters config)
+  --   calculatePitchingPoints = calcPitchingPoints (C.lg_pitchingMults $ C.point_parameters config)
 
-calcBattingPoints :: C.BattingMults -> I.BattingStats -> P.GmPoints
-calcBattingPoints mults stats@I.BattingStats{..} =
-    let s =
+calcBattingPoints :: Text -> C.BattingMults -> I.BattingStats -> P.GmPoints
+calcBattingPoints playerId mults stats@I.BattingStats{..} =
+    let player = playerId
+        s =
             fromIntegral
                 ( fromMaybe 0 (I.bat_hits stats)
                     - ( fromMaybe 0 (I.bat_triples stats)
@@ -87,7 +94,8 @@ calcBattingPoints mults stats@I.BattingStats{..} =
         ko = fromIntegral (fromMaybe 0 (I.bat_strikeOuts stats)) * C.lgb_strikeout mults
         cs = fromIntegral (fromMaybe 0 (I.bat_caughtStealing stats)) * C.lgb_caught_stealing mults
      in P.GmPoints
-            [ Just
+        { gmpts_Id  = playerId
+        , gmpts_batting = [Just
                 P.BattingGmPoints
                     { gmb_gameId = "GameID" -- TODO: Get the actual gameId
                     , gmb_total_points = s + d + t + h + rbi + r + bob + sb + hbp - ko - cs
@@ -103,12 +111,13 @@ calcBattingPoints mults stats@I.BattingStats{..} =
                     , gmb_strikeout = ko
                     , gmb_caught_stealing = cs
                     }
-            ]
-            []
-
-calcPitchingPoints :: C.PitchingMults -> I.PitchingStats -> P.GmPoints
-calcPitchingPoints mults stats@I.PitchingStats{..} =
-    let w = fromIntegral (fromMaybe 0 (I.pit_wins stats)) * C.lgp_win mults
+            ] 
+        , gmpts_pitching = []
+        }
+calcPitchingPoints :: Text -> C.PitchingMults -> I.PitchingStats -> P.GmPoints
+calcPitchingPoints playerId mults stats@I.PitchingStats{..} =
+    let player = playerId
+        w = fromIntegral (fromMaybe 0 (I.pit_wins stats)) * C.lgp_win mults
         s = fromIntegral (fromMaybe 0 (I.pit_saves stats)) * C.lgp_save mults
         inningsPitched = fromMaybe "0" (I.pit_inningsPitched stats)
         parsedInnings = readMaybe (Text.unpack inningsPitched) :: Maybe Double
@@ -127,8 +136,9 @@ calcPitchingPoints mults stats@I.PitchingStats{..} =
         hbm = fromIntegral (fromMaybe 0 (I.pit_hitBatsmen stats)) * C.lgp_hit_batsman mults
         l = fromIntegral (fromMaybe 0 (I.pit_losses stats)) * C.lgp_loss mults
      in P.GmPoints
-            []
-            [ Just
+        { gmpts_Id  = playerId
+        , gmpts_batting = []
+        , gmpts_pitching = [Just
                 P.PitchingGmPoints
                     { gmp_gameId = "GameID" -- TODO: Get the actual gameId
                     , gmp_total_points = w + s + qs + ip + ko + cg + sho - bob - ha - er - hbm - l
@@ -146,7 +156,7 @@ calcPitchingPoints mults stats@I.PitchingStats{..} =
                     , gmp_loss = l
                     }
             ]
-
+          }
 {-
 -- broken functions for tying it all together
 -- this one is only broken because it uses our old style of querying the stats and getting batter or pitcher
