@@ -91,7 +91,7 @@ executable roster
   hs-source-dirs: src, src/ADT, src/League
   main-is: FetchActiveRoster.hs
   ghc-options: -O2
-  other-modules:  Input, Middle, Scraper, Points, Roster, Config, Leaderboard, OfficialRoster, Validators, PointCalc
+  other-modules:  Input, Middle, Scraper, Points, Roster, Config, Leaderboard, OfficialRoster, Validators, PointCalc, Conversion
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -113,6 +113,7 @@ executable roster
                 , scientific
                 , directory
                 , async
+                , cassava
 
 executable league
   hs-source-dirs: src, src/ADT, src/League
