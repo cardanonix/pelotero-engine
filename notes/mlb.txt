@@ -1,0 +1,7 @@
+notable urls
+
+
+player headshots:  https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/$PLAYERID/headshot/67/current
+player mlb page: https://www.mlb.com/player/$NAMESLUG
+
+teamlogo: https://www.mlbstatic.com/team-logos/team-cap-on-dark/$TeamID.svg
