@@ -117,7 +117,7 @@ executable roster
 
 executable league
   hs-source-dirs: src, src/ADT, src/League
-  main-is: League.hs
+  main-is: LeagueTEST.hs
   ghc-options: -O2
   other-modules:  Validators, Config, Points, Input, Middle, OfficialRoster, Roster, PointCalc
   build-depends:  base >=4.11 && <4.18
