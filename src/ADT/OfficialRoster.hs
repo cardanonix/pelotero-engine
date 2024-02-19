@@ -38,7 +38,7 @@ instance FromJSON OfficialRoster where
         peopleObject <- v .: "officialPlayers"
         players <- forM (AK.keys peopleObject) $ \playerKey -> do
             case AK.lookup playerKey peopleObject of
-                Nothing -> fail $ "Key not found: " ++ (show playerKey)
+                Nothing -> fail $ "Key not found: " ++ show playerKey
                 Just playerValue -> parseJSON playerValue
 
         return $ OfficialRoster players dataPulled checksum
