@@ -15,7 +15,7 @@ import Input_trace (GameData)
 
 main :: IO ()
 main = do
-    jsonData <- B.readFile "testFiles/mlb/boxscore_716896.json"
+    jsonData <- B.readFile "testFiles/716896_boxscore_modified.json"
     let parsedResult = eitherDecodeStrict jsonData :: Either String GameData
     case parsedResult of
         Left err -> putStrLn $ "Failed to parse JSON: " ++ err
