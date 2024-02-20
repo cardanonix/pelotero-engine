@@ -16,10 +16,18 @@ data RankingData = RankingData
     , rankings      :: [PlayerRanking]
     } deriving (Show, Eq, Generic)
 
-instance FromJSON RankingData
+instance FromJSON RankingData where
+    parseJSON = withObject "RankingData" $ \v -> do
+        teamId <- v .: "teamId"
+        dataChecksum <- v .: "dataChecksum"
+        lastUpdatedStr <- v .: "lastUpdated"
+        lastUpdated <- parseTimeM True defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" lastUpdatedStr
+        rankings <- v .: "rankings"
+        return RankingData{..}
+
 instance ToJSON RankingData
 
--- | Represents a player's ranking within the team.
+-- Represents a player's ranking within the team.
 data PlayerRanking = PlayerRanking
     { playerId :: Int
     , rank     :: Int
