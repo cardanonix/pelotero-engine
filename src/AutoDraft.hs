@@ -30,6 +30,7 @@ import System.Environment (getArgs)
 import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
+import qualified Ranking as PR
 
 -- Utility Functions
 readJson :: FromJSON a => FilePath -> IO (Maybe a)
