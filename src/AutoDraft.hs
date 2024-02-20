@@ -1,32 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Main (main) where
+module Main where
 
-import Control.Monad (filterM)
-import Data.Aeson (
-    FromJSON (..),
-    Result (Success),
-    Value,
-    decode,
-    eitherDecodeStrict,
-    fromJSON,
-    withObject,
-    (.!=),
-    (.:),
-    (.:?),
- )
-import Data.Aeson.Types (Parser, Result (..))
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as B
-import Data.ByteString.Lazy.Char8 (pack)
-import qualified Data.Map.Strict as M
-import Data.Maybe (catMaybes, mapMaybe)
-import Data.List (sortOn, find)
+import Control.Monad (forM)
+import Data.Aeson (FromJSON, ToJSON, decode, encode, withObject, (.:))
+import qualified Data.ByteString.Lazy as BL
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Debug.Trace (traceShowM)
-import System.Environment (getArgs)
-
+import GHC.Generics (Generic)
+import Data.Time.Clock (UTCTime)
+import Data.Maybe (mapMaybe)
+import Data.List (find)
 import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
@@ -39,48 +23,32 @@ readJson filePath = decode <$> BL.readFile filePath
 writeJson :: ToJSON a => FilePath -> a -> IO ()
 writeJson filePath = BL.writeFile filePath . encode
 
--- Main Drafting Logic
-draftPlayers :: RankingData -> RankingData -> [OfficialPlayer] -> C.Configuration -> (R.Roster, R.Roster)
-draftPlayers rankingData1 rankingData2 officialPlayers config = (finalRoster1, finalRoster2)
-  where
-    rankedPlayers1 = rankAndFilterPlayers (R.rankings rankingData1) officialPlayers
-    rankedPlayers2 = rankAndFilterPlayers (R.rankings rankingData2) officialPlayers
-    -- Example placeholder for distributing players; Implement according to your draft logic and config
-    (finalRoster1, finalRoster2) = distributePlayers rankedPlayers1 rankedPlayers2 R.emptyRoster R.emptyRoster config
+draftPlayers :: PR.RankingData -> PR.RankingData -> [O.OfficialPlayer] -> C.Configuration -> (R.Roster, R.Roster)
+draftPlayers rankingData1 rankingData2 officialPlayers config = 
+  let
+    rankedPlayers1 = rankAndFilterPlayers (PR.rankings rankingData1) officialPlayers
+    rankedPlayers2 = rankAndFilterPlayers (PR.rankings rankingData2) officialPlayers
+    mergedPlayers = mergePlayers rankedPlayers1 rankedPlayers2
+  in
+    distributePlayers mergedPlayers emptyRoster emptyRoster config
 
-
-rankAndFilterPlayers :: [PlayerRanking] -> [OfficialPlayer] -> [(OfficialPlayer, Int)]
+rankAndFilterPlayers :: [PR.PlayerRanking] -> [O.OfficialPlayer] -> [(O.OfficialPlayer, Int)]
 rankAndFilterPlayers playerRankings officialPlayers = mapMaybe mapRank officialPlayers
   where
     mapRank player = do
-      ranking <- find (\r -> playerId r == opPlayerId player) playerRankings
-      return (player, rank ranking)
-
+      ranking <- find (\r -> PR.playerId r == O.playerId player) playerRankings
+      return (player, PR.rank ranking)
 
 distributePlayers :: [(O.OfficialPlayer, Int)] -> [(O.OfficialPlayer, Int)] -> R.Roster -> R.Roster -> C.Configuration -> (R.Roster, R.Roster)
 distributePlayers rankedPlayers1 rankedPlayers2 initialRoster1 initialRoster2 config =
-    foldl (distributePlayer config) (initialRoster1, initialRoster2, True) (mergePlayers rankedPlayers1 rankedPlayers2)
+    foldl (distributePlayers config) (initialRoster1, initialRoster2, True) (mergePlayers rankedPlayers1 rankedPlayers2)
 
-
-emptyRoster :: Roster
-emptyRoster = Roster [] [] [] [] [] [] [] [] []
-
-addToRoster :: O.OfficialPlayer -> R.Roster -> R.Roster
-addToRoster player roster = case O.primaryPosition player of
-  "C" -> roster { cR = useName player : cR roster }
-  "1B" -> roster { b1R = useName player : b1R roster }
-  "2B" -> roster { b2R = useName player : b2R roster }
-  "3B" -> roster { b3R = useName player : b3R roster }
-  "SS" -> roster { ssR = useName player : ssR roster }
-  "OF" -> roster { ofR = useName player : ofR roster }
-  "U" -> roster { uR = useName player : uR roster }
-  "SP" -> roster { spR = useName player : spR roster }
-  "RP" -> roster { rpR = useName player : rpR roster }
-  _ -> roster -- TODO: add more detailed logic
+emptyRoster :: R.Roster
+emptyRoster = R.Roster [] [] [] [] [] [] [] [] []
 
 addToRoster :: C.Configuration -> O.OfficialPlayer -> R.Roster -> R.Roster
 addToRoster cfg player roster =
-    let playerIdStr = show $ O.opPlayerId player  -- Convert player ID to String
+    let playerIdStr = show $ O.playerId player  -- Convert player ID to String
     in if not (playerIdExists playerIdStr roster)
        then addIfUnderLimit (O.primaryPosition player) playerIdStr cfg roster
        else roster
@@ -97,30 +65,34 @@ addIfUnderLimit position playerId cfg roster =
        then updateRoster position playerId roster
        else roster
 
+mergePlayers :: [(O.OfficialPlayer, Int)] -> [(O.OfficialPlayer, Int)] -> [(O.OfficialPlayer, Int)]
+mergePlayers xs ys = concatMap (\((x, rx), (y, ry)) -> [(x, rx), (y, ry)]) $ zip xs ys
+
 addPlayer :: Text -> Text -> C.Configuration -> R.Roster -> R.Roster
 addPlayer posName playerName cfg roster = 
-    let posLimit = lookupLimit posName (C.draftLimits cfg)
+    let posLimit = lookupLimit posName cfg
         currentCount = countPlayers posName roster 
     in if currentCount < posLimit
        then updateRoster posName playerName roster
        else roster
 
-lookupLimit :: Text -> C.Configuration -> Int
-lookupLimit posName cfg =
-    let draftLimits = draft_limits (draft_parameters cfg)
-    in case posName of
-        "catcher"   -> dr_catcher draftLimits
-        "first"     -> dr_first draftLimits
-        "second"    -> dr_second draftLimits
-        "third"     -> dr_third draftLimits
-        "shortstop" -> dr_shortstop draftLimits
-        "outfield"  -> dr_outfield draftLimits
-        "utility"   -> dr_utility draftLimits
-        "s_pitcher" -> dr_s_pitcher draftLimits
-        "r_pitcher" -> dr_r_pitcher draftLimits
-        _           -> 0  -- Default case for unhandled positions
 
--- Placeholder for countPlayers function
+lookupLimit :: Text -> C.Configuration -> Int
+lookupLimit posName cfg = 
+  let limits = C.draft_parameters cfg
+      draftLimits = C.draft_limits limits 
+  in case posName of
+      "catcher"   -> C.dr_catcher draftLimits
+      "first"     -> C.dr_first draftLimits
+      "second"    -> C.dr_second draftLimits
+      "third"     -> C.dr_third draftLimits
+      "shortstop" -> C.dr_shortstop draftLimits
+      "outfield"  -> C.dr_outfield draftLimits
+      "utility"   -> C.dr_utility draftLimits
+      "s_pitcher" -> C.dr_s_pitcher draftLimits
+      "r_pitcher" -> C.dr_r_pitcher draftLimits
+      _           -> 0  -- Default case for unhandled positions      
+
 countPlayers :: Text -> R.Roster -> Int
 countPlayers posName roster =
     case posName of
@@ -135,7 +107,6 @@ countPlayers posName roster =
         "r_pitcher" -> length (R.rpR roster)
         _           -> 0
 
--- Placeholder for updateRoster function
 updateRoster :: Text -> String -> R.Roster -> R.Roster
 updateRoster posName playerId roster =
     case posName of
@@ -153,33 +124,34 @@ updateRoster posName playerId roster =
 addUnique :: String -> [String] -> [String]
 addUnique pid pids = if pid `elem` pids then pids else pid : pids
 
--- Main Function
 main :: IO ()
 main = do
-    rankingData1 <- readJson "appData/head2head/team001_rankings.json" :: IO (Maybe PR.RankingData)
-    rankingData2 <- readJson "appData/head2head/team002_rankings.json" :: IO (Maybe PR.RankingData)
-    officialRoster <- readJson "appData/rosters/activePlayers.json" :: IO (Maybe O.OfficialRoster)
+  rankingData1 <- readJson "appData/head2head/team001_rankings.json" :: IO (Maybe PR.RankingData)
+  rankingData2 <- readJson "appData/head2head/team002_rankings.json" :: IO (Maybe PR.RankingData)
+  officialRoster <- readJson "appData/rosters/activePlayers.json" :: IO (Maybe O.OfficialRoster)
+  config <- readJson "path/to/config.json" :: IO (Maybe C.Configuration)
 
-    case (rankingData1, rankingData2, officialRoster) of
-        (Just rd1, Just rd2, Just or) -> do
-            let roster1 = draftPlayers (rankings rd1) (people or)
-            let roster2 = draftPlayers (rankings rd2) (people or)
-            writeJson "appData/draftedroster001.json" roster1
-            writeJson "appData/draftedroster002.json" roster2
-        _ -> putStrLn "Failed to load data"
+  case (rankingData1, rankingData2, officialRoster, config) of
+    (Just rd1, Just rd2, Just or, Just cfg) -> do
+      let (roster1, roster2) = draftPlayers rd1 rd2 (O.people or) cfg
+      writeJson "appData/draftedroster001.json" roster1
+      writeJson "appData/draftedroster002.json" roster2
+    _ -> putStrLn "Failed to load data"
 
 {- 
 data RankingData = RankingData
     { teamId        :: Text
     , dataChecksum  :: Text
     , lastUpdated   :: UTCTime
-    , rankings      :: [PlayerRanking]  -- relevant data found here
+    , rankings      :: [PlayerRanking]
     } deriving (Show, Eq, Generic)
+
 
 data PlayerRanking = PlayerRanking
     { playerId :: Int
     , rank     :: Int
-    } deriving (Show, Eq, Generic) 
+    } deriving (Show, Eq, Generic)
+
 
 data OfficialRoster = OfficialRoster
     { people :: [OfficialPlayer]
