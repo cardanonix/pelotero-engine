@@ -1,9 +1,34 @@
-{-# LANGUAGE OverloadedStrings, DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings, DeriveGeneric, RecordWildCards #-}
 {-# LANGUAGE GADTs #-}
 
 module Ranking where
 
-import Data.Aeson (FromJSON, ToJSON)
+import Data.Aeson
+    ( FromJSON,
+      ToJSON,
+      FromJSON(..),
+      Result(Success),
+      Value,
+      decode,
+      eitherDecodeStrict,
+      fromJSON,
+      withObject,
+      (.!=),
+      (.:),
+      (.:?) )
+
+import Data.Time (
+    Day,
+    addDays,
+    defaultTimeLocale,
+    diffDays,
+    formatTime,
+    parseTimeOrError,
+    parseTimeM
+ )
+import qualified Data.ByteString.Lazy as BL
+import Data.Aeson (FromJSON (..), Result (Success), Value, decode, eitherDecodeStrict, fromJSON, withObject, (.!=), (.:), (.:?))
+
 import GHC.Generics (Generic)
 import Data.Text (Text)
 import Data.Time.Clock (UTCTime)
