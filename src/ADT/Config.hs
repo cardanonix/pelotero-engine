@@ -88,6 +88,13 @@ data LgRoster = LgRoster
     }
     deriving (Show, Eq)
 
+data DraftParameters = DraftParameters
+    { autoDraft :: Bool
+    , autoDraft_UTC :: Text
+    , draft_limits :: DraftRoster
+    }
+    deriving (Show, Eq)
+
 data DraftRoster = DraftRoster
     { dr_catcher :: Int
     , dr_first :: Int
@@ -98,13 +105,6 @@ data DraftRoster = DraftRoster
     , dr_utility :: Int
     , dr_s_pitcher :: Int
     , dr_r_pitcher :: Int
-    }
-    deriving (Show, Eq)
-
-data DraftParameters = DraftParameters
-    { autoDraft :: Bool
-    , autoDraft_UTC :: Text
-    , draft_limits :: DraftRoster
     }
     deriving (Show, Eq)
 
