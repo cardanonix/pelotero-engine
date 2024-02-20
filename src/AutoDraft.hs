@@ -156,8 +156,8 @@ addUnique pid pids = if pid `elem` pids then pids else pid : pids
 -- Main Function
 main :: IO ()
 main = do
-    rankingData1 <- readJson "appData/head2head/team001_rankings.json" :: IO (Maybe RankingData)
-    rankingData2 <- readJson "appData/head2head/team002_rankings.json" :: IO (Maybe RankingData)
+    rankingData1 <- readJson "appData/head2head/team001_rankings.json" :: IO (Maybe PR.RankingData)
+    rankingData2 <- readJson "appData/head2head/team002_rankings.json" :: IO (Maybe PR.RankingData)
     officialRoster <- readJson "appData/rosters/activePlayers.json" :: IO (Maybe O.OfficialRoster)
 
     case (rankingData1, rankingData2, officialRoster) of
