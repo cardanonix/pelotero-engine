@@ -58,10 +58,19 @@ rankAndFilterPlayers playerRankings officialPlayers = mapMaybe mapRank officialP
 
 -- You will need to implement logic to evenly distribute players according to their position and rankings
 distributePlayers :: [(O.OfficialPlayer, Int)] -> [(O.OfficialPlayer, Int)] -> R.Roster -> R.Roster -> C.Configuration -> (R.Roster, R.Roster)
-distributePlayers rankedPlayers1 rankedPlayers2 roster1 roster2 =
-  -- Implement the distribution logic here, using the player's position and rank to assign them to each roster
-  -- This is a placeholder; actual implementation will depend on your specific requirements
-  (roster1, roster2)
+distributePlayers rankedPlayers1 rankedPlayers2 initialRoster1 initialRoster2 config =
+    foldl (distributePlayer config) (initialRoster1, initialRoster2, True) (mergePlayers rankedPlayers1 rankedPlayers2)
+    where
+        -- Merges two lists of players while maintaining their ranks and alternates between teams
+        mergePlayers :: [(O.OfficialPlayer, Int)] -> [(O.OfficialPlayer, Int)] -> [(O.OfficialPlayer, Int, Bool)]
+        mergePlayers xs ys = concatMap (\((p1, r1), (p2, r2)) -> [(p1, r1, True), (p2, r2, False)]) (zip xs ys)
+
+        -- Adds a player to the appropriate roster based on the round-robin flag and checks position limits from config
+        distributePlayer :: C.Configuration -> (R.Roster, R.Roster, Bool) -> (O.OfficialPlayer, Int, Bool) -> (R.Roster, R.Roster, Bool)
+        distributePlayer cfg (roster1, roster2, toFirstTeam) (player, _, True)
+            | toFirstTeam = (addToRoster cfg player roster1, roster2, not toFirstTeam)
+            | otherwise   = (roster1, addToRoster cfg player roster2, not toFirstTeam)
+        distributePlayer cfg (roster1, roster2, toFirstTeam) (player, _, False) = distributePlayer cfg (roster1, roster2, toFirstTeam) (player, 0, toFirstTeam)
 
 emptyRoster :: Roster
 emptyRoster = Roster [] [] [] [] [] [] [] [] []
@@ -78,6 +87,81 @@ addToRoster player roster = case O.primaryPosition player of
   "SP" -> roster { spR = useName player : spR roster }
   "RP" -> roster { rpR = useName player : rpR roster }
   _ -> roster -- we should handle unexpected positions or add more detailed logic
+
+addToRoster :: C.Configuration -> O.OfficialPlayer -> R.Roster -> R.Roster
+addToRoster cfg player roster = 
+    case O.primaryPosition player of
+        "C"  -> addIfUnderLimit "C" (O.useName player) cfg roster
+        "1B" -> addIfUnderLimit "1B" (O.useName player) cfg roster
+        -- Continue for other positions
+        _ -> roster  -- Consider handling unexpected positions
+
+-- Utility function to check position limits and add a player if under limit
+addIfUnderLimit :: Text -> O.OfficialPlayer -> C.Configuration -> R.Roster -> R.Roster
+addIfUnderLimit position player cfg roster = case position of
+    "C"  -> addPlayer "catcher" (O.useName player) cfg roster
+    "1B" -> addPlayer "first" (O.useName player) cfg roster
+    "2B" -> addPlayer "second" (O.useName player) cfg roster
+    "3B" -> addPlayer "third" (O.useName player) cfg roster
+    "SS" -> addPlayer "shortstop" (O.useName player) cfg roster
+    "OF" -> addPlayer "outfield" (O.useName player) cfg roster
+    "U"  -> addPlayer "utility" (O.useName player) cfg roster
+    "SP" -> addPlayer "s_pitcher" (O.useName player) cfg roster
+    "RP" -> addPlayer "r_pitcher" (O.useName player) cfg roster
+    _    -> roster -- No action for unexpected positions
+
+addPlayer :: Text -> Text -> C.Configuration -> R.Roster -> R.Roster
+addPlayer posName playerName cfg roster = 
+    let posLimit = lookupLimit posName (C.draftLimits cfg) -- You need to implement lookupLimit
+        currentCount = countPlayers posName roster -- You need to implement countPlayers
+    in if currentCount < posLimit
+       then updateRoster posName playerName roster -- You need to implement updateRoster
+       else roster
+
+lookupLimit :: Text -> Configuration -> Int
+lookupLimit posName cfg =
+    let draftLimits = draft_limits (draft_parameters cfg)
+    in case posName of
+        "catcher"   -> dr_catcher draftLimits
+        "first"     -> dr_first draftLimits
+        "second"    -> dr_second draftLimits
+        "third"     -> dr_third draftLimits
+        "shortstop" -> dr_shortstop draftLimits
+        "outfield"  -> dr_outfield draftLimits
+        "utility"   -> dr_utility draftLimits
+        "s_pitcher" -> dr_s_pitcher draftLimits
+        "r_pitcher" -> dr_r_pitcher draftLimits
+        _           -> 0  -- Default case for unhandled positions
+
+-- Placeholder for countPlayers function
+countPlayers :: Text -> R.Roster -> Int
+countPlayers posName roster =
+    case posName of
+        "catcher"   -> length (R.cR roster)
+        "first"     -> length (R.b1R roster)
+        "second"    -> length (R.b2R roster)
+        "third"     -> length (R.b3R roster)
+        "shortstop" -> length (R.ssR roster)
+        "outfield"  -> length (R.ofR roster)
+        "utility"   -> length (R.uR roster)
+        "s_pitcher" -> length (R.spR roster)
+        "r_pitcher" -> length (R.rpR roster)
+        _           -> 0
+
+-- Placeholder for updateRoster function
+updateRoster :: Text -> Text -> R.Roster -> R.Roster
+updateRoster posName playerName roster =
+    case posName of
+        "catcher"   -> roster {R.cR = playerName : R.cR roster}
+        "first"     -> roster {R.b1R = playerName : R.b1R roster}
+        "second"    -> roster {R.b2R = playerName : R.b2R roster}
+        "third"     -> roster {R.b3R = playerName : R.b3R roster}
+        "shortstop" -> roster {R.ssR = playerName : R.ssR roster}
+        "outfield"  -> roster {R.ofR = playerName : R.ofR roster}
+        "utility"   -> roster {R.uR = playerName : R.uR roster}
+        "s_pitcher" -> roster {R.spR = playerName : R.spR roster}
+        "r_pitcher" -> roster {R.rpR = playerName : R.rpR roster}
+        _           -> roster  -- No update for unhandled positions
 
 -- Main Function
 main :: IO ()
