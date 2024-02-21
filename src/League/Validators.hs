@@ -88,9 +88,9 @@ validateAndPrintLineup manager config = do
             mapM_ (putStrLn . Text.unpack) duplicates
             return False
 
--- This function validates a roster and returns True or False.
-isRosterValid :: R.LgManager -> C.Configuration -> Bool
-isRosterValid manager config =
+-- This function validates a lineup and returns True or False.
+isLineupValid :: R.LgManager -> C.Configuration -> Bool
+isLineupValid manager config =
     case validateLineup manager config of
         Left _ -> False
         Right _ -> True
@@ -110,6 +110,47 @@ lineupHasUniquePlayers lineup =
             then Left "No duplicate players found."
             else Right duplicates
 
+-- Roster Validation
+hasUniqueRosterPlayers :: R.Roster -> Either String [Text]
+hasUniqueRosterPlayers roster =
+    let allPlayers = concat [R.cR roster, R.b1R roster, R.b2R roster, R.b3R roster, R.ssR roster, R.ofR roster, R.uR roster, R.spR roster, R.rpR roster]
+        duplicates = allPlayers \\ nub allPlayers
+    in if null duplicates then Left "No duplicate players found in roster." else Right duplicates
+
+lookupPlayerInRoster :: Text -> R.Roster -> Bool
+lookupPlayerInRoster playerId roster =
+    let allPlayers = concat [R.cR roster, R.b1R roster, R.b2R roster, R.b3R roster, R.ssR roster, R.ofR roster, R.uR roster, R.spR roster, R.rpR roster]
+    in playerId `elem` allPlayers
+
+
+getRosterDiscrepancies :: R.Roster -> C.DraftRoster -> [String]
+getRosterDiscrepancies roster limits =
+    let discrepancies = [
+          validatePosition "catcher" (R.cR roster) (C.dr_catcher limits),
+          validatePosition "first" (R.b1R roster) (C.dr_first limits),
+          validatePosition "second" (R.b1R roster) (C.dr_second limits),
+          validatePosition "third" (R.b1R roster) (C.dr_third limits),
+          validatePosition "shortstop" (R.b1R roster) (C.dr_shortstop limits),
+          validatePosition "outfield" (R.b1R roster) (C.dr_outfield limits),      
+          validatePosition "utility" (R.b1R roster) (C.dr_utility limits), 
+          validatePosition "s_pitcher" (R.b1R roster) (C.dr_s_pitcher limits), 
+          validatePosition "r_pitcher" (R.b1R roster) (C.dr_r_pitcher limits)     
+        ]
+    in catMaybes discrepancies
+  where
+    validatePosition posName players limit =
+        let diff = length players - limit
+        in if diff > 0 then Just $ "Too many players at " ++ posName ++ ": " ++ show diff else Nothing
+
+validateRoster :: R.Roster -> C.Configuration -> Either [String] ()
+validateRoster roster config = do
+    let discrepancies = getRosterDiscrepancies roster (C.draft_limits $ C.draft_parameters config)
+    let duplicateCheck = hasUniqueRosterPlayers roster
+    case (duplicateCheck, discrepancies) of
+        (Left _, []) -> Right ()
+        (Right duplicates, []) -> Left (map Text.unpack duplicates ++ ["Duplicate player IDs found in roster."])
+        (_, errors) -> Left errors
+
 -- also used in Leaderboard to verify that the player is valid except with that different player type
 hasValidPositions :: Value -> Bool
 hasValidPositions val = case fromJSON val :: Result I.Player of
@@ -119,8 +160,8 @@ hasValidPositions val = case fromJSON val :: Result I.Player of
     _ -> False
 
 -- Lookup a playerId in an OfficialRoster
-lookupPlayerInRoster :: Text -> O.OfficialRoster -> Bool
-lookupPlayerInRoster pid roster =
+lookupPlayerInOfficialRoster :: Text -> O.OfficialRoster -> Bool
+lookupPlayerInOfficialRoster pid roster =
     any (\player -> Text.pack (show $ playerId player) == pid) (people roster)
 
 lookupPlayerId :: Text -> IO Bool
@@ -128,7 +169,7 @@ lookupPlayerId playerId = do
     parsedRoster <- readJson "appData/rosters/activePlayers.json" :: IO (Either String O.OfficialRoster)
     case parsedRoster of
         Left _ -> return False
-        Right activeRoster -> return $ lookupPlayerInRoster playerId activeRoster
+        Right activeRoster -> return $ lookupPlayerInOfficialRoster playerId activeRoster
 
 validatePlayerId :: R.CurrentLineup -> IO (Either String [Text])
 validatePlayerId lineup = do
