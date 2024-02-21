@@ -2,22 +2,22 @@
 
 module Main where
 
-import Control.Monad (forM)
+import Control.Monad (forM, foldM)
 import Data.Aeson (FromJSON, ToJSON, decode, encode, withObject, (.:))
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as Text
 import GHC.Generics (Generic)
 import Data.Time.Clock (UTCTime)
 import Data.Maybe (mapMaybe)
-import Data.List (find)
+import Data.List (find, delete)
 import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
 import qualified Ranking as PR
 import Validators
 
-readJson :: FromJSON a => FilePath -> IO (Maybe a)
-readJson filePath = decode <$> BL.readFile filePath
+-- readJson :: FromJSON a => FilePath -> IO (Maybe a)
+-- readJson filePath = decode <$> BL.readFile filePath
 
 writeJson :: ToJSON a => FilePath -> a -> IO ()
 writeJson filePath = BL.writeFile filePath . encode
@@ -66,15 +66,15 @@ addToRoster config player roster =
 lookupLimit :: Text.Text -> C.DraftRoster -> Int
 lookupLimit position limits =
     case position of
-        "catcher" -> dr_catcher limits
-        "first" -> dr_first limits
-        "second" -> dr_second limits
-        "third" -> dr_third limits
-        "shortstop" -> dr_shortstop limits
-        "outfield" -> dr_outfield limits
-        "utility" -> dr_utility limits
-        "s_pitcher" -> dr_s_pitcher limits
-        "r_pitcher" -> dr_r_pitcher limits
+        "catcher" -> C.dr_catcher limits
+        "first" -> C.dr_first limits
+        "second" -> C.dr_second limits
+        "third" -> C.dr_third limits
+        "shortstop" -> C.dr_shortstop limits
+        "outfield" -> C.dr_outfield limits
+        "utility" -> C.dr_utility limits
+        "s_pitcher" -> C.dr_s_pitcher limits
+        "r_pitcher" -> C.dr_r_pitcher limits
         _ -> 0
 
 countPlayers :: Text.Text -> R.Roster -> Int
