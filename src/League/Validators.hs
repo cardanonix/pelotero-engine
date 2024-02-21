@@ -54,7 +54,7 @@ testRoster config (Right lgManager) = do
 
 validateRoster :: R.LgManager -> C.Configuration -> Either [String] ()
 validateRoster manager config = do
-    let discrepancies = getDiscrepancies (R.current_lineup manager) (C.valid_roster . C.point_parameters $ config)
+    let discrepancies = getLineupDiscrepancies (R.current_lineup manager) (C.valid_roster . C.point_parameters $ config)
     let duplicateCheck = hasUniquePlayers (R.current_lineup manager)
     case (duplicateCheck, discrepancies) of
         (Left _, []) -> Right ()
@@ -68,7 +68,7 @@ validateRoster manager config = do
 validateAndPrint :: R.LgManager -> C.Configuration -> IO Bool
 validateAndPrint manager config = do
     let rosterConfig = C.valid_roster . C.point_parameters $ config
-    let discrepancies = getDiscrepancies (R.current_lineup manager) rosterConfig
+    let discrepancies = getLineupDiscrepancies (R.current_lineup manager) rosterConfig
     let validPositions = null discrepancies
     let validRosterSize = all (\(_, diff) -> diff <= 0) discrepancies
 
@@ -146,8 +146,8 @@ getUniquePlayerIds :: R.CurrentLineup -> [Text]
 getUniquePlayerIds R.CurrentLineup{..} =
     cC : b1C : b2C : b3C : ssC : uC : (ofC ++ spC ++ rpC)
 
-getDiscrepancies :: R.CurrentLineup -> C.LgRoster -> [(String, Int)]
-getDiscrepancies R.CurrentLineup{..} C.LgRoster{..} =
+getLineupDiscrepancies :: R.CurrentLineup -> C.LgRoster -> [(String, Int)]
+getLineupDiscrepancies R.CurrentLineup{..} C.LgRoster{..} =
     let discrepancies =
             [ validatePositionCount "Catcher" [cC] lg_catcher
             , validatePositionCount "First Base" [b1C] lg_first
@@ -176,7 +176,7 @@ totalPlayersInLineup R.CurrentLineup{..} =
 
 validateCurrentLineup :: R.LgManager -> C.Configuration -> Bool
 validateCurrentLineup R.LgManager{..} C.Configuration{point_parameters = C.PointParameters{valid_roster = rosterConfig}} =
-    let positionalValid = null (getDiscrepancies current_lineup rosterConfig)
+    let positionalValid = null (getLineupDiscrepancies current_lineup rosterConfig)
      in case hasUniquePlayers current_lineup of
             Left _ -> positionalValid
             Right _ -> False
