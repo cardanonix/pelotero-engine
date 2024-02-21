@@ -40,22 +40,22 @@ processConfigResults :: C.Configuration -> [(FileName, FileContent)] -> IO ()
 processConfigResults config files =
     forM_ files $ \(fname, content) -> do
         putStrLn $ "\nTesting with " ++ extractNameFromPath fname ++ ":"
-        testRoster config content
+        testLineup config content
 
-testRoster :: C.Configuration -> Either String R.LgManager -> IO ()
-testRoster _ (Left errRoster) = putStrLn $ "Failed to parse Roster JSON: " ++ errRoster
-testRoster config (Right lgManager) = do
+testLineup :: C.Configuration -> Either String R.LgManager -> IO ()
+testLineup _ (Left errRoster) = putStrLn $ "Failed to parse Roster JSON: " ++ errRoster
+testLineup config (Right lgManager) = do
     print $ R.current_lineup lgManager
     print lgManager
-    isValid <- validateAndPrint lgManager config
+    isValid <- validateAndPrintLineup lgManager config
     if isValid
         then putStrLn "This Lineup is valid."
         else putStrLn "That lineup has discrepancies."
 
-validateRoster :: R.LgManager -> C.Configuration -> Either [String] ()
-validateRoster manager config = do
+validateLineup :: R.LgManager -> C.Configuration -> Either [String] ()
+validateLineup manager config = do
     let discrepancies = getLineupDiscrepancies (R.current_lineup manager) (C.valid_roster . C.point_parameters $ config)
-    let duplicateCheck = hasUniquePlayers (R.current_lineup manager)
+    let duplicateCheck = lineupHasUniquePlayers (R.current_lineup manager)
     case (duplicateCheck, discrepancies) of
         (Left _, []) -> Right ()
         (Right duplicates, []) -> Left (map Text.unpack duplicates ++ ["Duplicate player IDs found."])
@@ -65,8 +65,8 @@ validateRoster manager config = do
         | diff > 0 = "This roster has " ++ show diff ++ " too many players at " ++ pos ++ "."
         | diff < 0 = "This roster needs " ++ show (abs diff) ++ " more players at " ++ pos ++ "."
 
-validateAndPrint :: R.LgManager -> C.Configuration -> IO Bool
-validateAndPrint manager config = do
+validateAndPrintLineup :: R.LgManager -> C.Configuration -> IO Bool
+validateAndPrintLineup manager config = do
     let rosterConfig = C.valid_roster . C.point_parameters $ config
     let discrepancies = getLineupDiscrepancies (R.current_lineup manager) rosterConfig
     let validPositions = null discrepancies
@@ -74,7 +74,7 @@ validateAndPrint manager config = do
 
     playerIdValidation <- validatePlayerId (R.current_lineup manager)
 
-    case (playerIdValidation, hasUniquePlayers (R.current_lineup manager)) of
+    case (playerIdValidation, lineupHasUniquePlayers (R.current_lineup manager)) of
         (Left successMessage, Left _) -> do
             putStrLn successMessage
             mapM_ (\(pos, diff) -> putStrLn $ "This roster has " ++ show diff ++ " too many players at " ++ pos ++ ".") discrepancies
@@ -91,20 +91,20 @@ validateAndPrint manager config = do
 -- This function validates a roster and returns True or False.
 isRosterValid :: R.LgManager -> C.Configuration -> Bool
 isRosterValid manager config =
-    case validateRoster manager config of
+    case validateLineup manager config of
         Left _ -> False
         Right _ -> True
 
 -- This function validates a roster and returns the error messages if there are any.
 getRosterValidationErrors :: R.LgManager -> C.Configuration -> [String]
 getRosterValidationErrors manager config =
-    case validateRoster manager config of
+    case validateLineup manager config of
         Left errors -> errors
         Right _ -> []
 
-hasUniquePlayers :: R.CurrentLineup -> Either String [Text]
-hasUniquePlayers lineup =
-    let allPlayers = getUniquePlayerIds lineup
+lineupHasUniquePlayers :: R.CurrentLineup -> Either String [Text]
+lineupHasUniquePlayers lineup =
+    let allPlayers = getUniquePlayerIdsLineup lineup
         duplicates = allPlayers \\ nub allPlayers
      in if null duplicates
             then Left "No duplicate players found."
@@ -132,7 +132,7 @@ lookupPlayerId playerId = do
 
 validatePlayerId :: R.CurrentLineup -> IO (Either String [Text])
 validatePlayerId lineup = do
-    let allPlayers = getUniquePlayerIds lineup
+    let allPlayers = getUniquePlayerIdsLineup lineup
     nonexistent <- filterM (fmap not . lookupPlayerId) allPlayers
     if null nonexistent
         then return $ Left "All Players are valid."
@@ -142,8 +142,8 @@ validatePlayerId lineup = do
 intToText :: Int -> Text
 intToText = Text.pack . show
 
-getUniquePlayerIds :: R.CurrentLineup -> [Text]
-getUniquePlayerIds R.CurrentLineup{..} =
+getUniquePlayerIdsLineup :: R.CurrentLineup -> [Text]
+getUniquePlayerIdsLineup R.CurrentLineup{..} =
     cC : b1C : b2C : b3C : ssC : uC : (ofC ++ spC ++ rpC)
 
 getLineupDiscrepancies :: R.CurrentLineup -> C.LgRoster -> [(String, Int)]
@@ -177,7 +177,7 @@ totalPlayersInLineup R.CurrentLineup{..} =
 validateCurrentLineup :: R.LgManager -> C.Configuration -> Bool
 validateCurrentLineup R.LgManager{..} C.Configuration{point_parameters = C.PointParameters{valid_roster = rosterConfig}} =
     let positionalValid = null (getLineupDiscrepancies current_lineup rosterConfig)
-     in case hasUniquePlayers current_lineup of
+     in case lineupHasUniquePlayers current_lineup of
             Left _ -> positionalValid
             Right _ -> False
 
