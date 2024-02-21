@@ -12,7 +12,7 @@ import Data.ByteString.Lazy.Char8 (pack)
 import Data.Foldable (foldl', forM_)
 import Data.List (nub, (\\))
 import qualified Data.Map.Strict as M
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Debug.Trace (traceShow, traceShowM)
@@ -122,25 +122,23 @@ lookupPlayerInRoster playerId roster =
     let allPlayers = concat [R.cR roster, R.b1R roster, R.b2R roster, R.b3R roster, R.ssR roster, R.ofR roster, R.uR roster, R.spR roster, R.rpR roster]
     in playerId `elem` allPlayers
 
-
 getRosterDiscrepancies :: R.Roster -> C.DraftRoster -> [String]
 getRosterDiscrepancies roster limits =
-    let discrepancies = [
-          validatePosition "catcher" (R.cR roster) (C.dr_catcher limits),
-          validatePosition "first" (R.b1R roster) (C.dr_first limits),
-          validatePosition "second" (R.b1R roster) (C.dr_second limits),
-          validatePosition "third" (R.b1R roster) (C.dr_third limits),
-          validatePosition "shortstop" (R.b1R roster) (C.dr_shortstop limits),
-          validatePosition "outfield" (R.b1R roster) (C.dr_outfield limits),      
-          validatePosition "utility" (R.b1R roster) (C.dr_utility limits), 
-          validatePosition "s_pitcher" (R.b1R roster) (C.dr_s_pitcher limits), 
-          validatePosition "r_pitcher" (R.b1R roster) (C.dr_r_pitcher limits)     
-        ]
-    in catMaybes discrepancies
+    catMaybes $ map validatePosition
+    [ ("catcher", R.cR roster, C.dr_catcher limits)
+    , ("first", R.b1R roster, C.dr_first limits)
+    , ("second", R.b2R roster, C.dr_second limits)
+    , ("third", R.b3R roster, C.dr_third limits)
+    , ("shortstop", R.ssR roster, C.dr_shortstop limits)
+    , ("outfield", R.ofR roster, C.dr_outfield limits)
+    , ("utility", R.uR roster, C.dr_utility limits)
+    , ("s_pitcher", R.spR roster, C.dr_s_pitcher limits)
+    , ("r_pitcher", R.rpR roster, C.dr_r_pitcher limits)
+    ]
   where
-    validatePosition posName players limit =
+    validatePosition (posName, players, limit) =
         let diff = length players - limit
-        in if diff > 0 then Just $ "Too many players at " ++ posName ++ ": " ++ show diff else Nothing
+        in if diff > 0 then Just $ posName ++ ": Too many players - " ++ show diff else Nothing
 
 validateRoster :: R.Roster -> C.Configuration -> Either [String] ()
 validateRoster roster config = do
