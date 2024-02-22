@@ -105,10 +105,10 @@ addPlayerToPosition position player roster =
 
 main :: IO ()
 main = do
-    rankings1 <- readJson "appData/head2head/team001_rankings.json"
-    rankings2 <- readJson "appData/head2head/team002_rankings.json"
-    officialPlayers <- readJson "appData/rosters/officialPlayers.json"
-    config <- readJson "config/leagueConfig.json"
+    rankings1 <- readJson "testFiles/appData/rankings/team001_rankings.json"
+    rankings2 <- readJson "testFiles/appData/rankings/team002_rankings.json"
+    officialPlayers <- readJson "testFiles/appData/rosters/activePlayers.json"
+    config <- readJson "testFiles/appData/config/config.json"
 
     case (rankings1, rankings2, officialPlayers, config) of
         (Right r1, Right r2, Right op, Right cfg) -> do
@@ -117,95 +117,3 @@ main = do
             writeJson "draftResults/team1Roster.json" roster1
             writeJson "draftResults/team2Roster.json" roster2
         _ -> putStrLn "Error loading data."
-
-{- 
-data RankingData = RankingData
-    { teamId        :: Text
-    , dataChecksum  :: Text
-    , lastUpdated   :: UTCTime
-    , rankings      :: [PlayerRanking]
-    } deriving (Show, Eq, Generic)
-
-
-data PlayerRanking = PlayerRanking
-    { playerId :: Int
-    , rank     :: Int
-    } deriving (Show, Eq, Generic)
-
-
-data OfficialRoster = OfficialRoster
-    { people :: [OfficialPlayer]
-    , dataPulled :: Text
-    , checksum :: Text
-    }
-    deriving (Show)
-
-data OfficialPlayer = OfficialPlayer
-    { playerId :: Int               -- relevant data here
-    , useName :: Text
-    , useLastName :: Text
-    , nameSlug :: Text
-    , currentTeam :: Int
-    , primaryPosition :: Text       -- relevant data here
-    , batSide :: Text
-    , pitchHand :: Text
-    , active :: Bool                -- relevant data here
-    }
-    deriving (Show, Eq) 
-    
-data DraftParameters = DraftParameters
-    { autoDraft :: Bool
-    , autoDraft_UTC :: Text
-    , draft_limits :: DraftRoster -- relevant date found here
-    }
-    deriving (Show, Eq)   
-
-data DraftRoster = DraftRoster
-    { dr_catcher :: Int
-    , dr_first :: Int
-    , dr_second :: Int
-    , dr_third :: Int
-    , dr_shortstop :: Int
-    , dr_outfield :: Int
-    , dr_utility :: Int
-    , dr_s_pitcher :: Int
-    , dr_r_pitcher :: Int
-    }
-    deriving (Show, Eq)
-
-data LgManager = LgManager
-    { status :: Text
-    , commissioner :: Text
-    , teamId :: Text
-    , leagueID :: Text
-    , current_lineup :: CurrentLineup
-    , roster :: Roster
-    }
-    deriving (Show, Eq)
-
-data CurrentLineup = CurrentLineup
-    { cC :: Text
-    , b1C :: Text
-    , b2C :: Text
-    , b3C :: Text
-    , ssC :: Text
-    , ofC :: [Text]
-    , uC :: Text
-    , spC :: [Text]
-    , rpC :: [Text]
-    }
-    deriving (Show, Eq)
-
-data Roster = Roster
-    { cR :: [Text]
-    , b1R :: [Text]
-    , b2R :: [Text]
-    , b3R :: [Text]
-    , ssR :: [Text]
-    , ofR :: [Text]
-    , uR :: [Text]
-    , spR :: [Text]
-    , rpR :: [Text]
-    }
-    deriving (Show, Eq) 
- -}
