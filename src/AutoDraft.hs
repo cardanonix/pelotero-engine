@@ -105,15 +105,21 @@ addPlayerToPosition position player roster =
 
 main :: IO ()
 main = do
-    rankings1 <- readJson "testFiles/appData/rankings/team001_rankings.json"
-    rankings2 <- readJson "testFiles/appData/rankings/team002_rankings.json"
-    officialPlayers <- readJson "testFiles/appData/rosters/activePlayers.json"
-    config <- readJson "testFiles/appData/config/config.json"
+    rankings1Result <- readJson "testFiles/appData/rankings/team001_rankings.json"
+    rankings2Result <- readJson "testFiles/appData/rankings/team002_rankings.json"
+    officialPlayersResult <- readJson "testFiles/appData/rosters/activePlayers.json"
+    configResult <- readJson "testFiles/appData/config/config.json"
 
-    case (rankings1, rankings2, officialPlayers, config) of
-        (Right r1, Right r2, Right op, Right cfg) -> do
-            (roster1, roster2) <- draftPlayers r1 r2 op cfg
-            putStrLn "Draft completed."
-            writeJson "draftResults/team1Roster.json" roster1
-            writeJson "draftResults/team2Roster.json" roster2
-        _ -> putStrLn "Error loading data."
+    case rankings1Result of
+      Left err -> putStrLn $ "Failed to load team 1 rankings: " ++ err
+      Right r1 -> case rankings2Result of
+        Left err -> putStrLn $ "Failed to load team 2 rankings: " ++ err
+        Right r2 -> case officialPlayersResult of
+          Left err -> putStrLn $ "Failed to load official players: " ++ err
+          Right op -> case configResult of
+            Left err -> putStrLn $ "Failed to load configuration: " ++ err
+            Right cfg -> do
+              (roster1, roster2) <- draftPlayers r1 r2 op cfg
+              putStrLn "Draft completed."
+              writeJson "draftResults/team1Roster.json" roster1
+              writeJson "draftResults/team2Roster.json" roster2
