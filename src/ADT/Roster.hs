@@ -10,7 +10,7 @@ module Roster where
 import Config (Configuration, parseDouble)
 import Control.Applicative ((<|>))
 import Control.Monad (filterM)
-import Data.Aeson (FromJSON (..), Result (Success), Value, decode, eitherDecodeStrict, fromJSON, withObject, (.!=), (.:), (.:?))
+import Data.Aeson (FromJSON (..), ToJSON (..), Result (Success), Value, (.=), object, decode, eitherDecodeStrict, fromJSON, toJSON, withObject, (.!=), (.:), (.:?))
 import Data.Aeson.Types (Parser, Result (..), withScientific, withText)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B (readFile)
@@ -98,3 +98,18 @@ instance FromJSON Roster where
             <*> v .: "U"
             <*> v .: "SP"
             <*> v .: "RP"
+
+
+instance ToJSON Roster where
+    toJSON (Roster cR b1R b2R b3R ssR ofR uR spR rpR) =
+        object
+            [ "C" .= cR
+            , "1B" .= b1R
+            , "2B" .= b2R
+            , "3B" .= b3R
+            , "SS" .= ssR
+            , "OF" .= ofR
+            , "U" .= uR
+            , "SP" .= spR
+            , "RP" .= rpR
+            ]

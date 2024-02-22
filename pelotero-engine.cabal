@@ -200,7 +200,7 @@ executable autodraft
   hs-source-dirs: src, src/ADT, src/League
   main-is: AutoDraft.hs
   ghc-options: -O2
-  other-modules:  Config, OfficialRoster, Roster, Ranking
+  other-modules:  Config, OfficialRoster, Roster, Ranking, Input, Middle, Points, Validators
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time

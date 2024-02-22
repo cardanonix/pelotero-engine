@@ -16,9 +16,6 @@ import qualified Roster as R
 import qualified Ranking as PR
 import Validators
 
--- readJson :: FromJSON a => FilePath -> IO (Maybe a)
--- readJson filePath = decode <$> BL.readFile filePath
-
 writeJson :: ToJSON a => FilePath -> a -> IO ()
 writeJson filePath = BL.writeFile filePath . encode
 
@@ -28,25 +25,25 @@ emptyRoster = R.Roster [] [] [] [] [] [] [] [] []
 
 draftPlayers :: [PR.PlayerRanking] -> [PR.PlayerRanking] -> [O.OfficialPlayer] -> C.Configuration -> IO (R.Roster, R.Roster)
 draftPlayers rankings1 rankings2 officialPlayers config = do
-    -- Convert rankings to a list of player IDs for easier processing
-    let rankedPlayerIds1 = map PR.playerId rankings1
-    let rankedPlayerIds2 = map PR.playerId rankings2
     let officialPlayerIds = map O.playerId officialPlayers
+    let validRankedIds1 = filter (\ranking -> PR.playerId ranking `elem` officialPlayerIds) rankings1
+    let validRankedIds2 = filter (\ranking -> PR.playerId ranking `elem` officialPlayerIds) rankings2
+    let validRankedPlayerIds1 = map PR.playerId validRankedIds1
+    let validRankedPlayerIds2 = map PR.playerId validRankedIds2
 
-    -- Filter rankings to include only official players
-    let validRankedIds1 = filter (`elem` officialPlayerIds) rankedPlayerIds1
-    let validRankedIds2 = filter (`elem` officialPlayerIds) rankedPlayerIds2
-
-    -- Draft players alternating between teams
-    let draftCycle (roster1, roster2, availableIds) (rankId1, rankId2) = do
-            let player1 = findPlayer rankId1 officialPlayers availableIds
-            let player2 = findPlayer rankId2 officialPlayers (maybe availableIds (`delete` availableIds) player1)
-            let updatedRoster1 = maybe roster1 (`addToRoster` roster1) player1
-            let updatedRoster2 = maybe roster2 (`addToRoster` roster2) player2
-            return (updatedRoster1, updatedRoster2, maybe availableIds (`delete` availableIds) player2)
-
-    -- Fold over the paired rankings, drafting players
-    foldM draftCycle (emptyRoster, emptyRoster, officialPlayerIds) (zip validRankedIds1 validRankedIds2)
+    -- Use foldM to iterate over ranked player IDs, final step discards the list of available player IDs
+    (roster1, roster2, _) <- foldM (draftCycle config officialPlayers) (emptyRoster, emptyRoster, officialPlayerIds) (zip validRankedPlayerIds1 validRankedPlayerIds2)
+    return (roster1, roster2)
+    
+draftCycle :: C.Configuration -> [O.OfficialPlayer] -> (R.Roster, R.Roster, [Int]) -> (Int, Int) -> IO (R.Roster, R.Roster, [Int])
+draftCycle config officialPlayers (roster1, roster2, availablePlayers) (rankId1, rankId2) = do
+    let player1 = findPlayer rankId1 officialPlayers availablePlayers
+    let availablePlayersAfterP1 = maybe availablePlayers (\p -> delete (O.playerId p) availablePlayers) player1
+    let player2 = findPlayer rankId2 officialPlayers availablePlayersAfterP1
+    let updatedRoster1 = maybe roster1 (\p -> addToRoster config p roster1) player1
+    let updatedRoster2 = maybe roster2 (\p -> addToRoster config p roster2) player2
+    let availablePlayersAfterP2 = maybe availablePlayersAfterP1 (\p -> delete (O.playerId p) availablePlayersAfterP1) player2
+    return (updatedRoster1, updatedRoster2, availablePlayersAfterP2)
 
 -- Finds a player by ID in the list of official players, if available
 findPlayer :: Int -> [O.OfficialPlayer] -> [Int] -> Maybe O.OfficialPlayer
@@ -114,7 +111,7 @@ main = do
     config <- readJson "config/leagueConfig.json"
 
     case (rankings1, rankings2, officialPlayers, config) of
-        (Just r1, Just r2, Just op, Just cfg) -> do
+        (Right r1, Right r2, Right op, Right cfg) -> do
             (roster1, roster2) <- draftPlayers r1 r2 op cfg
             putStrLn "Draft completed."
             writeJson "draftResults/team1Roster.json" roster1
