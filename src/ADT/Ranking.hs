@@ -32,6 +32,7 @@ import Data.Aeson (FromJSON (..), Result (Success), Value, decode, eitherDecodeS
 import GHC.Generics (Generic)
 import Data.Text (Text)
 import Data.Time.Clock (UTCTime, getCurrentTime)
+import Data.Time.Format (formatTime, defaultTimeLocale)
 
 getCurrentFormattedTime :: IO String
 getCurrentFormattedTime = do
