@@ -105,30 +105,59 @@ addPlayerToPosition position player roster =
         "r_pitcher" -> roster { R.rpR = playerIdText : R.rpR roster }
         _ -> roster  -- No action if position is not recognized
 
+
 main :: IO ()
 main = do
     rankings1Result <- readJson "testFiles/appData/rankings/team001_rankings.json" :: IO (Either String PR.RankingData)
     rankings2Result <- readJson "testFiles/appData/rankings/team002_rankings.json" :: IO (Either String PR.RankingData)
-    officialPlayersResult <- readJson "testFiles/appData/rosters/activePlayers.json" :: IO (Either String [O.OfficialPlayer])
+    officialRosterResult <- readJson "testFiles/appData/rosters/activePlayers.json" :: IO (Either String O.OfficialRoster)  -- Updated this line
     configResult <- readJson "testFiles/appData/config/config.json" :: IO (Either String C.Configuration)
 
     case rankings1Result of
       Left err -> putStrLn $ "Failed to load team 1 rankings: " ++ err
       Right r1 -> case rankings2Result of
         Left err -> putStrLn $ "Failed to load team 2 rankings: " ++ err
-        Right r2 -> case officialPlayersResult of
+        Right r2 -> case officialRosterResult of  -- Updated this variable name
           Left err -> putStrLn $ "Failed to load official players: " ++ err
-          Right op -> case configResult of
-            Left err -> putStrLn $ "Failed to load configuration: " ++ err
-            Right cfg -> do
-              -- Extract rankings list from RankingData
-              let rankings1 = PR.rankings r1
-              let rankings2 = PR.rankings r2
-              -- Now pass the correct type to draftPlayers
-              (roster1, roster2) <- draftPlayers rankings1 rankings2 op cfg
-              putStrLn "Draft completed."
-              writeJson "draftResults/team1Roster.json" roster1
-              writeJson "draftResults/team2Roster.json" roster2
+          Right roster -> do  -- Changed 'op' to 'roster' for clarity
+              let op = O.people roster  -- Extract the list of OfficialPlayer from the OfficialRoster
+              case configResult of
+                Left err -> putStrLn $ "Failed to load configuration: " ++ err
+                Right cfg -> do
+                  -- Extract rankings list from RankingData
+                  let rankings1 = PR.rankings r1
+                  let rankings2 = PR.rankings r2
+                  -- Now pass the correct type to draftPlayers
+                  (roster1, roster2) <- draftPlayers rankings1 rankings2 op cfg
+                  putStrLn "Draft completed."
+                  writeJson "testFiles/appData/draftResults/team1Roster.json" roster1
+                  writeJson "testFiles/appData/draftResults/team2Roster.json" roster2
+
+
+-- main :: IO ()
+-- main = do
+--     rankings1Result <- readJson "testFiles/appData/rankings/team001_rankings.json" :: IO (Either String PR.RankingData)
+--     rankings2Result <- readJson "testFiles/appData/rankings/team002_rankings.json" :: IO (Either String PR.RankingData)
+--     officialPlayersResult <- readJson "testFiles/appData/rosters/activePlayers.json" :: IO (Either String [O.OfficialPlayer])
+--     configResult <- readJson "testFiles/appData/config/config.json" :: IO (Either String C.Configuration)
+
+--     case rankings1Result of
+--       Left err -> putStrLn $ "Failed to load team 1 rankings: " ++ err
+--       Right r1 -> case rankings2Result of
+--         Left err -> putStrLn $ "Failed to load team 2 rankings: " ++ err
+--         Right r2 -> case officialPlayersResult of
+--           Left err -> putStrLn $ "Failed to load official players: " ++ err
+--           Right op -> case configResult of
+--             Left err -> putStrLn $ "Failed to load configuration: " ++ err
+--             Right cfg -> do
+--               -- Extract rankings list from RankingData
+--               let rankings1 = PR.rankings r1
+--               let rankings2 = PR.rankings r2
+--               -- Now pass the correct type to draftPlayers
+--               (roster1, roster2) <- draftPlayers rankings1 rankings2 op cfg
+--               putStrLn "Draft completed."
+--               writeJson "draftResults/team1Roster.json" roster1
+--               writeJson "draftResults/team2Roster.json" roster2
 
 -- main :: IO ()
 -- main = do
