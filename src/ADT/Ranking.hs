@@ -31,7 +31,13 @@ import Data.Aeson (FromJSON (..), Result (Success), Value, decode, eitherDecodeS
 
 import GHC.Generics (Generic)
 import Data.Text (Text)
-import Data.Time.Clock (UTCTime)
+import Data.Time.Clock (UTCTime, getCurrentTime)
+
+getCurrentFormattedTime :: IO String
+getCurrentFormattedTime = do
+    currentTime <- getCurrentTime
+    let formattedTime = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" currentTime
+    return formattedTime
 
 -- | Represents the top-level ranking data structure.
 data RankingData = RankingData

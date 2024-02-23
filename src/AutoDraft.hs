@@ -7,7 +7,9 @@ import Data.Aeson (FromJSON, ToJSON, decode, encode, withObject, (.:))
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as Text
 import GHC.Generics (Generic)
-import Data.Time.Clock (UTCTime)
+import Data.Time.Clock (UTCTime, getCurrentTime)
+import Data.Time.Format (formatTime, defaultTimeLocale)
+
 import Data.Maybe (mapMaybe)
 import Data.List (find, delete)
 import qualified Config as C
@@ -105,10 +107,10 @@ addPlayerToPosition position player roster =
 
 main :: IO ()
 main = do
-    rankings1Result <- readJson "testFiles/appData/rankings/team001_rankings.json"
-    rankings2Result <- readJson "testFiles/appData/rankings/team002_rankings.json"
-    officialPlayersResult <- readJson "testFiles/appData/rosters/activePlayers.json"
-    configResult <- readJson "testFiles/appData/config/config.json"
+    rankings1Result <- readJson "testFiles/appData/rankings/team001_rankings.json" :: IO (Either String PR.RankingData)
+    rankings2Result <- readJson "testFiles/appData/rankings/team002_rankings.json" :: IO (Either String PR.RankingData)
+    officialPlayersResult <- readJson "testFiles/appData/rosters/activePlayers.json" :: IO (Either String [O.OfficialPlayer])
+    configResult <- readJson "testFiles/appData/config/config.json" :: IO (Either String C.Configuration)
 
     case rankings1Result of
       Left err -> putStrLn $ "Failed to load team 1 rankings: " ++ err
@@ -119,7 +121,16 @@ main = do
           Right op -> case configResult of
             Left err -> putStrLn $ "Failed to load configuration: " ++ err
             Right cfg -> do
-              (roster1, roster2) <- draftPlayers r1 r2 op cfg
+              -- Extract rankings list from RankingData
+              let rankings1 = PR.rankings r1
+              let rankings2 = PR.rankings r2
+              -- Now pass the correct type to draftPlayers
+              (roster1, roster2) <- draftPlayers rankings1 rankings2 op cfg
               putStrLn "Draft completed."
               writeJson "draftResults/team1Roster.json" roster1
               writeJson "draftResults/team2Roster.json" roster2
+
+-- main :: IO ()
+-- main = do
+--     formattedTime <- PR.getCurrentFormattedTime
+--     putStrLn $ "The current time is: " ++ formattedTime

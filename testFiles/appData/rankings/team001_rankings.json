@@ -1,7 +1,7 @@
 {
     "teamId": "unique_team_identifier", 
     "dataChecksum": "checksum_value", 
-    "lastUpdated": "YYYY-MM-DDTHH:MM:SSZ", 
+    "lastUpdated": "2024-02-23T02:37:20Z", 
     "rankings": [
       {"playerId": 420670, "rank": 1},
       {"playerId": 238692, "rank": 2},
