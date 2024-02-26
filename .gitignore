@@ -5,6 +5,7 @@
 *appData/rosters*
 *appData/config*
 *appData/points*
+*appData/rankings*
 output*
 /bower_components/
 /node_modules/
@@ -36,7 +37,7 @@ generated-plutus-scripts
 *.qcow2
 flake.nix.bak
 .DS_Store
-
+/script/
 *.local
 .vscode/*
 !.vscode/extensions.json
@@ -48,3 +49,4 @@ flake.nix.bak
 *.sln
 *.sw?
 contract/.nfs00000000020e067900000001
+notes/CBSLeagueScraper.py
