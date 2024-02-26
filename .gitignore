@@ -49,4 +49,8 @@ flake.nix.bak
 *.sln
 *.sw?
 contract/.nfs00000000020e067900000001
+<<<<<<< HEAD
 notes/CBSLeagueScraper.py
+=======
+notes/CBSLeagueScraper.py
+>>>>>>> 0c0919f (newest main changes)
