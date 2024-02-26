@@ -21,7 +21,7 @@ Ensure that you have the necessary Haskell libraries installed, such as:
 
 If you use nix, making sure all dependencies are covered is as simple as cloning and running:
 ```
-nix develop github:harryprayiv/scraperProto
+nix develop github:cardanonix/pelotero-engine
 ```
 
 
