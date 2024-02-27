@@ -165,7 +165,7 @@
             echo ..
             echo ...
             cabal build
-            cabal run roster
+            cabal run roster 2024
             echo .
             echo ..
             echo ...
@@ -173,41 +173,6 @@
         };
       }
     );
-    # oci_ImageResult = flake-utils.lib.eachDefaultSystem (system: let
-    #   overlayPkgs = import nixpkgs {
-    #     inherit system overlays;
-    #   };
-    #   linuxPkgs = import nixpkgs {
-    #     system = "x86_64-linux";
-    #     overlays = overlays;
-    #   };
-    # in {
-    #   packages.dev-env-docker = overlayPkgs.dockerTools.buildImage {
-    #     name = "dev-env-docker";
-    #     tag = "0.1.0";
-    #     # The packFunction ensures all packages are accessible inside the container.
-    #     packFunction = overlayPkgs.callPackage ({
-    #       writeScriptBin,
-    #       bash,
-    #       coreutils,
-    #     }:
-    #       writeScriptBin "setup-environment" ''
-    #         #!${bash}/bin/bash
-    #         export PATH="${coreutils}/bin:${overlayPkgs.haskellPackages.hls-fourmolu-plugin}/bin:${overlayPkgs.zlib}/bin:$PATH"
-    #       '' {});
-    #     contents = [
-    #       overlayPkgs.haskellPackages.hls-fourmolu-plugin
-    #       overlayPkgs.zlib
-    #     ];
-    #     config = {
-    #       Cmd = ["setup-environment"];
-    #     };
-    #     created = "2023_10_06_10_22_00";
-    #   };
-    #   devShells.default = overlayPkgs.mkShell {
-    #     buildInputs = with overlayPkgs; [bat vim];
-    #   };
-    # });
   in
     back_EndResults
     // {

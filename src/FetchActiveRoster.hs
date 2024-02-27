@@ -40,19 +40,31 @@ import Scraper
 import Conversion
 
 
+import System.Environment (getArgs)
+import Text.Read (readMaybe)
+
 main :: IO ()
 main = do
-    let rosterPath = "appData/rosters/activePlayers.json"
-    activeRoster <- fetchActiveRoster 2023 -- assuming 2023 is the season you're fetching for
+    args <- getArgs
+    case args of
+        (yearStr:_) -> case readMaybe yearStr of
+            Just year -> processYear year
+            Nothing -> putStrLn "Error: First argument must be a year (integer)."
+        _ -> putStrLn "Error: Please provide a year as the first argument."
+
+processYear :: Int -> IO ()
+processYear year = do
+    let rosterPath = "appData/rosters/" ++ show year ++ "_activePlayers.json"
+    activeRoster <- fetchActiveRoster year -- now using the year parameter
     case activeRoster of
         Left err -> putStrLn $ "Failed to fetch active roster: " ++ err
         Right rosterData -> writeRosterToFile rosterPath rosterData
 
     jsonData <- BL.readFile rosterPath
-    
+
     -- Parse JSON data
     let decodedData = eitherDecode jsonData :: Either String PlayersFile
-    
+
     case decodedData of
         Left err -> putStrLn err
         Right parsedData -> do
@@ -61,4 +73,5 @@ main = do
             
             -- Convert to CSV
             let csvData = Csv.encodeDefaultOrderedByName playersList
-            BL.writeFile "appData/rosters/activePlayers.csv" csvData
+            let csvPath = "appData/rosters/" ++ show year ++ "_activePlayers.csv"
+            BL.writeFile csvPath csvData
