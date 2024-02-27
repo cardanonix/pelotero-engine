@@ -1,0 +1,23 @@
+make a bash script that looks at the json files in a folder and creates a composite summed json file of all of them
+
+
+scrapedData/2023_03_30/2023_03_30_gameIds.txt which is a list of game ids with nothing else:
+that looks like this
+``
+718767
+718768
+718769
+718770
+718772
+718773
+718774
+718775
+718776
+718777
+718778
+718779
+718780
+718781
+718782
+``
+and uses those game id's to scrape json files which are named like this: scrapedData/2023_03_30/718767_FINAL.json

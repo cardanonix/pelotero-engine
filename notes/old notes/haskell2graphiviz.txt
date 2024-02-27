@@ -1,0 +1,232 @@
+convert these haskell data types (ghc 8.10.7) into accurate representations in Graphviz code:
+``
+newtype BallparkId = BallparkId String deriving (Show, Eq)
+newtype MLBPlayerId = MLBPlayerId String deriving (Show, Eq)
+newtype TeamId = TeamId String deriving (Show, Eq)
+
+data MLBPlayer = MLBPlayer
+  { playerId :: MLBPlayerId
+  , firstName :: String
+  , lastName :: String
+  , team :: TeamId
+  , positions :: [Position]
+  , isOnInjuredList :: Bool
+  , countStats :: Bool
+  } deriving (Show, Eq)
+
+data MLBTeam = MLBTeam
+  { teamId :: TeamId
+  , teamName :: String
+  , teamAbbreviation :: String
+  , players :: [MLBPlayerId]
+  , homePark :: BallparkId
+  , league :: League
+  , division :: Division
+  }
+
+data PositionCount = PositionCount
+  { minCount :: Int
+  , maxCount :: Int
+  } deriving (Show, Eq)
+
+data RosterCount = RosterCount
+  { pitchers :: PositionCount
+  , relievers :: PositionCount
+  , catchers :: PositionCount
+  , firstBasemen :: PositionCount
+  , secondBasemen :: PositionCount
+  , thirdBasemen :: PositionCount
+  , shortstops :: PositionCount
+  , outfielders :: PositionCount
+  } deriving (Show, Eq)
+
+typicalRosterCount :: RosterCount
+typicalRosterCount = RosterCount
+  { pitchers = PositionCount { minCount = 5, maxCount = 6 }
+  , relievers = PositionCount { minCount = 4, maxCount = 8 }
+  , catchers = PositionCount { minCount = 2, maxCount = 3 }
+  , firstBasemen = PositionCount { minCount = 1, maxCount = 2 }
+  , secondBasemen = PositionCount { minCount = 1, maxCount = 2 }
+  , thirdBasemen = PositionCount { minCount = 1, maxCount = 2 }
+  , shortstops = PositionCount { minCount = 1, maxCount = 2 }
+  , outfielders = PositionCount { minCount = 4, maxCount = 5 }
+  }
+
+data League = AmericanLeague | NationalLeague
+  deriving (Eq, Show)
+
+data Division = East | Central | West
+  deriving (Eq, Show)
+
+data Ballpark = Ballpark
+  { ballparkId :: String
+  , ballparkName :: String
+  }
+
+data Position = Pitcher | Reliever | Catcher | FirstBase | SecondBase | ThirdBase | Shortstop | Outfield
+  deriving (Eq, Show)
+
+data StatType
+  = BattingStat BattingStats
+  | PitchingStat PitchingStats
+  deriving (Show, Eq)
+
+batting :: Stats -> Maybe BattingStats
+batting (Stats _ (BattingStat bs)) = Just bs
+batting _ = Nothing
+
+pitching :: Stats -> Maybe PitchingStats
+pitching (Stats _ (PitchingStat ps)) = Just ps
+pitching _ = Nothing
+
+data Stats = Stats
+  { player :: MLBPlayerId
+  , statType :: StatType
+  } deriving (Show, Eq)
+
+data BattingStats = BattingStats
+  { singles :: Double
+  , doubles :: Double
+  , triples :: Double
+  , homeRuns :: Double
+  , rbi :: Double
+  , runs :: Double
+  , baseOnBalls :: Double
+  , stolenBases :: Double
+  , strikeouts :: Double
+  , caughtStealing :: Double
+  , hitByPitch :: Double
+  , fpts :: Double
+  , fppg :: Double
+  , gp :: Double
+  , tpa :: Double
+  , ab :: Double
+  , hits :: Double
+  , avg :: Double
+  , obp :: Double
+  , slg :: Double
+  , ops :: Double
+  , tb :: Double
+  , sb :: Double
+  , cs :: Double
+  , hbp :: Double
+  , sh :: Double
+  , sf :: Double
+  , e :: Double
+  , a :: Double
+  , gdp :: Double
+  } deriving (Show, Eq)
+
+data PitchingStats = PitchingStats
+  { wins :: Double
+  , losses :: Double
+  , era :: Double
+  , saves :: Double
+  , qualityStarts :: Double
+  , strikeoutsPitcher :: Double
+  , baseOnBallsPitcher :: Double
+  , inningsPitched :: Double
+  , hitsAllowed :: Double
+  , earnedRuns :: Double
+  , hitBatsman :: Double
+  , fptsPitcher :: Double
+  , fppgPitcher :: Double
+  , gpPitcher :: Double
+  , gs :: Double
+  , cg :: Double
+  , sho :: Double
+  , hld :: Double
+  , gbPercent :: Maybe Double
+  , so9 :: Double
+  , bb9 :: Double
+  } deriving (Show, Eq)
+``
+
+
+convert these haskell data types (ghc 8.10.7) into accurate representations in Graphviz code:
+``
+newtype GameId = GameId String deriving (Show, Eq)
+
+data GameStatus = InProgress | Finished deriving (Eq, Show)
+
+data Scorecard = Scorecard
+  { gameId :: GameId
+  , playEvents :: [PlayEvent]
+  , gameStatus :: GameStatus
+  } deriving (Show, Eq)
+
+data HalfInning = Top | Bottom deriving (Eq, Show)
+
+data PlayEventType
+  = Single
+  | Double
+  | Triple
+  | HomeRun
+  | Walk
+  | Strikeout
+  | HitByPitch
+  | FieldersChoice
+  | GroundOut
+  | FlyOut
+  | LineOut
+  | GroundIntoDoublePlay
+  | GroundIntoTriplePlay
+  | StolenBase
+  | CaughtStealing
+  | WildPitch
+  | PassedBall
+  | Balk
+  | Error
+  | SacrificeBunt
+  | SacrificeFly
+  | IntentionalWalk
+  | DefensiveIndifference
+  | Interference
+  | FieldObstruction
+  | OtherPlay
+  deriving (Show, Eq)
+
+data PlayEvent = PlayEvent
+  { playEventType :: PlayEventType
+  , inning :: Int
+  , halfInning :: HalfInning
+  , batter :: MLBPlayerId
+  , pitcher :: MLBPlayerId
+  , teamIds :: (TeamId, TeamId)
+  , runnerAdvanced_event :: [(MLBPlayerId, Int)]
+  , runScored_event :: Int
+  , rbi_event :: Int
+  , out_event :: (Int,Int)
+  , error_event :: Int
+  } deriving (Show, Eq)
+
+allPlayEventTypes :: [PlayEventType]
+allPlayEventTypes =
+  [ Single
+  , Double
+  , Triple
+  , HomeRun
+  , Walk
+  , Strikeout
+  , HitByPitch
+  , FieldersChoice
+  , GroundOut
+  , FlyOut
+  , LineOut
+  , GroundIntoDoublePlay
+  , GroundIntoTriplePlay
+  , StolenBase
+  , CaughtStealing
+  , WildPitch
+  , PassedBall
+  , Balk
+  , Error
+  , SacrificeBunt
+  , SacrificeFly
+  , IntentionalWalk
+  , DefensiveIndifference
+  , Interference
+  , FieldObstruction
+  , OtherPlay
+  ]
+``

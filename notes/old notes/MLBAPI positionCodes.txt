@@ -1,0 +1,27 @@
+also create an type that represents position codes defined below
+
+position codes enum: {1: Pitcher (P)
+
+2: Catcher (C)
+
+3: First Base (1B)
+
+4: Second Base (2B)
+
+5: Third Base (3B)
+
+6: Shortstop (SS)
+
+7: Left Field (LF)
+
+8: Center Field (CF)
+
+9: Right Field (RF)
+
+10: Designated Hitter (DH)
+
+11: Pinch Hitter (PH)
+
+12: Pinch Runner (PR)
+
+13: Unknown Position (UN)}

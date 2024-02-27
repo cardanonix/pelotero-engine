@@ -1,0 +1,83 @@
+curl -s "https://statsapi.mlb.com//api/v1.1/game/719087/feed/live" | jq '.liveData.plays.allPlays[] | "batter: " + .matchup.batter.fullName + " (" + (.matchup.batter.id|tostring) + ") " + .result.eventType + " vs pitcher: " + .matchup.pitcher.fullName + " (" + (.matchup.pitcher.id|tostring) + "), inning: " + .about.halfInning + " of the " + (.about.inning|tostring) + ", out: " + (.about.hasOut|tostring) + ", scoring play: " + (.about.isScoringPlay|tostring)'
+
+# result of all plays
+curl -s "https://statsapi.mlb.com//api/v1.1/game/719087/feed/live" | jq '.liveData.plays.allPlays[] | "batter: " + .matchup.batter.fullName + " (" + (.matchup.batter.id|tostring) + ") " + .result.eventType + " vs pitcher: " + .matchup.pitcher.fullName + " (" + (.matchup.pitcher.id|tostring) + "), inning: " + .about.halfInning + " of the " + (.about.inning|tostring) + ", out: " + (.about.hasOut|tostring) + ", scoring play: " + (.about.isScoringPlay|tostring)'
+
+
+# get scoring plays
+curl -s "https://statsapi.mlb.com//api/v1.1/game/719087/feed/live" | jq '[.liveData.plays.allPlays[].about.isScoringPlay] | map(select(. == true)) | length'
+
+found from this Reddit comment: 
+
+http://statsapi.mlb.com/api/v1/game/718780/boxscore
+
+
+I wrote a console app that downloads and parse stats from the old xml repository and I had to rewrite it this year when I realized that everything had moved to the new API.  Here are a few of the endpoints I use with my import.  Maybe they'll help some of you guys.  I do a daily import which allows me to do scoring for an old-school weekend only fantasy baseball league.  I use the v1 API for everything right now.  Haven't found a need to use v1.1.
+
+&#x200B;
+
+Some, maybe all, of this information is probably already out here somewhere but I figured it might help somebody get started.
+
+&#x200B;
+
+Base URL:  [http://statsapi.mlb.com:80/api/v1/](http://statsapi.mlb.com:80/api/v1/)
+
+First, I update rosters.  I experimented with a few of the endpoints when the docs were still active and found that the best one for my purposes was the depth chart.  I have had all the MLB teams stored in a table for years so I fetch their depth chart by ID.
+
+URL:  [http://statsapi.mlb.com:80/api/v1/teams/{<MLBTEAMID>}/roster/depthChart](http://statsapi.mlb.com:80/api/v1/)
+
+Example: [http://statsapi.mlb.com:80/api/v1/teams/158/roster/depthChart](http://statsapi.mlb.com:80/api/v1/)
+
+Then, for each team, I build a collection of player IDs and hit the people endpoint to fetch player objects so I can update injury status, position, etc.
+
+URL:  r/[http://statsapi.mlb.com:80/api/v1/people?personIds=](http://statsapi.mlb.com:80/api/v1/people?personIds=)<COMMA\_SEPARATED\_PLAYERIDS>
+
+Example:   r/[http://statsapi.mlb.com:80/api/v1/people?personIds=400284%2C405395%2C407812%2C407822](http://statsapi.mlb.com:80/api/v1/people?personIds=400284%2C405395%2C407812%2C407822)
+
+&#x200B;
+
+After I update rosters, I fetch all games played by date from the schedule endpoint.  Most times I do 1 day at a time, but if I need to, I can run the process for a date range, too.  Due to issues I found with data in box scores, I only use this step to fetch all game pack id's, which are then used to download each box score.  I found that scores were often incorrect from the schedule endpoint but that the box score endpoint is accurate.
+
+Schedule URL: [http://statsapi.mlb.com:80/api/v1/schedule?sportId=1&date={<PROCESSINGDATE>:MM/dd/yyyy}](http://statsapi.mlb.com:80/api/v1/)
+
+Example:[http://statsapi.mlb.com:80/api/v1/schedule?sportId=1&date=0](http://statsapi.mlb.com:80/api/v1/)9/14/2018
+
+Box Score URL: [http://statsapi.mlb.com:80/api/v1/game/{<GAMEPACKID>}/boxscore](http://statsapi.mlb.com:80/api/v1/)
+
+Example:  [http://statsapi.mlb.com:80/api/v1/game/530629/boxscore](http://statsapi.mlb.com:80/api/v1/)
+
+&#x200B;
+
+I use the box score response to parse and save stats for each player who played in the game then I used my own database to report scoring and do my own research.  Below is a list of team IDs that MLB uses in their own applications.
+
+**Team IDs:**
+108	LAA	Angels
+109	ARI	D-backs
+110	BAL	Orioles
+111	BOS Red Sox
+112	CHC Cubs
+113	CIN	Reds
+114	CLE	Indians
+115	COL	Rockies
+116	DET	Tigers
+117	HOU Astros
+118	KC	Royals
+119	LAD	Dodgers
+120	WSH Nationals
+121	NYM Mets
+133	OAK Athletics
+134	PIT	Pirates
+135	SD	Padres
+136	SEA	Mariners
+137	SF	Giants
+138	STL	Cardinals
+139	TB	Rays
+140	TEX	Rangers
+141	TOR	Blue Jays
+142	MIN Twins
+143	PHI	Phillies
+144	ATL	Braves
+145	CWS White Sox
+146	MIA	Marlins
+147	NYY	Yankees
+158	MIL	Brewers

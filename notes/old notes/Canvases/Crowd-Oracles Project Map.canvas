@@ -1,0 +1,16 @@
+{
+	"nodes":[
+		{"type":"text","text":"Oracle Feed","id":"aaf27ecc4282ac58","x":-480,"y":-500,"width":250,"height":60,"color":"4"},
+		{"type":"text","text":"Treasury","id":"4b3767c91b7a4718","x":-165,"y":-730,"width":125,"height":50,"color":"4"},
+		{"type":"text","text":"Cardano DApp","id":"9a9b018c7d9021a9","x":-40,"y":-500,"width":250,"height":60,"color":"#0062ad"},
+		{"id":"a9a195fa3417b493","x":-605,"y":-1040,"width":250,"height":60,"color":"4","type":"text","text":"Oracle Main Layer"},
+		{"type":"text","text":"Oracle Concensus Layer","id":"2b82facdeb535f9f","x":-542,"y":-870,"width":125,"height":50,"color":"4"},
+		{"type":"text","text":"Ergo","id":"9030c14f6c5b1e21","x":-102,"y":-1100,"width":125,"height":90,"color":"1"}
+	],
+	"edges":[
+		{"id":"43200e2b62ecc726","fromNode":"aaf27ecc4282ac58","fromSide":"right","toNode":"9a9b018c7d9021a9","toSide":"left"},
+		{"id":"5ecb30a32199afc9","fromNode":"a9a195fa3417b493","fromSide":"bottom","toNode":"2b82facdeb535f9f","toSide":"top"},
+		{"id":"83593f2a0ceb3dd1","fromNode":"2b82facdeb535f9f","fromSide":"bottom","toNode":"aaf27ecc4282ac58","toSide":"top"},
+		{"id":"205eb33f85e421e9","fromNode":"4b3767c91b7a4718","fromSide":"left","toNode":"2b82facdeb535f9f","toSide":"right","fromEnd":"arrow"}
+	]
+}

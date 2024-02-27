@@ -1,0 +1,4 @@
+{
+  "gameId": Int64,
+  "gameStats": GameStats
+}

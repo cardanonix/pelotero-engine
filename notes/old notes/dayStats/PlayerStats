@@ -1,0 +1,9 @@
+{
+  "playerId": Int,
+  "fullName": String,
+  "parentTeamId": Int,
+  "allPositions": [Int],
+  "status": String,
+  "batting": ?BattingStats,
+  "pitching": ?PitchingStats
+}
