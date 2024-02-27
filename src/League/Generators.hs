@@ -1,7 +1,7 @@
 -- {-# LANGUAGE OverloadedStrings #-}
 -- {-# LANGUAGE RecordWildCards #-}
 
-module Generators where
+module Main (main) where
 
 import Control.Monad (filterM, forM)
 import Data.Aeson (FromJSON (..), Result (Success), ToJSON (..), Value, decode, eitherDecodeStrict, fromJSON, withObject, (.!=), (.:), (.:?))
@@ -16,6 +16,10 @@ import Data.Maybe (catMaybes, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Debug.Trace (traceShow, traceShowM)
+import System.Random (randomR, newStdGen, StdGen)
+
+
+
 
 import qualified Config as C
 import qualified GHC.Generics as R
@@ -25,3 +29,13 @@ import qualified OfficialRoster as O
 import qualified Points as P
 import qualified Roster as R
 import Validators
+
+-- pure function to generate a random number (and a new generator)
+randomInt :: (Int, Int) -> StdGen -> (Int, StdGen)
+randomInt range gen = randomR range gen
+
+main :: IO ()
+main = do
+    gen <- newStdGen
+    let (randomNumber, newGen) = randomInt (1, 1226) gen
+    print randomNumber

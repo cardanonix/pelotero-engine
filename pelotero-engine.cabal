@@ -221,4 +221,32 @@ executable autodraft
                 , crypton
                 , scientific
                 , directory
-                , async                
+                , async          
+
+executable generators
+  hs-source-dirs: src, src/ADT, src/League
+  main-is: Generators.hs
+  ghc-options: -O2
+  other-modules:  Config, OfficialRoster, Roster, Ranking, Input, Middle, Points, Validators
+  build-depends:  base >=4.11 && <4.18
+                , random
+                , http-conduit 
+                , time
+                , bytestring
+                , http-client-tls
+                , http-client
+                , zlib
+                , process
+                , aeson
+                , aeson-schemas
+                , lens
+                , vector
+                , unordered-containers
+                , text
+                , debug-trace-var
+                , containers
+                , cryptohash-sha256
+                , crypton
+                , scientific
+                , directory
+                , async                                
