@@ -25,7 +25,6 @@ writeJson filePath = BL.writeFile filePath . encode
 emptyRoster :: R.Roster
 emptyRoster = R.Roster [] [] [] [] [] [] [] [] []
 
-
 positionCodeToText :: Text.Text -> Text.Text
 positionCodeToText code =
   case code of
@@ -97,7 +96,6 @@ draftPlayers rankings1 rankings2 officialPlayers config = do
 
   return (roster1, roster2)
 
-
 draftCycle :: C.Configuration -> [O.OfficialPlayer] -> (R.Roster, R.Roster, [Int], Bool) -> ((Int, Int), Bool) -> IO (R.Roster, R.Roster, [Int], Bool)
 draftCycle config officialPlayers (roster1, roster2, availablePlayers, isTeam1Turn) ((rankId1, rankId2), nextIsTeam1Turn) = do
     putStrLn $ "Attempting to draft players with IDs: " ++ show rankId1 ++ ", " ++ show rankId2
@@ -120,10 +118,6 @@ extendRankingsWithUnrankedPlayers rankedPlayers allPlayerIds =
         unrankedPlayerIds = filter (`notElem` rankedPlayerIds) allPlayerIds
     in rankedPlayerIds ++ unrankedPlayerIds -- Concatenate ranked with unranked
 
-findPlayer :: Int -> [O.OfficialPlayer] -> [Int] -> Maybe O.OfficialPlayer
-findPlayer playerId players availableIds =
-    find (\p -> O.playerId p == playerId && playerId `elem` availableIds) players
-
 addToRoster :: C.Configuration -> O.OfficialPlayer -> R.Roster -> R.Roster
 addToRoster config player roster =
   let positionCode = O.primaryPosition player
@@ -133,7 +127,7 @@ addToRoster config player roster =
       addToPosition = if isPitcher then
                         addPitcherToRoster config player roster
                       else
-                        addNonPitcherToRoster config player roster draftPositionText
+                        addBatterToRoster config player roster draftPositionText
   in addToPosition
 
 addPitcherToRoster :: C.Configuration -> O.OfficialPlayer -> R.Roster -> R.Roster
@@ -149,42 +143,14 @@ addPitcherToRoster config player roster =
      else
        roster -- No action if no pitching slots available
 
-addNonPitcherToRoster :: C.Configuration -> O.OfficialPlayer -> R.Roster -> Text.Text -> R.Roster
-addNonPitcherToRoster config player roster position =
+addBatterToRoster :: C.Configuration -> O.OfficialPlayer -> R.Roster -> Text.Text -> R.Roster
+addBatterToRoster config player roster position =
   let rosterLimit = lookupLimit position (C.draft_limits $ C.draft_parameters config)
       currentPositionCount = countPlayers position roster
   in if currentPositionCount < rosterLimit then
        addPlayerToPosition position player roster
      else
        roster -- No action if position is full
-
-lookupLimit :: Text.Text -> C.DraftRoster -> Int
-lookupLimit position limits =
-    case position of
-        "catcher" -> C.dr_catcher limits
-        "first" -> C.dr_first limits
-        "second" -> C.dr_second limits
-        "third" -> C.dr_third limits
-        "shortstop" -> C.dr_shortstop limits
-        "outfield" -> C.dr_outfield limits
-        "utility" -> C.dr_utility limits
-        "s_pitcher" -> C.dr_s_pitcher limits
-        "r_pitcher" -> C.dr_r_pitcher limits
-        _ -> 0
-
-countPlayers :: Text.Text -> R.Roster -> Int
-countPlayers position roster =
-    case position of
-        "catcher" -> length $ R.cR roster
-        "first" -> length $ R.b1R roster
-        "second" -> length $ R.b2R roster
-        "third" -> length $ R.b3R roster
-        "shortstop" -> length $ R.ssR roster
-        "outfield" -> length $ R.ofR roster
-        "utility" -> length $ R.uR roster
-        "s_pitcher" -> length $ R.spR roster
-        "r_pitcher" -> length $ R.rpR roster
-        _ -> 0
 
 addPlayerToPosition :: Text.Text -> O.OfficialPlayer -> R.Roster -> R.Roster
 addPlayerToPosition position player roster =

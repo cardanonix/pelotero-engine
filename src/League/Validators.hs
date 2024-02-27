@@ -7,10 +7,10 @@ import Control.Monad (filterM, forM)
 import Data.Aeson (FromJSON (..), Result (Success), ToJSON (..), Value, decode, eitherDecodeStrict, fromJSON, withObject, (.!=), (.:), (.:?))
 import Data.Aeson.Types (Parser, Result (..))
 import Data.ByteString (ByteString)
+import Data.List ( find, delete, nub, (\\) )
 import qualified Data.ByteString as B
 import Data.ByteString.Lazy.Char8 (pack)
 import Data.Foldable (foldl', forM_)
-import Data.List (nub, (\\))
 import qualified Data.Map.Strict as M
 import Data.Maybe (catMaybes, mapMaybe)
 import Data.Text (Text)
@@ -88,6 +88,12 @@ validateAndPrintLineup manager config = do
             mapM_ (putStrLn . Text.unpack) duplicates
             return False
 
+
+findPlayer :: Int -> [O.OfficialPlayer] -> [Int] -> Maybe O.OfficialPlayer
+findPlayer playerId players availableIds =
+    find (\p -> O.playerId p == playerId && playerId `elem` availableIds) players
+
+
 -- This function validates a lineup and returns True or False.
 isLineupValid :: R.LgManager -> C.Configuration -> Bool
 isLineupValid manager config =
@@ -124,8 +130,7 @@ lookupPlayerInRoster playerId roster =
 
 getRosterDiscrepancies :: R.Roster -> C.DraftRoster -> [String]
 getRosterDiscrepancies roster limits =
-    catMaybes $ map validatePosition
-    [ ("catcher", R.cR roster, C.dr_catcher limits)
+    mapMaybe validatePosition [ ("catcher", R.cR roster, C.dr_catcher limits)
     , ("first", R.b1R roster, C.dr_first limits)
     , ("second", R.b2R roster, C.dr_second limits)
     , ("third", R.b3R roster, C.dr_third limits)
@@ -140,6 +145,20 @@ getRosterDiscrepancies roster limits =
         let diff = length players - limit
         in if diff > 0 then Just $ posName ++ ": Too many players - " ++ show diff else Nothing
 
+countPlayers :: Text.Text -> R.Roster -> Int
+countPlayers position roster =
+    case position of
+        "catcher" -> length $ R.cR roster
+        "first" -> length $ R.b1R roster
+        "second" -> length $ R.b2R roster
+        "third" -> length $ R.b3R roster
+        "shortstop" -> length $ R.ssR roster
+        "outfield" -> length $ R.ofR roster
+        "utility" -> length $ R.uR roster
+        "s_pitcher" -> length $ R.spR roster
+        "r_pitcher" -> length $ R.rpR roster
+        _ -> 0
+
 validateRoster :: R.Roster -> C.Configuration -> Either [String] ()
 validateRoster roster config = do
     let discrepancies = getRosterDiscrepancies roster (C.draft_limits $ C.draft_parameters config)
@@ -148,6 +167,20 @@ validateRoster roster config = do
         (Left _, []) -> Right ()
         (Right duplicates, []) -> Left (map Text.unpack duplicates ++ ["Duplicate player IDs found in roster."])
         (_, errors) -> Left errors
+
+lookupLimit :: Text.Text -> C.DraftRoster -> Int
+lookupLimit position limits =
+    case position of
+        "catcher" -> C.dr_catcher limits
+        "first" -> C.dr_first limits
+        "second" -> C.dr_second limits
+        "third" -> C.dr_third limits
+        "shortstop" -> C.dr_shortstop limits
+        "outfield" -> C.dr_outfield limits
+        "utility" -> C.dr_utility limits
+        "s_pitcher" -> C.dr_s_pitcher limits
+        "r_pitcher" -> C.dr_r_pitcher limits
+        _ -> 0
 
 -- also used in Leaderboard to verify that the player is valid except with that different player type
 hasValidPositions :: Value -> Bool
