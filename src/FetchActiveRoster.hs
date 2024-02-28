@@ -1,46 +1,32 @@
 module Main (main) where
 
-import Control.Monad (filterM)
-import Data.Aeson (
-    FromJSON (..),
-    Result (Success),
-    Value,
-    decode,
-    eitherDecodeStrict,
-    fromJSON,
-    withObject,
-    (.!=),
-    (.:),
-    (.:?),
- )
-
+import Data.ByteString.Lazy.Char8 ( pack )
+import System.Environment ( getArgs )
+import Data.Csv (ToNamedRecord, namedRecord, (.=))
+import Data.Aeson
 import Data.Aeson.Types ( Parser, Result(..) )
+
+
+import Data.ByteString (ByteString)
+import qualified Data.Csv as Csv
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
-import Data.ByteString.Lazy.Char8 ( pack)
-import System.Environment ( getArgs)
-import Data.Aeson
-import Data.Csv (ToNamedRecord, namedRecord, (.=))
-import Control.Monad (mzero)
-import Data.Aeson.Types (Parser, Result (..))
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as B
-import qualified Data.Csv as Csv
 import qualified Data.Text.Encoding as TE
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as Text
 import qualified Data.Map.Strict as M
-import Data.ByteString.Lazy.Char8 (pack)
+
+
+import Control.Monad ( filterM, mzero )
 import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import Debug.Trace (traceShowM)
+
+
 import Input
 import Middle
 import Scraper
 import Conversion
-
-
-import System.Environment (getArgs)
 import Text.Read (readMaybe)
 
 main :: IO ()
@@ -70,7 +56,7 @@ processYear year = do
         Right parsedData -> do
             -- Convert HashMap to List
             let playersList = HM.elems $ officialPlayers parsedData
-            
+
             -- Convert to CSV
             let csvData = Csv.encodeDefaultOrderedByName playersList
             let csvPath = "appData/rosters/" ++ show year ++ "_activePlayers.csv"

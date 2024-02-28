@@ -6,7 +6,7 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
 module Scraper (
-    scrapeDataForDateRange,
+    scrapeStatsForDateRange,
     writeRosterToFile,
     fetchActiveRoster,
 ) where
@@ -56,27 +56,13 @@ import Network.HTTP.Simple (
 import System.Directory (createDirectoryIfMissing, doesFileExist)
 
 import qualified Input as I
-
-import Input (
-    ActivePlayer (..),
-    DateEntry (..),
-    GameData (..),
-    GameID (..),
-    GameSchedule (..),
-    LiveGameStatus (..),
-    LiveGameStatusWrapper (..),
-    LiveGameWrapper (..),
-    Player (..),
-    PlayerStats (..),
-    TeamData (..),
- )
 import qualified Middle as MI
 import qualified Points as P
 import Validators
 
 -- A (date String) -> [B] (list of gameIds/GameSchedule)
 -- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule
-fetchGameScheduleForDate :: String -> IO (Either String GameSchedule)
+fetchGameScheduleForDate :: String -> IO (Either String I.GameSchedule)
 fetchGameScheduleForDate date = do
     scheduleResult <- fetchAndDecodeJSON (scheduleUrl date)
     return $ fmap (assignDateToSchedule (T.pack date)) scheduleResult
@@ -93,9 +79,9 @@ fetchFinishedBxScore gameId = do
     gameStatusResult <- fetchGameStatus gameId
     case gameStatusResult of
         Right gameDataWrapper -> do
-            let liveStatusWrapper = gameData gameDataWrapper
-            let liveStatus = gameStatus liveStatusWrapper
-            if codedGameState liveStatus == "F"
+            let liveStatusWrapper = I.gameData gameDataWrapper
+            let liveStatus = I.gameStatus liveStatusWrapper
+            if I.codedGameState liveStatus == "F"
                 then do
                     boxscoreResult <- fetchAndDecodeJSON (boxScoreUrl gameId)
                     return $ fmap (Just . assignGameIdToPlayers gameId) boxscoreResult
@@ -124,6 +110,11 @@ fetchFinishedBxScoresToJsonPlayerData gameIds = do
     gameDataResult <- fetchFinishedBxScores gameIds
     return $ fmap convertGameDataMapToJsonPlayerData gameDataResult
 
+-- Main scraper function tying stats scaping everything together
+scrapeStatsForDateRange :: String -> String -> IO ()
+scrapeStatsForDateRange start end = do
+    mapM_ processDate (generateDateRange start end)
+
 processDate :: String -> IO ()
 processDate date = do
     putStrLn $ "Processing " ++ date
@@ -140,11 +131,6 @@ processDate date = do
                     -- The printout of flattenedPlayers has been removed
                     let filename = formatFilename date
                     writeDataToFile filename "appData/stats" _flattenedPlayers
-
--- Main scraper function tying everything together
-scrapeDataForDateRange :: String -> String -> IO ()
-scrapeDataForDateRange start end = do
-    mapM_ processDate (generateDateRange start end)
 
 flattenedPlayersList :: M.Map Text MI.JsonPlayerData -> M.Map Text MI.JsonPlayerData
 flattenedPlayersList = id -- or simply remove this function and use the map directly
@@ -196,21 +182,21 @@ withEither action successHandler = do
         Right dataPacket -> successHandler dataPacket
 
 -- Special Enhancement of fromJSON types that gets called as post-processing in the fetch functions
-assignDateToSchedule :: Text -> GameSchedule -> GameSchedule
+assignDateToSchedule :: Text -> I.GameSchedule -> I.GameSchedule
 assignDateToSchedule date schedule =
-    let assignToDateEntry entry = entry{games = fmap (V.map assignToDate) (games entry)}
-        assignToDate gameID = gameID{game_date = Just date}
-     in schedule{dates = map assignToDateEntry (dates schedule)}
+    let assignToDateEntry entry = entry{I.games = fmap (V.map assignToDate) (I.games entry)}
+        assignToDate gameID = gameID{I.game_date = Just date}
+     in schedule{I.dates = map assignToDateEntry (I.dates schedule)}
 
-assignGameIdToPlayers :: Int -> GameData -> GameData
+assignGameIdToPlayers :: Int -> I.GameData -> I.GameData
 assignGameIdToPlayers gameId gameData =
-    let assignToTeam team = team{players = M.map assignToPlayer (players team)}
-        assignToPlayer player = player{gameid = Just gameId}
+    let assignToTeam team = team{I.players = M.map assignToPlayer (I.players team)}
+        assignToPlayer player = player{I.gameid = Just gameId}
      in gameData
-            { teams =
-                (teams gameData)
-                    { I.away = assignToTeam (I.away (teams gameData))
-                    , I.home = assignToTeam (I.home (teams gameData))
+            { I.teams =
+                (I.teams gameData)
+                    { I.away = assignToTeam (I.away (I.teams gameData))
+                    , I.home = assignToTeam (I.home (I.teams gameData))
                     }
             }
 
@@ -222,11 +208,11 @@ fetchAndDecodeJSON url = do
 
 -- Takes a schedule bytestring and outputs true if games are happening, false otherwise.
 hasGamesForDate :: I.GameSchedule -> Bool
-hasGamesForDate schedule = any (isJust . games) (dates schedule)
+hasGamesForDate schedule = any (isJust . I.games) (I.dates schedule)
 
 -- Takes a schedule bytestring and outputs an array of gameId's or errors
 extractGameIds :: I.GameSchedule -> [Int]
-extractGameIds gameData = concatMap (maybe [] (V.toList . fmap gamePk) . games) (dates gameData)
+extractGameIds gameData = concatMap (maybe [] (V.toList . fmap I.gamePk) . I.games) (I.dates gameData)
 
 -- ## FileName Manipulation Stuff
 -- Takes a filename, path, and the data to save, then writes to a JSON file at the specified path with the given filename.

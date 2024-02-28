@@ -52,11 +52,11 @@ nix develop github:cardanonix/pelotero-engine
 
 - processDate: Processes a given date by fetching game schedule and game data, then outputs them.
 
-- scrapeDataForDateRange: Main function that processes data scraping for a given date range.
+- scrapeStatsForDateRange: Main function that processes data scraping for a given date range.
 
 
 # Usage
-To scrape data for a specific date range, you can use the scrapeDataForDateRange function, providing the start and end date:
+To scrape data for a specific date range, you can use the scrapeStatsForDateRange function, providing the start and end date:
 
 ```
 nix develop github:cardanonix/scraperProto

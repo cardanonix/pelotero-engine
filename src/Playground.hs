@@ -232,8 +232,8 @@ processDate date = do
                     writeDataToFile filename "appData/stats" _flattenedPlayers
 
 -- Main scraper function tying everything together
-scrapeDataForDateRange :: String -> String -> IO ()
-scrapeDataForDateRange start end = do
+scrapeStatsForDateRange :: String -> String -> IO ()
+scrapeStatsForDateRange start end = do
     mapM_ processDate (generateDateRange start end)
 
 flattenedPlayersList :: M.Map Text MI.JsonPlayerData -> M.Map Text MI.JsonPlayerData

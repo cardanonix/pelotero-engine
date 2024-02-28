@@ -31,8 +31,11 @@ import qualified Roster as R
 import Validators
 
 -- pure function to generate a random number (and a new generator)
+randomIntGen :: (Int, Int) -> StdGen -> (Int, StdGen)
+randomIntGen range gen = randomR range gen
+
 randomInt :: (Int, Int) -> StdGen -> (Int, StdGen)
-randomInt range gen = randomR range gen
+randomInt = randomR
 
 main :: IO ()
 main = do

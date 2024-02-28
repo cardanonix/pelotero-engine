@@ -24,12 +24,12 @@ import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Debug.Trace (traceShowM)
-import Scraper (scrapeDataForDateRange)
+import Scraper (scrapeStatsForDateRange)
 import System.Environment (getArgs)
 
 main :: IO ()
 main = do
     args <- getArgs
     case args of
-        [startDate, endDate] -> scrapeDataForDateRange startDate endDate
+        [startDate, endDate] -> scrapeStatsForDateRange startDate endDate
         _ -> putStrLn "Usage: fetchStats <start-date> <end-date>"
