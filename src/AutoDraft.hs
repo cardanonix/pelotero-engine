@@ -26,13 +26,13 @@ emptyRoster = R.Roster [] [] [] [] [] [] [] [] []
 positionCodeToText :: Text.Text -> Text.Text
 positionCodeToText code =
   case code of
-    "P" -> "pitcher"    -- Adjusted for general pitcher position, consider splitting into s_pitcher and r_pitcher if necessary
+    "P" -> "pitcher" 
     "C" -> "catcher"
     "1B" -> "first"
     "2B" -> "second"
     "3B" -> "third"
     "SS" -> "shortstop"
-    "LF" -> "outfield"  -- outfield positions are generalized
+    "LF" -> "outfield"
     "CF" -> "outfield"
     "RF" -> "outfield"
     "DH" -> "utility"
@@ -51,6 +51,7 @@ positionCodeToOfficialText code =
     "8" -> "CF"
     "9" -> "RF"
     "10" -> "DH"
+    "Y" -> "DH"
     _ -> "Unknown"
 
 -- Corrected function for translating position codes to draft text
