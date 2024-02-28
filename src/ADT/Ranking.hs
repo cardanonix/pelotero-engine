@@ -34,11 +34,6 @@ import Data.Text (Text)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
 
-getCurrentFormattedTime :: IO String
-getCurrentFormattedTime = do
-    currentTime <- getCurrentTime
-    let formattedTime = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" currentTime
-    return formattedTime
 
 -- | Represents the top-level ranking data structure.
 data RankingData = RankingData
