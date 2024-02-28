@@ -1,7 +1,7 @@
 {
     "teamId": "unique_team_identifier", 
-    "dataChecksum": "checksum_value", 
-    "lastUpdated": "2024-02-23T02:37:20Z", 
+    "dataChecksum": "ed8ee834a904befa731959c7938b51cc30d0c7039c8ce91318377d7cedf5e0da", 
+    "lastUpdated": "2024-02-28T13:36:02.915299407Z", 
     "rankings": [
       {"playerId": 446334, "rank": 1},
       {"playerId": 453286, "rank": 2},
