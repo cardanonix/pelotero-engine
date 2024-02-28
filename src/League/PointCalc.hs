@@ -157,106 +157,26 @@ calcPitchingPoints playerId mults stats@I.PitchingStats{..} =
             ]
         }
 
-{-
--- broken functions for tying it all together
 -- this one is only broken because it uses our old style of querying the stats and getting batter or pitcher
-calculateAllPoints :: C.Configuration -> R.LgManager -> [M.JsonPlayerData] -> [(Text, Either Text [P.GmPoints])]
-calculateAllPoints config lgManager = map (\playerData ->
-    let playerId = M.playerId playerData
-    in (playerId, calculatePointsForGivenPlayer config playerId lgManager playerData))
+-- calculateAllPoints :: C.Configuration -> R.LgManager -> [M.JsonPlayerData] -> [(Text, Either Text [P.GmPoints])]
+-- calculateAllPoints config lgManager = map (\playerData ->
+--     let playerId = M.playerId playerData
+--     in (playerId, calculatePointsForGivenPlayer config playerId lgManager playerData))
 
-calculatePointsForGivenPlayer :: C.Configuration -> Text -> R.LgManager -> M.JsonPlayerData -> Either Text [P.GmPoints]
-calculatePointsForGivenPlayer config playerId lgManager playerData = do
-    playerType <- batterOrPitcher playerId lgManager
-    let playerAllStats = MS.elems $ M.stats playerData
-    return $ case playerType of
-        P.Batting -> map (\stats -> fromMaybe (P.GmPoints [] []) (M.batting stats) >>= calcBattingPoints (C.lg_battingMults $ C.point_parameters config)) playerAllStats
-        P.Pitching -> map (\stats -> fromMaybe (P.GmPoints [] []) (M.pitching stats) >>= calcPitchingPoints (C.lg_pitchingMults $ C.point_parameters config)) playerAllStats
-                        -- errors for the above code: • Couldn't match expected type ‘P.GmPoints’
-{-               with actual type ‘m0 b0’
-• In the expression:
-    fromMaybe (P.GmPoints [] []) (M.batting stats)
-      >>=
-        calcBattingPoints (C.lg_battingMults $ C.point_parameters config)
-  In the first argument of ‘map’, namely
-    ‘(\ stats
-        -> fromMaybe (P.GmPoints [] []) (M.batting stats)
-             >>=
-               calcBattingPoints (C.lg_battingMults $ C.point_parameters config))’
-  In the expression:
-    map
-      (\ stats
-         -> fromMaybe (P.GmPoints [] []) (M.batting stats)
-              >>=
-                calcBattingPoints (C.lg_battingMults $ C.point_parameters config))
-      playerAllStatstypecheck(-Wdeferred-type-errors)
-• Couldn't match expected type ‘P.GmPoints’
-              with actual type ‘m0 b0’
-• In the expression:
-    fromMaybe (P.GmPoints [] []) (M.batting stats)
-      >>=
-        calcBattingPoints (C.lg_battingMults $ C.point_parameters config)
-  In the first argument of ‘map’, namely
-    ‘(\ stats
-        -> fromMaybe (P.GmPoints [] []) (M.batting stats)
-             >>=
-               calcBattingPoints (C.lg_battingMults $ C.point_parameters config))’
-  In the expression:
-    map
-      (\ stats
-         -> fromMaybe (P.GmPoints [] []) (M.batting stats)
-              >>=
-                calcBattingPoints (C.lg_battingMults $ C.point_parameters config))
-      playerAllStatstypecheck(-Wdeferred-type-errors)
-• Couldn't match expected type ‘P.GmPoints’
-              with actual type ‘m0 b0’
-• In the expression:
-    fromMaybe (P.GmPoints [] []) (M.batting stats)
-      >>=
-        calcBattingPoints (C.lg_battingMults $ C.point_parameters config)
-  In the first argument of ‘map’, namely
-    ‘(\ stats
-        -> fromMaybe (P.GmPoints [] []) (M.batting stats)
-             >>=
-               calcBattingPoints (C.lg_battingMults $ C.point_parameters config))’
-  In the expression:
-    map
-      (\ stats
-         -> fromMaybe (P.GmPoints [] []) (M.batting stats)
-              >>=
-                calcBattingPoints (C.lg_battingMults $ C.point_parameters config)) -}
+-- calculatePointsForGivenPlayer :: C.Configuration -> Text -> R.LgManager -> M.JsonPlayerData -> Either Text [P.GmPoints]
+-- calculatePointsForGivenPlayer config playerId lgManager playerData = do
+--     playerType <- batterOrPitcher playerId lgManager
+--     let playerAllStats = MS.elems $ M.stats playerData
+--     return $ case playerType of
+--         P.Batting -> map (\stats -> fromMaybe (P.GmPoints [] []) (M.batting stats) >>= calcBattingPoints (C.lg_battingMults $ C.point_parameters config)) playerAllStats
+--         P.Pitching -> map (\stats -> fromMaybe (P.GmPoints [] []) (M.pitching stats) >>= calcPitchingPoints (C.lg_pitchingMults $ C.point_parameters config)) playerAllStats
 
-queryPlayerId :: Text -> P.StatType -> M.JsonPlayerData -> P.PlayerResults
-queryPlayerId playerIdQuery statType playerData
-    | playerIdQuery /= playerID = P.NoStats
-    | statType == P.Batting   = P.BattingResults (listToMaybe $ map M.batting allStats)
-    | statType == P.Pitching  = P.PitchingResults (listToMaybe $ map M.pitching allStats)
-    where
-        playerID = M.playerId playerData
-        allStats = MS.elems $ M.stats playerData
--- errors for the above function at row 4 column 69 and row5 column 70:
-{- • Couldn't match type ‘Maybe I.PitchingStats’
-                 with ‘I.PitchingStats’
-  Expected: M.JsonStatsData -> I.PitchingStats
-    Actual: M.JsonStatsData -> Maybe I.PitchingStats
-• In the first argument of ‘map’, namely ‘M.pitching’
-  In the second argument of ‘($)’, namely ‘map M.pitching allStats’
-  In the first argument of ‘P.PitchingResults’, namely
-    ‘(listToMaybe $ map M.pitching allStats)’typecheck(-Wdeferred-type-errors)
-• Couldn't match type ‘Maybe I.PitchingStats’
-                 with ‘I.PitchingStats’
-  Expected: M.JsonStatsData -> I.PitchingStats
-    Actual: M.JsonStatsData -> Maybe I.PitchingStats
-• In the first argument of ‘map’, namely ‘M.pitching’
-  In the second argument of ‘($)’, namely ‘map M.pitching allStats’
-  In the first argument of ‘P.PitchingResults’, namely
-    ‘(listToMaybe $ map M.pitching allStats)’typecheck(-Wdeferred-type-errors)
-• Couldn't match type ‘Maybe I.PitchingStats’
-                 with ‘I.PitchingStats’
-  Expected: M.JsonStatsData -> I.PitchingStats
-    Actual: M.JsonStatsData -> Maybe I.PitchingStats
-• In the first argument of ‘map’, namely ‘M.pitching’
-  In the second argument of ‘($)’, namely ‘map M.pitching allStats’
-  In the first argument of ‘P.PitchingResults’, namely
-    ‘(listToMaybe $ map M.pitching allStats)’typecheck( -}
- -}
+-- queryPlayerId :: Text -> P.StatType -> M.JsonPlayerData -> P.PlayerResults
+-- queryPlayerId playerIdQuery statType playerData
+--     | playerIdQuery /= playerID = P.NoStats
+--     | statType == P.Batting   = P.BattingResults (listToMaybe $ map M.batting allStats)
+--     | statType == P.Pitching  = P.PitchingResults (listToMaybe $ map M.pitching allStats)
+--     where
+--         playerID = M.playerId playerData
+--         allStats = MS.elems $ M.stats playerData
+

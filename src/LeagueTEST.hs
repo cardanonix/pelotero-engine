@@ -2,6 +2,7 @@ module Main (main) where
 
 import Config as C
 import Validators
+import Utility
 
 main :: IO ()
 main = do

@@ -10,7 +10,11 @@ module Config where
 
 import Control.Applicative ((<|>))
 import Control.Monad (filterM)
-import Data.Aeson (FromJSON (..), Result (Success), Value, decode, eitherDecodeStrict, fromJSON, withObject, (.!=), (.:), (.:?))
+import Data.Aeson (FromJSON (..), Result (Success), Value, decode, eitherDecodeStrict, fromJSON, withObject, ToJSON(..), object, (.=), (.!=), (.:), (.:?))
+import Data.Aeson ()
+
+
+
 import Data.Aeson.Types (Parser, Result (..), withScientific, withText)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B (readFile)
@@ -203,3 +207,96 @@ instance FromJSON DraftRoster where
             <*> v .: "utility"
             <*> v .: "s_pitcher"
             <*> v .: "r_pitcher"
+
+-- ToJSON Instances
+instance ToJSON Configuration where
+    toJSON :: Configuration -> Value
+    toJSON Configuration{..} = object
+        [ "status" .= status
+        , "leagueID" .= leagueID
+        , "point_parameters" .= point_parameters
+        , "draft_parameters" .= draft_parameters
+        , "commissioner" .= commissioner
+        , "lgMembers" .= lgMembers
+        ]
+
+instance ToJSON PointParameters where
+    toJSON :: PointParameters -> Value
+    toJSON PointParameters{..} = object
+        [ "style" .= lg_style
+        , "start_UTC" .= start_UTC
+        , "end_UTC" .= end_UTC
+        , "batting" .= lg_battingMults
+        , "pitching" .= lg_pitchingMults
+        , "valid_roster" .= valid_roster
+        ]
+
+instance ToJSON BattingMults where
+    toJSON :: BattingMults -> Value
+    toJSON BattingMults{..} = object
+        [ "single" .= lgb_single
+        , "double" .= lgb_double
+        , "triple" .= lgb_triple
+        , "homerun" .= lgb_homerun
+        , "rbi" .= lgb_rbi
+        , "run" .= lgb_run
+        , "base_on_balls" .= lgb_base_on_balls
+        , "stolen_base" .= lgb_stolen_base
+        , "hit_by_pitch" .= lgb_hit_by_pitch
+        , "strikeout" .= lgb_strikeout
+        , "caught_stealing" .= lgb_caught_stealing
+        ]
+
+instance ToJSON PitchingMults where
+    toJSON :: PitchingMults -> Value
+    toJSON PitchingMults{..} = object
+        [ "win" .= lgp_win
+        , "save" .= lgp_save
+        , "quality_start" .= lgp_quality_start
+        , "inning_pitched" .= lgp_inning_pitched
+        , "strikeout" .= lgp_strikeout
+        , "complete_game" .= lgp_complete_game
+        , "shutout" .= lgp_shutout
+        , "base_on_balls" .= lgp_base_on_balls
+        , "hits_allowed" .= lgp_hits_allowed
+        , "earned_runs" .= lgp_earned_runs
+        , "hit_batsman" .= lgp_hit_batsman
+        , "loss" .= lgp_loss
+        ]
+
+instance ToJSON LgRoster where
+    toJSON :: LgRoster -> Value
+    toJSON LgRoster{..} = object
+        [ "catcher" .= lg_catcher
+        , "first" .= lg_first
+        , "second" .= lg_second
+        , "third" .= lg_third
+        , "shortstop" .= lg_shortstop
+        , "outfield" .= lg_outfield
+        , "utility" .= lg_utility
+        , "s_pitcher" .= lg_s_pitcher
+        , "r_pitcher" .= lg_r_pitcher
+        , "max_size" .= lg_max_size
+        ]
+
+instance ToJSON DraftParameters where
+    toJSON :: DraftParameters -> Value
+    toJSON DraftParameters{..} = object
+        [ "autoDraft" .= autoDraft
+        , "autoDraft_UTC" .= autoDraft_UTC
+        , "draft_limits" .= draft_limits
+        ]
+
+instance ToJSON DraftRoster where
+    toJSON :: DraftRoster -> Value
+    toJSON DraftRoster{..} = object
+        [ "catcher" .= dr_catcher
+        , "first" .= dr_first
+        , "second" .= dr_second
+        , "third" .= dr_third
+        , "shortstop" .= dr_shortstop
+        , "outfield" .= dr_outfield
+        , "utility" .= dr_utility
+        , "s_pitcher" .= dr_s_pitcher
+        , "r_pitcher" .= dr_r_pitcher
+        ]

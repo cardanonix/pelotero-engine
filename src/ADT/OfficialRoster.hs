@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE InstanceSigs #-}
 
 module OfficialRoster where
 
@@ -30,6 +31,7 @@ data OfficialPlayer = OfficialPlayer
     } deriving (Show, Eq, Generic)
 
 instance FromJSON OfficialRoster where
+    parseJSON :: Value -> Parser OfficialRoster
     parseJSON = withObject "OfficialRoster" $ \v -> do
         checksum <- v .: "checksum"
         dataPulled <- v .: "dataPulled"
@@ -39,6 +41,7 @@ instance FromJSON OfficialRoster where
         return OfficialRoster{people = people, dataPulled = dataPulled, checksum = checksum}
 
 instance FromJSON OfficialPlayer where
+    parseJSON :: Value -> Parser OfficialPlayer
     parseJSON = withObject "OfficialPlayer" $ \v -> do
         playerId <- v .: "id"
         useName <- v .: "useName"

@@ -24,14 +24,12 @@ import OfficialRoster as O
 import qualified OfficialRoster as O
 import qualified Points as P
 import qualified Roster as R
+import Utility
 
 type FileName = String
 type FileContent = Either String R.LgManager
 
 -- data StatType = Batting | Pitching deriving (Show, Eq)
-
-readJson :: (FromJSON a) => FilePath -> IO (Either String a)
-readJson filePath = eitherDecodeStrict <$> B.readFile filePath
 
 extractNameFromPath :: FileName -> String
 extractNameFromPath = reverse . takeWhile (/= '/') . reverse

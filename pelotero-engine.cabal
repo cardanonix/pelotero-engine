@@ -10,7 +10,7 @@ executable playground
   hs-source-dirs: src, src/ADT, src/League
   main-is: Playground.hs
   ghc-options: -O2
-  other-modules:  Config, Points, Input, Leaderboard, Middle, OfficialRoster, Roster, Scraper, Validators, PointCalc
+  other-modules:  Config, Points, Input, Leaderboard, Middle, OfficialRoster, Roster, Scraper, Validators, PointCalc, Utility
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -37,7 +37,7 @@ executable head2head
   hs-source-dirs: src, src/ADT, src/League
   main-is: Head2Head.hs
   ghc-options: -O2
-  other-modules:  Scraper, Input, Middle, Roster, Config, Points, OfficialRoster, Validators, PointCalc, Stats
+  other-modules:  Scraper, Input, Middle, Roster, Config, Points, OfficialRoster, Validators, PointCalc, Stats, Utility
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -64,7 +64,7 @@ executable fetchStats
   hs-source-dirs: src, src/ADT, src/League
   main-is: FetchStats.hs
   ghc-options: -O2
-  other-modules:  Input, Middle, Scraper, Points, Config, Roster, OfficialRoster, Validators, PointCalc
+  other-modules:  Input, Middle, Scraper, Points, Config, Roster, OfficialRoster, Validators, PointCalc, Utility
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -91,7 +91,7 @@ executable roster
   hs-source-dirs: src, src/ADT, src/League
   main-is: FetchActiveRoster.hs
   ghc-options: -O2
-  other-modules:  Input, Middle, Scraper, Points, Roster, Config, Leaderboard, OfficialRoster, Validators, PointCalc, Conversion
+  other-modules:  Input, Middle, Scraper, Points, Roster, Config, Leaderboard, OfficialRoster, Validators, PointCalc, Conversion, Utility
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -119,7 +119,7 @@ executable league
   hs-source-dirs: src, src/ADT, src/League
   main-is: LeagueTEST.hs
   ghc-options: -O2
-  other-modules:  Validators, Config, Points, Input, Middle, OfficialRoster, Roster, PointCalc
+  other-modules:  Validators, Config, Points, Input, Middle, OfficialRoster, Roster, PointCalc, Utility
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -173,7 +173,7 @@ executable official
   hs-source-dirs: src, src/ADT, src/League
   main-is: OfficialTest.hs
   ghc-options: -O2
-  other-modules:  Roster, Config, Input, OfficialRoster, Points, Middle, PointCalc, Validators
+  other-modules:  Roster, Config, Input, OfficialRoster, Points, Middle, PointCalc, Validators, Utility
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -200,7 +200,7 @@ executable autodraft
   hs-source-dirs: src, src/ADT, src/League
   main-is: AutoDraft.hs
   ghc-options: -O2
-  other-modules:  Config, OfficialRoster, Roster, Ranking, Input, Middle, Points, Validators
+  other-modules:  Config, OfficialRoster, Roster, Ranking, Input, Middle, Points, Validators, Utility
   build-depends:  base >=4.11 && <4.18
                 , http-conduit 
                 , time
@@ -227,7 +227,7 @@ executable generators
   hs-source-dirs: src, src/ADT, src/League
   main-is: Generators.hs
   ghc-options: -O2
-  other-modules:  Config, OfficialRoster, Roster, Ranking, Input, Middle, Points, Validators
+  other-modules:  Config, OfficialRoster, Roster, Ranking, Input, Middle, Points, Validators, Utility
   build-depends:  base >=4.11 && <4.18
                 , random
                 , http-conduit 

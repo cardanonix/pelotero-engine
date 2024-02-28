@@ -59,6 +59,7 @@ import qualified Input as I
 import qualified Middle as MI
 import qualified Points as P
 import Validators
+import Utility
 
 -- A (date String) -> [B] (list of gameIds/GameSchedule)
 -- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule
@@ -172,15 +173,6 @@ writeRosterToFile path roster = do
     -- Write to file
     BL.writeFile path jsonData
 
--- Edge Cases Handling
--- monadic error handling for fetching and decoding
-withEither :: IO (Either String a) -> (a -> IO ()) -> IO ()
-withEither action successHandler = do
-    result <- action
-    case result of
-        Left err -> putStrLn err
-        Right dataPacket -> successHandler dataPacket
-
 -- Special Enhancement of fromJSON types that gets called as post-processing in the fetch functions
 assignDateToSchedule :: Text -> I.GameSchedule -> I.GameSchedule
 assignDateToSchedule date schedule =
@@ -200,11 +192,7 @@ assignGameIdToPlayers gameId gameData =
                     }
             }
 
--- Fetch and decode utility
-fetchAndDecodeJSON :: (FromJSON a) => String -> IO (Either String a)
-fetchAndDecodeJSON url = do
-    response <- httpBS (parseRequest_ url)
-    return $ eitherDecodeStrict $ getResponseBody response
+
 
 -- Takes a schedule bytestring and outputs true if games are happening, false otherwise.
 hasGamesForDate :: I.GameSchedule -> Bool
@@ -334,9 +322,3 @@ rosterUrl season = "https://statsapi.mlb.com/api/v1/sports/1/players?activeStatu
 -- Generate the API URL for specific year's stat leaders in either batting or pitching (not working well)
 seasonStatsUrl :: Int -> P.StatType -> String
 seasonStatsUrl season statType = "http://statsapi.mlb.com/api/v1/stats?stats=season&sportId=1&season=" ++ show season ++ "&group=" ++ statTypeToString statType
-
-computeChecksum :: BL.ByteString -> Text
-computeChecksum bs = T.pack . show . hashWith SHA256 $ BL.toStrict bs
-
-getCurrentDate :: IO Text
-getCurrentDate = T.pack . formatTime defaultTimeLocale "%Y_%m_%d_%H_%M" <$> getCurrentTime

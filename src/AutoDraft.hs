@@ -17,9 +17,7 @@ import qualified OfficialRoster as O
 import qualified Roster as R
 import qualified Ranking as PR
 import Validators
-
-writeJson :: ToJSON a => FilePath -> a -> IO ()
-writeJson filePath = BL.writeFile filePath . encode
+import Utility
 
 -- Creates an empty roster based on the league's draft limits
 emptyRoster :: R.Roster
