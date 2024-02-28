@@ -1,9 +1,4 @@
 # ⚾ Pelotero Engine ⚾
-<<<<<<< HEAD
-=======
-
-[![Haskell CI](https://github.com/cardanonix/pelotero-engine/actions/workflows/haskell.yml/badge.svg?branch=main&event=status)](https://github.com/cardanonix/pelotero-engine/actions/workflows/haskell.yml)
->>>>>>> 467f2e5157af46c60ad10eff35681edfaa691a85
 
 This app provides functions to scrape game data from a baseball API for a given date range and process the retrieved data.
 
