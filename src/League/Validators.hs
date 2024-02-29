@@ -14,7 +14,7 @@ import Data.Foldable (foldl', forM_)
 import qualified Data.Map.Strict as M
 import Data.Maybe (catMaybes, mapMaybe)
 import Data.Text (Text)
-import qualified Data.Text as Text
+import qualified Data.Text as T
 import Debug.Trace (traceShow, traceShowM)
 
 import qualified Config as C
@@ -56,7 +56,7 @@ validateLineup manager config = do
     let duplicateCheck = lineupHasUniquePlayers (R.current_lineup manager)
     case (duplicateCheck, discrepancies) of
         (Left _, []) -> Right ()
-        (Right duplicates, []) -> Left (map Text.unpack duplicates ++ ["Duplicate player IDs found."])
+        (Right duplicates, []) -> Left (map T.unpack duplicates ++ ["Duplicate player IDs found."])
         (_, errors) -> Left (map discrepancyToString errors)
   where
     discrepancyToString (pos, diff)
@@ -79,18 +79,46 @@ validateAndPrintLineup manager config = do
             return $ validPositions && validRosterSize
         (Right nonexistent, _) -> do
             putStrLn "Invalid player IDs found:"
-            mapM_ (putStrLn . Text.unpack) nonexistent
+            mapM_ (putStrLn . T.unpack) nonexistent
             return False
         (_, Right duplicates) -> do
             putStrLn "Duplicate player IDs found:"
-            mapM_ (putStrLn . Text.unpack) duplicates
+            mapM_ (putStrLn . T.unpack) duplicates
             return False
-
 
 findPlayer :: Int -> [O.OfficialPlayer] -> [Int] -> Maybe O.OfficialPlayer
 findPlayer playerId players availableIds =
     find (\p -> O.playerId p == playerId && playerId `elem` availableIds) players
 
+maxPossibleTeams :: C.Configuration -> OfficialRoster -> Int
+maxPossibleTeams config roster =
+  let
+    positions = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH"]
+    -- Calculate the max possible teams for each position and take the minimum
+    maxTeamsForAllPositions = map (\pos -> maxPossibleTeamsForPosition pos config roster) positions
+  in
+    minimum maxTeamsForAllPositions
+
+maxPossibleTeamsForPosition :: T.Text -> C.Configuration -> OfficialRoster -> Int
+maxPossibleTeamsForPosition position config roster =
+  let
+    -- Convert the position code to the draft limit field name
+    draftLimit = case positionCodeToText position of
+      "pitcher" -> C.dr_s_pitcher (C.draft_limits (C.draft_parameters config)) + C.dr_r_pitcher (C.draft_limits (C.draft_parameters config))
+      "catcher" -> C.dr_catcher (C.draft_limits (C.draft_parameters config))
+      "first" -> C.dr_first (C.draft_limits (C.draft_parameters config))
+      "second" -> C.dr_second (C.draft_limits (C.draft_parameters config))
+      "third" -> C.dr_third (C.draft_limits (C.draft_parameters config))
+      "shortstop" -> C.dr_shortstop (C.draft_limits (C.draft_parameters config))
+      "outfield" -> C.dr_outfield (C.draft_limits (C.draft_parameters config)) * 3 -- Assuming LF, CF, RF are interchangeable
+      "utility" -> C.dr_utility (C.draft_limits (C.draft_parameters config))
+      _ -> 0
+
+    -- Count the number of players available for the position
+    playerCount = length $ filter (\p -> primaryPosition p == position) (people roster)
+  in
+    -- Calculate the maximum number of teams based on the draft limit and available players
+    if draftLimit > 0 then playerCount `div` draftLimit else 0
 
 -- This function validates a lineup and returns True or False.
 isLineupValid :: R.LgManager -> C.Configuration -> Bool
@@ -143,7 +171,7 @@ getRosterDiscrepancies roster limits =
         let diff = length players - limit
         in if diff > 0 then Just $ posName ++ ": Too many players - " ++ show diff else Nothing
 
-countPlayers :: Text.Text -> R.Roster -> Int
+countPlayers :: T.Text -> R.Roster -> Int
 countPlayers position roster =
     case position of
         "catcher" -> length $ R.cR roster
@@ -163,10 +191,10 @@ validateRoster roster config = do
     let duplicateCheck = hasUniqueRosterPlayers roster
     case (duplicateCheck, discrepancies) of
         (Left _, []) -> Right ()
-        (Right duplicates, []) -> Left (map Text.unpack duplicates ++ ["Duplicate player IDs found in roster."])
+        (Right duplicates, []) -> Left (map T.unpack duplicates ++ ["Duplicate player IDs found in roster."])
         (_, errors) -> Left errors
 
-lookupLimit :: Text.Text -> C.DraftRoster -> Int
+lookupLimit :: T.Text -> C.DraftRoster -> Int
 lookupLimit position limits =
     case position of
         "catcher" -> C.dr_catcher limits
@@ -191,7 +219,7 @@ hasValidPositions val = case fromJSON val :: Result I.Player of
 -- Lookup a playerId in an OfficialRoster
 lookupPlayerInOfficialRoster :: Text -> O.OfficialRoster -> Bool
 lookupPlayerInOfficialRoster pid roster =
-    any (\player -> Text.pack (show $ playerId player) == pid) (people roster)
+    any (\player -> T.pack (show $ playerId player) == pid) (people roster)
 
 lookupPlayerId :: Text -> IO Bool
 lookupPlayerId playerId = do
@@ -210,7 +238,7 @@ validatePlayerId lineup = do
 
 -- Utility function to convert an Int ID to Text
 intToText :: Int -> Text
-intToText = Text.pack . show
+intToText = T.pack . show
 
 getUniquePlayerIdsLineup :: R.CurrentLineup -> [Text]
 getUniquePlayerIdsLineup R.CurrentLineup{..} =
