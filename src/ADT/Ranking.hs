@@ -15,7 +15,19 @@ import Data.Aeson
       withObject,
       (.!=),
       (.:),
-      (.:?) )
+      (.:?),
+      FromJSON(..),
+      Result(Success),
+      Value,
+      decode,
+      eitherDecodeStrict,
+      fromJSON,
+      withObject,
+      (.!=),
+      (.:),
+      (.:?),
+      object,
+      (.=) )
 
 import Data.Time (
     Day,
@@ -27,12 +39,11 @@ import Data.Time (
     parseTimeM
  )
 import qualified Data.ByteString.Lazy as BL
-import Data.Aeson (FromJSON (..), Result (Success), Value, decode, eitherDecodeStrict, fromJSON, withObject, (.!=), (.:), (.:?))
-
 import GHC.Generics (Generic)
 import Data.Text (Text)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
+import Data.Aeson.Types (toJSON)
 
 
 -- | Represents the top-level ranking data structure.
@@ -43,6 +54,14 @@ data RankingData = RankingData
     , rankings      :: [PlayerRanking]
     } deriving (Show, Eq, Generic)
 
+-- Represents a player's ranking within the team.
+data PlayerRanking = PlayerRanking
+    { playerId :: Int
+    , rank     :: Int
+    } deriving (Show, Eq, Generic)
+
+instance FromJSON PlayerRanking
+
 instance FromJSON RankingData where
     parseJSON = withObject "RankingData" $ \v -> do
         teamId <- v .: "teamId"
@@ -52,13 +71,17 @@ instance FromJSON RankingData where
         rankings <- v .: "rankings"
         return RankingData{..}
 
-instance ToJSON RankingData
+instance ToJSON RankingData where
+    toJSON (RankingData teamId dataChecksum lastUpdated rankings) =
+        object [ "teamId"        .= teamId
+               , "dataChecksum"  .= dataChecksum
+               , "lastUpdated"   .= formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S%QZ" lastUpdated
+               , "rankings"      .= rankings
+               ]
 
--- Represents a player's ranking within the team.
-data PlayerRanking = PlayerRanking
-    { playerId :: Int
-    , rank     :: Int
-    } deriving (Show, Eq, Generic)
-
-instance FromJSON PlayerRanking
-instance ToJSON PlayerRanking
+-- Custom ToJSON instance for PlayerRanking
+instance ToJSON PlayerRanking where
+    toJSON (PlayerRanking playerId rank) =
+        object [ "playerId" .= playerId
+               , "rank"     .= rank
+               ]
