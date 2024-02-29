@@ -183,3 +183,34 @@ main = do
             writeJson "testFiles/appData/draftResults/team2Roster.json" finalRoster2
             putStrLn "Draft completed successfully."
         _ -> putStrLn "Failed to load one or more necessary files. Check file paths and data integrity."
+
+-- let allRankings = [team1Rankings, team2Rankings, team3Rankings]
+
+-- roundRobinDraft :: C.Configuration -> [[PR.PlayerRanking]] -> [[O.OfficialPlayer]] -> [R.Roster] -> Int -> IO [R.Roster]
+-- roundRobinDraft config rankings allPlayers initialRosters currentRankingIndex
+--   | currentRankingIndex >= maximum (map length rankings) = return initialRosters  -- End condition
+--   | otherwise = do
+--       let playerIdsToDraft = map (\ranking -> if currentRankingIndex < length ranking
+--                                                then Just $ PR.playerId (ranking !! currentRankingIndex)
+--                                                else Nothing) rankings
+--       -- Draft players to their respective teams
+--       let updatedRosters = zipWith3 (\roster maybePlayerId players ->
+--                                         case maybePlayerId of
+--                                           Just playerId -> draftPlayerToTeam config roster playerId players
+--                                           Nothing -> roster)
+--                                     initialRosters playerIdsToDraft allPlayers
+--       roundRobinDraft config rankings allPlayers updatedRosters (currentRankingIndex + 1)
+
+
+-- -- Drafts players for all teams in a round-robin fashion
+-- draftForAllTeams :: [O.OfficialRoster] -> [PR.PlayerRanking] -> C.Configuration -> IO [R.Roster]
+-- draftForAllTeams rosters rankings config = do
+--     let initialRosters = replicate (length rosters) emptyRoster
+--     -- Assuming a function that implements the round-robin drafting logic
+--     foldM (roundRobinDraft config allRankings (map O.people rosters)) initialRosters [0..(maximum (map length allRankings)) - 1]
+
+-- draftPlayerToTeam :: C.Configuration -> R.Roster -> Int -> [O.OfficialPlayer] -> R.Roster
+-- draftPlayerToTeam config roster playerId players =
+--   case find (\p -> O.playerId p == playerId) players of
+--     Just player -> addToRoster config player roster
+--     Nothing -> roster
