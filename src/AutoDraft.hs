@@ -19,9 +19,7 @@ import qualified Ranking as PR
 import Validators ( countPlayers, findPlayer, lookupLimit )
 import Utility ( readJson, writeJson, positionCodeToDraftText )
 
--- Creates an empty roster with no players
-emptyRoster :: R.Roster
-emptyRoster = R.Roster [] [] [] [] [] [] [] [] []
+
 
 positionTextToRosterPosition :: T.Text -> R.Roster -> O.OfficialPlayer -> R.Roster
 positionTextToRosterPosition position roster player =
@@ -36,7 +34,7 @@ draftPlayers rankings1 rankings2 officialPlayers config = do
       extendedRankings2 = extendRankingsWithUnrankedPlayers rankings2 officialPlayerIds
       rankingsPairs = zip extendedRankings1 extendedRankings2
       initialTurn = True -- Assume Team 1 starts
-      initialState = (emptyRoster, emptyRoster, officialPlayerIds, initialTurn)
+      initialState = (R.makeEmptyRoster, R.makeEmptyRoster, officialPlayerIds, initialTurn)
 
   -- Correctly pass along the turn indicator in each draft cycle
   (roster1, roster2, _, _) <- foldM (draftCycle config officialPlayers) initialState (map (\pair -> (pair, initialTurn)) rankingsPairs)
