@@ -102,6 +102,58 @@ import qualified Ranking as PR
 import Data.ByteArray.Encoding (convertToBase, Base(Base16))
 import qualified Data.Text.Encoding as T
 
+positionCodeToText :: T.Text -> T.Text
+positionCodeToText code =
+  case code of
+    "P" -> "pitcher" 
+    "C" -> "catcher"
+    "1B" -> "first"
+    "2B" -> "second"
+    "3B" -> "third"
+    "SS" -> "shortstop"
+    "LF" -> "outfield"
+    "CF" -> "outfield"
+    "RF" -> "outfield"
+    "DH" -> "utility"
+    _ -> "Unknown"
+
+positionCodeToOfficialText :: T.Text -> T.Text
+positionCodeToOfficialText code =
+  case code of
+    "1" -> "P"
+    "2" -> "C"
+    "3" -> "1B"
+    "4" -> "2B"
+    "5" -> "3B"
+    "6" -> "SS"
+    "7" -> "LF"
+    "8" -> "CF"
+    "9" -> "RF"
+    "10" -> "DH"
+    "Y" -> "DH"
+    _ -> "Unknown"
+
+-- Corrected function for translating position codes to draft text
+positionCodeToDraftText :: T.Text -> T.Text
+positionCodeToDraftText code =
+  let officialText = positionCodeToOfficialText code
+  in officialTextToDraftText officialText
+  where
+    officialTextToDraftText :: T.Text -> T.Text
+    officialTextToDraftText officialText =
+      case officialText of
+        "P"  -> "pitcher"
+        "C"  -> "catcher"
+        "1B" -> "first"
+        "2B" -> "second"
+        "3B" -> "third"
+        "SS" -> "shortstop"
+        "LF" -> "outfield"
+        "CF" -> "outfield"
+        "RF" -> "outfield"
+        "DH" -> "utility"
+        _    -> "Unknown"
+
 -- Generate a random ByteString of a specified length
 generateRandomBytes :: Int -> IO ByteString
 generateRandomBytes = getRandomBytes
