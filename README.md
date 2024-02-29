@@ -63,10 +63,18 @@ nix develop github:cardanonix/scraperProto
 cabal run fetchStats 2023-08-22 2023-08-22
 ```
 
+# TUI
+To do anything in this library using nix, I made simple TUI:
+
+```
+nix develop github:cardanonix/scraperProto
+./tui
+```
+
 # Note
 This app focuses on a baseball API and its structure at the time of the last update. It's advisable to ensure that the API's structure or endpoints haven't changed significantly before using this scraper for production purposes.
 
 # Contribute
 Feel free to fork, improve, create pull requests, report bugs, or request new features.
 
-Made with ❤️ by [Your Name].
+Made with ❤️ by Harry Pray IV.
