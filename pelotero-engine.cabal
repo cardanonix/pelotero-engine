@@ -12,7 +12,9 @@ executable playground
   ghc-options: -O2
   other-modules:  Config, Points, Input, Leaderboard, Middle, OfficialRoster, Roster, Scraper, Ranking, Validators, PointCalc, Utility
   build-depends:  base >=4.11 && <4.18
-                , random  
+                , random
+                , filepath
+                , memory  
                 , http-conduit 
                 , time
                 , bytestring
@@ -40,7 +42,9 @@ executable head2head
   ghc-options: -O2
   other-modules:  Scraper, Input, Middle, Roster, Config, Points, OfficialRoster, Validators, Ranking, PointCalc, Stats, Utility
   build-depends:  base >=4.11 && <4.18
-                , random  
+                , random 
+                , memory
+                , filepath
                 , http-conduit 
                 , time
                 , bytestring
@@ -68,7 +72,9 @@ executable fetchStats
   ghc-options: -O2
   other-modules:  Input, Middle, Scraper, Points, Config, Roster, OfficialRoster, Validators, Ranking, PointCalc, Utility
   build-depends:  base >=4.11 && <4.18
-                , random  
+                , random
+                , memory
+                , filepath
                 , http-conduit 
                 , time
                 , bytestring
@@ -96,7 +102,9 @@ executable roster
   ghc-options: -O2
   other-modules:  Input, Middle, Scraper, Points, Roster, Config, Leaderboard, OfficialRoster, Ranking, Validators, PointCalc, Conversion, Utility
   build-depends:  base >=4.11 && <4.18
-                , random  
+                , random 
+                , memory
+                , filepath
                 , http-conduit 
                 , time
                 , bytestring
@@ -125,7 +133,9 @@ executable league
   ghc-options: -O2
   other-modules:  Validators, Config, Points, Input, Middle, OfficialRoster, Roster, Ranking, PointCalc, Utility
   build-depends:  base >=4.11 && <4.18
-                , random  
+                , random 
+                , memory
+                , filepath
                 , http-conduit 
                 , time
                 , bytestring
@@ -154,6 +164,8 @@ executable test_adt
   other-modules:  Input_trace
   build-depends:  base >=4.11 && <4.18
                 , random  
+                , memory
+                , filepath
                 , http-conduit 
                 , time
                 , bytestring
@@ -182,6 +194,8 @@ executable official
   other-modules:  Roster, Config, Input, OfficialRoster, Points, Middle, PointCalc, Ranking, Validators, Utility
   build-depends:  base >=4.11 && <4.18
                 , random  
+                , memory
+                , filepath
                 , http-conduit 
                 , time
                 , bytestring
@@ -210,6 +224,8 @@ executable autodraft
   other-modules:  Config, OfficialRoster, Roster, Ranking, Input, Middle, Points, Validators, Utility
   build-depends:  base >=4.11 && <4.18
                 , random
+                , memory
+                , filepath
                 , http-conduit 
                 , time
                 , bytestring
@@ -238,6 +254,8 @@ executable generators
   other-modules:  Config, OfficialRoster, Roster, Ranking, Input, Middle, Points, Validators, Utility
   build-depends:  base >=4.11 && <4.18
                 , random
+                , memory
+                , filepath
                 , http-conduit 
                 , time
                 , bytestring
