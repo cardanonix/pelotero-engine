@@ -5,7 +5,7 @@ module Main where
 import Control.Monad (forM, foldM)
 import Data.Aeson (FromJSON, ToJSON, decode, encode, withObject, (.:))
 import qualified Data.ByteString.Lazy as BL
-import qualified Data.Text as Text
+import qualified Data.Text as T
 import GHC.Generics (Generic)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
@@ -16,66 +16,14 @@ import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
 import qualified Ranking as PR
-import Validators
-import Utility
+import Validators ( countPlayers, findPlayer, lookupLimit )
+import Utility ( readJson, writeJson, positionCodeToDraftText )
 
--- Creates an empty roster based on the league's draft limits
+-- Creates an empty roster with no players
 emptyRoster :: R.Roster
 emptyRoster = R.Roster [] [] [] [] [] [] [] [] []
 
-positionCodeToText :: Text.Text -> Text.Text
-positionCodeToText code =
-  case code of
-    "P" -> "pitcher" 
-    "C" -> "catcher"
-    "1B" -> "first"
-    "2B" -> "second"
-    "3B" -> "third"
-    "SS" -> "shortstop"
-    "LF" -> "outfield"
-    "CF" -> "outfield"
-    "RF" -> "outfield"
-    "DH" -> "utility"
-    _ -> "Unknown"
-
-positionCodeToOfficialText :: Text.Text -> Text.Text
-positionCodeToOfficialText code =
-  case code of
-    "1" -> "P"
-    "2" -> "C"
-    "3" -> "1B"
-    "4" -> "2B"
-    "5" -> "3B"
-    "6" -> "SS"
-    "7" -> "LF"
-    "8" -> "CF"
-    "9" -> "RF"
-    "10" -> "DH"
-    "Y" -> "DH"
-    _ -> "Unknown"
-
--- Corrected function for translating position codes to draft text
-positionCodeToDraftText :: Text.Text -> Text.Text
-positionCodeToDraftText code =
-  let officialText = positionCodeToOfficialText code
-  in officialTextToDraftText officialText
-  where
-    officialTextToDraftText :: Text.Text -> Text.Text
-    officialTextToDraftText officialText =
-      case officialText of
-        "P"  -> "pitcher"
-        "C"  -> "catcher"
-        "1B" -> "first"
-        "2B" -> "second"
-        "3B" -> "third"
-        "SS" -> "shortstop"
-        "LF" -> "outfield"
-        "CF" -> "outfield"
-        "RF" -> "outfield"
-        "DH" -> "utility"
-        _    -> "Unknown"
- 
-positionTextToRosterPosition :: Text.Text -> R.Roster -> O.OfficialPlayer -> R.Roster
+positionTextToRosterPosition :: T.Text -> R.Roster -> O.OfficialPlayer -> R.Roster
 positionTextToRosterPosition position roster player =
   -- Implementation depends on how you're managing roster updates
   undefined
@@ -142,7 +90,7 @@ addPitcherToRoster config player roster =
      else
        roster -- No action if no pitching slots available
 
-addBatterToRoster :: C.Configuration -> O.OfficialPlayer -> R.Roster -> Text.Text -> R.Roster
+addBatterToRoster :: C.Configuration -> O.OfficialPlayer -> R.Roster -> T.Text -> R.Roster
 addBatterToRoster config player roster position =
   let rosterLimit = lookupLimit position (C.draft_limits $ C.draft_parameters config)
       currentPositionCount = countPlayers position roster
@@ -151,9 +99,9 @@ addBatterToRoster config player roster position =
      else
        roster -- No action if position is full
 
-addPlayerToPosition :: Text.Text -> O.OfficialPlayer -> R.Roster -> R.Roster
+addPlayerToPosition :: T.Text -> O.OfficialPlayer -> R.Roster -> R.Roster
 addPlayerToPosition position player roster =
-  let playerIdText = Text.pack $ show $ O.playerId player
+  let playerIdText = T.pack $ show $ O.playerId player
   in case position of
        "s_pitcher" -> roster { R.spR = playerIdText : R.spR roster }
        "r_pitcher" -> roster { R.rpR = playerIdText : R.rpR roster }
