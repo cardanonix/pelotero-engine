@@ -14,22 +14,15 @@
     styleguide.url = "github:cardanonix/styleguide";
   };
 
-  outputs = {
-    self,
-    nixpkgs,
-    flake-utils,
-    haskellNix,
-    iohk-nix,
-    CHaP,
-    plutus,
-    styleguide,
-  }: let
+outputs = { self, nixpkgs, flake-utils, haskellNix, iohk-nix, CHaP, plutus, styleguide, ... }:
+  let
+  
     overlays = [
       haskellNix.overlay
       iohk-nix.overlays.crypto
       (final: prev: {
         pelotero-engine = final.haskell-nix.project' {
-          src = ./.;
+          src = ./src;
           compiler-nix-name = "ghc928";
           shell.tools = {
             cabal = "latest";
@@ -39,55 +32,6 @@
         };
       })
     ];
-    # front_EndResults = flake-utils.lib.eachSystem ["x86_64-linux" "x86_64-darwin"] (
-    #   system: let
-    #     overlays = [
-    #       haskellNix.overlay
-    #       iohk-nix.overlays.crypto
-    #       (final: prev: {
-    #         helloProject = final.haskell-nix.project' {
-    #           src = ./.;
-    #           compiler-nix-name = "ghc925";
-    #           shell.tools = {
-    #             cabal = "latest";
-    #             hlint = "latest";
-    #             haskell-language-server = "latest";
-    #           };
-    #         };
-    #       })
-    #     ];
-    #     pkgs = import nixpkgs {
-    #       inherit system overlays;
-    #       inherit (haskellNix) config;
-    #     };
-    #     hixProject = pkgs.haskell-nix.hix.project {
-    #       src = ./.;
-    #       evalSystem = system;
-    #       inputMap = {"https://input-output-hk.github.io/cardano-haskell-packages" = CHaP;};
-    #       modules = [
-    #         (_: {
-    #           packages.cardano-crypto-praos.components.library.pkgconfig = pkgs.lib.mkForce [pkgs.libsodium-vrf];
-    #           packages.cardano-crypto-class.components.library.pkgconfig = pkgs.lib.mkForce [pkgs.libsodium-vrf pkgs.secp256k1];
-    #         })
-    #       ];
-    #     };
-    #     hixFlake = hixProject.flake {};
-    #   in {
-    #     apps = hixFlake.apps;
-    #     checks = hixFlake.checks;
-    #     packages = hixFlake.packages;
-    #     legacyPackages = pkgs;
-    #     devShell = pkgs.mkShell {
-    #       name = "frontEnd";
-    #       inputsFrom = [hixFlake.devShell];
-    #       buildInputs = [];
-    #       packages = [];
-    #       shellHook = ''
-    #         export NIX_SHELL_NAME="scraper"
-    #       '';
-    #     };
-    #   }
-    # );
     back_EndResults = flake-utils.lib.eachSystem ["x86_64-linux" "x86_64-darwin"] (
       system: let
         pkgs = import nixpkgs {
@@ -106,7 +50,6 @@
             })
           ];
         };
-
         hixFlake = hixProject.flake {};
       in {
         apps = hixFlake.apps;
@@ -114,6 +57,7 @@
         # checks.format = styleguide.lib.${system}.mkCheck self; # these are for CI but they depend on ‘terraform-1.6.0’
         # formatter = styleguide.lib.${system}.mkFormatter self; # these are for CI but they depend on ‘terraform-1.6.0’
         packages = hixFlake.packages;
+
         legacyPackages = pkgs;
 
         devShell = pkgs.mkShell {
@@ -123,14 +67,14 @@
             (pkgs.haskellPackages.ghcWithPackages
               (hsPkgs:
                 with hsPkgs; [
-                  # pkgs.haskellPackages.pelotero-engine
+                  pkgs.haskellPackages.pelotero-engine
                 ]))
             pkgs.haskellPackages.haskell-language-server
             pkgs.haskellPackages.hoogle
             pkgs.zlib
           ];
           packages = with pkgs; [
-            # haskellPackages.pelotero-engine
+            haskellPackages.pelotero-engine
             haskellPackages.haskell-language-server
             haskellPackages.hoogle
             haskellPackages.hls-fourmolu-plugin
@@ -178,9 +122,9 @@
     // {
       # apps = back_EndResults.apps // oci_ImageResult.apps;
       # checks = back_EndResults.checks // oci_ImageResult.checks;
-      # packages = back_EndResults.packages // oci_ImageResult.packages;
+      packages = back_EndResults.packages;
       # legacyPackages = back_EndResults.legacyPackages;
-      # devShell = back_EndResults.devShell;
+      devShell = back_EndResults.devShell;
     };
   nixConfig = {
     extra-experimental-features = ["nix-command flakes" "ca-derivations"];

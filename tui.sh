@@ -1,0 +1,95 @@
+#! /usr/bin/env bash
+
+# Turn off command echo
+set +x
+
+# Function to build a specific executable
+build_exe() {
+  local exeName=$1
+  echo "Building $exeName..."
+  nix build .#pelotero-engine:exe:$exeName --show-trace
+}
+
+# Function to build all executables
+build_all_exes() {
+  echo "Building all executables..."
+  for exe in "${!executables[@]}"; do
+    build_exe "$exe"
+  done
+}
+
+# Function to run a specific executable, optionally with arguments
+run_exe() {
+  local exeName=$1
+  shift # Remove the first argument, which is the executable name
+  local args="$@"
+  echo "Running $exeName with arguments: $args"
+  ./result/bin/$exeName $args
+}
+
+# Function to collect garbage
+collect_garbage() {
+  echo "Collecting garbage..."
+  nix-collect-garbage -d
+  echo "Garbage collection complete."
+}
+
+# Function to update the flake
+update_flake() {
+  echo "Updating flake..."
+  nix flake update
+  echo "Flake update complete."
+}
+
+# Array of executables
+declare -A executables=(
+  ["playground"]=""
+  ["head2head"]=""
+  ["fetchStats"]="Enter two dates (YYYY-MM-DD YYYY-MM-DD): "
+  ["roster"]="Enter a 4 digit year: "
+  ["league"]=""
+  ["test_adt"]=""
+  ["official"]=""
+  ["autodraft"]=""
+  ["generators"]=""
+)
+
+# Main menu
+PS3='Please enter your choice: '
+options=("Build all executables" "Build and Run specific executable" "Collect Garbage" "Update Flake" "Quit")
+
+select opt in "${options[@]}"
+do
+    case $opt in
+        "Build all executables")
+            build_all_exes
+            break
+            ;;
+        "Build and Run specific executable")
+            echo "Select an executable to build and run:"
+            select exe in "${!executables[@]}"
+            do
+                prompt=${executables[$exe]}
+                if [[ -n $prompt ]]; then
+                    echo "$prompt"
+                    read additional_args
+                fi
+                build_exe $exe
+                run_exe $exe $additional_args
+                break 2
+            done
+            ;;
+        "Collect Garbage")
+            collect_garbage
+            break
+            ;;
+        "Update Flake")
+            update_flake
+            break
+            ;;
+        "Quit")
+            break
+            ;;
+        *) echo "Invalid option $REPLY";;
+    esac
+done
