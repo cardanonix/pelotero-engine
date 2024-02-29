@@ -1,8 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Conversion where
-
-import Data.Aeson
+import Data.Aeson ( FromJSON(parseJSON), Value(Object), (.:) )
 import Data.Csv (ToNamedRecord, namedRecord, (.=))
 import qualified Data.Csv as Csv
 import Data.Text (Text)
@@ -22,6 +21,10 @@ data Player = Player
     , useLastName :: String
     , useName :: String
     } deriving (Show)
+
+-- Define the JSON structure for the entire file
+newtype PlayersFile
+  = PlayersFile {officialPlayers :: HM.HashMap String Player}
 
 instance FromJSON Player where
     parseJSON (Object v) =
@@ -65,11 +68,6 @@ instance Csv.DefaultOrdered Player where
 boolToString :: Bool -> String
 boolToString True = "TRUE"
 boolToString False = "FALSE"
-
--- Define the JSON structure for the entire file
-data PlayersFile = PlayersFile
-    { officialPlayers :: HM.HashMap String Player
-    }
 
 instance FromJSON PlayersFile where
     parseJSON (Object v) = PlayersFile <$> v .: "officialPlayers"
