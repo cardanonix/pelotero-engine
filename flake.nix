@@ -61,7 +61,7 @@ outputs = { self, nixpkgs, flake-utils, haskellNix, iohk-nix, CHaP, plutus, styl
         legacyPackages = pkgs;
 
         devShell = pkgs.mkShell {
-          name = "scraper";
+          name = "pelotero-engine";
           inputsFrom = [hixFlake.devShell];
           buildInputs = [
             (pkgs.haskellPackages.ghcWithPackages
