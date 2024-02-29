@@ -1,10 +1,7 @@
 cabal-version: 3.6
--- Instructions on how to write this file are in the Cabal
--- documentation, which can be found here:
---   http://haskell.org/cabal/release/cabal-latest/doc/users-guide/
 
 name: pelotero-engine
-version: 0.0.5.1
+version: 0.0.7.1
 
 executable playground
   hs-source-dirs: src, src/ADT, src/League
@@ -18,17 +15,10 @@ executable playground
                 , http-conduit 
                 , time
                 , bytestring
-                , http-client-tls
-                , http-client
-                , zlib
-                , process
                 , aeson
-                , aeson-schemas
-                , lens
                 , vector
                 , unordered-containers
                 , text
-                , debug-trace-var
                 , containers
                 , cryptohash-sha256
                 , crypton
@@ -48,17 +38,10 @@ executable head2head
                 , http-conduit 
                 , time
                 , bytestring
-                , http-client-tls
-                , http-client
-                , zlib
-                , process
                 , aeson
-                , aeson-schemas
-                , lens
                 , vector
                 , unordered-containers
                 , text
-                , debug-trace-var
                 , containers
                 , cryptohash-sha256
                 , crypton
@@ -78,17 +61,10 @@ executable fetchStats
                 , http-conduit 
                 , time
                 , bytestring
-                , http-client-tls
-                , http-client
-                , zlib
-                , process
                 , aeson
-                , aeson-schemas
-                , lens
                 , vector
                 , unordered-containers
                 , text
-                , debug-trace-var
                 , containers
                 , cryptohash-sha256
                 , crypton
@@ -108,17 +84,10 @@ executable roster
                 , http-conduit 
                 , time
                 , bytestring
-                , http-client-tls
-                , http-client
-                , zlib
-                , process
                 , aeson
-                , aeson-schemas
-                , lens
                 , vector
                 , unordered-containers
                 , text
-                , debug-trace-var
                 , containers
                 , cryptohash-sha256
                 , crypton
@@ -139,23 +108,15 @@ executable league
                 , http-conduit 
                 , time
                 , bytestring
-                , http-client-tls
-                , http-client
-                , zlib
-                , process
                 , aeson
-                , aeson-schemas
-                , lens
                 , vector
                 , unordered-containers
                 , text
-                , debug-trace-var
                 , containers
                 , cryptohash-sha256
                 , crypton
                 , scientific
                 , directory
-                , async
 
 executable test_adt
   hs-source-dirs: src, src/ADT, src/League
@@ -163,29 +124,10 @@ executable test_adt
   ghc-options: -O2
   other-modules:  Input_trace
   build-depends:  base >=4.11 && <4.18
-                , random  
-                , memory
-                , filepath
-                , http-conduit 
-                , time
                 , bytestring
-                , http-client-tls
-                , http-client
-                , zlib
-                , process
                 , aeson
-                , aeson-schemas
-                , lens
-                , vector
-                , unordered-containers
                 , text
-                , debug-trace-var
                 , containers
-                , cryptohash-sha256
-                , crypton
-                , scientific
-                , directory
-                , async
 
 executable official
   hs-source-dirs: src, src/ADT, src/League
@@ -199,23 +141,15 @@ executable official
                 , http-conduit 
                 , time
                 , bytestring
-                , http-client-tls
-                , http-client
-                , zlib
-                , process
                 , aeson
-                , aeson-schemas
-                , lens
                 , vector
                 , unordered-containers
                 , text
-                , debug-trace-var
                 , containers
                 , cryptohash-sha256
                 , crypton
                 , scientific
                 , directory
-                , async
 
 executable autodraft
   hs-source-dirs: src, src/ADT, src/League
@@ -229,13 +163,7 @@ executable autodraft
                 , http-conduit 
                 , time
                 , bytestring
-                , http-client-tls
-                , http-client
-                , zlib
-                , process
                 , aeson
-                , aeson-schemas
-                , lens
                 , vector
                 , unordered-containers
                 , text
@@ -245,7 +173,6 @@ executable autodraft
                 , crypton
                 , scientific
                 , directory
-                , async          
 
 executable generators
   hs-source-dirs: src, src/ADT, src/League
@@ -259,20 +186,12 @@ executable generators
                 , http-conduit 
                 , time
                 , bytestring
-                , http-client-tls
-                , http-client
-                , zlib
-                , process
                 , aeson
-                , aeson-schemas
-                , lens
                 , vector
                 , unordered-containers
                 , text
-                , debug-trace-var
                 , containers
                 , cryptohash-sha256
                 , crypton
                 , scientific
                 , directory
-                , async                                
