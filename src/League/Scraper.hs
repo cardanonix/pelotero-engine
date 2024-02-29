@@ -60,6 +60,7 @@ import qualified Middle as MI
 import qualified Points as P
 import Validators
 import Utility
+    ( computeChecksum, fetchAndDecodeJSON, getCurrentDate, withEither )
 
 -- A (date String) -> [B] (list of gameIds/GameSchedule)
 -- takes a date string "YYYY-MM-DD" and outputs a schedule bytestring of that day schdule

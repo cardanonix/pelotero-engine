@@ -20,6 +20,11 @@ import qualified Roster as R
 import qualified Ranking as PR
 import Validators
 import Utility
+    ( computeChecksum,
+      readJson,
+      shuffleList,
+      writeJson,
+      generateRandomSHA256 )
 
 -- Updated createRandomRankings function
 createRandomRankings :: O.OfficialRoster -> IO [PR.PlayerRanking]
