@@ -14,5 +14,5 @@ mkDerivation {
     crypton debug-trace-var directory filepath http-conduit memory
     random scientific text time unordered-containers vector
   ];
-  license = "unknown";
+  license = "Apache-2.0";
 }
