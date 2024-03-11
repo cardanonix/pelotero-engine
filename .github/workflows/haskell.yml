@@ -3,9 +3,9 @@ name: Haskell CI with Nix Flake
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main, unstable]
+    branches: [main, unstable, generators]
   push:
-    branches: [main, unstable]
+    branches: [main, unstable, generators]
   schedule:
     - cron: '0 0 * * 0' # Weekly to maintain cache
 
@@ -13,13 +13,13 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       name: Checkout code
 
     - name: Setup Nix with Flakes support
-      uses: cachix/install-nix-action@v14
+      uses: cachix/install-nix-action@v15
       with:
-        install_url: https://nixos-nix-install-tests.cachix.org/serve/3g0jw47z2ms7gwm2q5q3b4j2b2vrpq5j/install
+        # Removed install_url to rely on the action's default installation method
         extra_nix_config: |
           experimental-features = nix-command flakes
 
