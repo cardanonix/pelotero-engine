@@ -165,13 +165,6 @@ generateRandomSHA256 = do
   let hash = hashWith SHA256 randomBytes  -- Hashing the random bytes with SHA256
   return $ T.decodeUtf8 $ convertToBase Base16 hash  -- Convert the hash to Text (hexadecimal representation)
 
--- Helper function to remove an element at a specific index
-removeAt :: Int -> [a] -> (a, [a])
-removeAt n xs = let (left, x:right) = splitAt n xs in (x, left ++ right)
-
--- formatUTCTime :: Text -> UTCTime -> (Text, Value)
--- formatUTCTime key time = key .= formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S%QZ" time
-
 -- pure function to generate a random number (and a new generator)
 randomIntGen :: (Int, Int) -> StdGen -> (Int, StdGen)
 randomIntGen = randomR
@@ -187,6 +180,10 @@ shuffleList l gen =
       (chosen, rest) = removeAt n l
   in let (shuffledRest, finalGen) = shuffleList rest newGen
      in (chosen : shuffledRest, finalGen)
+
+-- Helper function to remove an element at a specific index
+removeAt :: Int -> [a] -> (a, [a])
+removeAt n xs = let (left, x:right) = splitAt n xs in (x, left ++ right)
 
 -- monadic error handling for fetching and decoding
 withEither :: IO (Either String a) -> (a -> IO ()) -> IO ()
@@ -204,25 +201,31 @@ eitherToMaybe _ = Nothing
 constructFilePath :: FilePath -> Int -> FilePath
 constructFilePath baseDir idx = baseDir ++ "finalRoster" ++ show idx ++ ".json"
 
+-- Fetch and decode utility
+fetchAndDecodeJSON :: (FromJSON a) => String -> IO (Either String a)
+fetchAndDecodeJSON url = do
+    response <- httpBS (parseRequest_ url)
+    return $ eitherDecodeStrict $ getResponseBody response
+
 readJson :: (FromJSON a) => FilePath -> IO (Either String a)
 readJson filePath = eitherDecodeStrict <$> B.readFile filePath
+
+loadDataFromDir :: (FromJSON a) => FilePath -> IO [Either String a]
+loadDataFromDir dir = do
+    jsonFiles <- listJsonFiles dir
+    mapM (readJson . (dir </>)) jsonFiles
 
 listJsonFiles :: FilePath -> IO [FilePath]
 listJsonFiles dir = do
     allFiles <- listDirectory dir
     return $ filter (\f -> takeExtension f == ".json") allFiles
 
--- Reads and parses all ranking JSON files into data structures
-readRankings :: FilePath -> IO [Either String [PR.PlayerRanking]]
-readRankings dir = do
-    jsonFiles <- listJsonFiles dir
-    mapM (readJson . (dir </>)) jsonFiles
-
 writeJson :: ToJSON a => FilePath -> a -> IO ()
 writeJson filePath = BL.writeFile filePath . encode
 
-loadDataFromDir :: (FromJSON a) => FilePath -> IO [Either String a]
-loadDataFromDir dir = do
+-- Reads and parses all ranking JSON files into data structures
+readRankings :: FilePath -> IO [Either String [PR.PlayerRanking]]
+readRankings dir = do
     jsonFiles <- listJsonFiles dir
     mapM (readJson . (dir </>)) jsonFiles
 
@@ -232,20 +235,17 @@ loadRankings = loadDataFromDir
 loadRosters :: FilePath -> IO [Either String O.OfficialRoster]
 loadRosters = loadDataFromDir
 
--- Fetch and decode utility
-fetchAndDecodeJSON :: (FromJSON a) => String -> IO (Either String a)
-fetchAndDecodeJSON url = do
-    response <- httpBS (parseRequest_ url)
-    return $ eitherDecodeStrict $ getResponseBody response
-
 computeChecksum :: BL.ByteString -> Text
 computeChecksum bs = T.pack . show . hashWith SHA256 $ BL.toStrict bs
 
 getCurrentDate :: IO Text
 getCurrentDate = T.pack . formatTime defaultTimeLocale "%Y_%m_%d_%H_%M" <$> getCurrentTime
 
+-- formatUTCTime :: Text -> UTCTime -> (Text, Value)
+-- formatUTCTime key time = key .= formatTime defaultTimeLocale "%Y-%m-%dT%H:%M" time
+
 getCurrentFormattedTime :: IO String
 getCurrentFormattedTime = do
     currentTime <- getCurrentTime
-    let formattedTime = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" currentTime
+    let formattedTime = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M" currentTime
     return formattedTime

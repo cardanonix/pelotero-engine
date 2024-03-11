@@ -67,7 +67,7 @@ instance FromJSON RankingData where
         teamId <- v .: "teamId"
         dataChecksum <- v .: "dataChecksum"
         lastUpdatedStr <- v .: "lastUpdated"
-        lastUpdated <- parseTimeM True defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" lastUpdatedStr
+        lastUpdated <- parseTimeM True defaultTimeLocale "%Y-%m-%dT%H:%M" lastUpdatedStr
         rankings <- v .: "rankings"
         return RankingData{..}
 
@@ -75,7 +75,7 @@ instance ToJSON RankingData where
     toJSON (RankingData teamId dataChecksum lastUpdated rankings) =
         object [ "teamId"        .= teamId
                , "dataChecksum"  .= dataChecksum
-               , "lastUpdated"   .= formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%S%QZ" lastUpdated
+               , "lastUpdated"   .= formatTime defaultTimeLocale "%Y-%m-%dT%H:%M" lastUpdated
                , "rankings"      .= rankings
                ]
 
