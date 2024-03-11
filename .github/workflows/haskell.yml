@@ -25,10 +25,22 @@ jobs:
 
     - name: Build with Nix Flake
       run: |
-        nix build .#pelotero-engine:exe:generators
+        nix build .#pelotero-engine:exe:generators --accept-flake-config
+        nix build .#pelotero-engine:exe:playground --accept-flake-config
+        nix build .#pelotero-engine:exe:head2head --accept-flake-config
+        nix build .#pelotero-engine:exe:league --accept-flake-config
+        nix build .#pelotero-engine:exe:test_adt --accept-flake-config
+        nix build .#pelotero-engine:exe:official --accept-flake-config
+        nix build .#pelotero-engine:exe:autodraft --accept-flake-config
+        nix build .#pelotero-engine:exe:fetchStats --accept-flake-config
+        nix build .#pelotero-engine:exe:roster --accept-flake-config
 
-    - name: Run Executable
+    - name: Run Generator
       run: ./result/bin/generators
+
+    # - name: Run Roster
+    #   run: |
+    #     ./result/bin/roster 2024        
 
     # Optional: Cache Nix store to speed up builds
     - uses: actions/cache@v2
