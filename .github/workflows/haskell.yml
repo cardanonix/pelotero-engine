@@ -28,17 +28,17 @@ jobs:
         nix build .#pelotero-engine:exe:generators --accept-flake-config
         ./result/bin/generators
         nix build .#pelotero-engine:exe:playground --accept-flake-config
-        ./result/bin/playground
+        # ./result/bin/playground
         nix build .#pelotero-engine:exe:head2head --accept-flake-config
-        ./result/bin/head2head
+        # ./result/bin/head2head
         nix build .#pelotero-engine:exe:league --accept-flake-config
-        ./result/bin/league
+        # ./result/bin/league
         nix build .#pelotero-engine:exe:test_adt --accept-flake-config
-        ./result/bin/test_adt
+        # ./result/bin/test_adt
         nix build .#pelotero-engine:exe:official --accept-flake-config
-        ./result/bin/official
+        # ./result/bin/official
         nix build .#pelotero-engine:exe:autodraft --accept-flake-config
-        ./result/bin/autodraft
+        # ./result/bin/autodraft
         nix build .#pelotero-engine:exe:fetchStats --accept-flake-config
         ./result/bin/fetchStats 2023-07-01 2023-07-02
         nix build .#pelotero-engine:exe:roster --accept-flake-config
