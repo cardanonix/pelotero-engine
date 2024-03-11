@@ -1,138 +1,138 @@
-<<<<<<< HEAD
-name: Haskell CI with Nix
-=======
-name: Haskell CI with Nix Flake
->>>>>>> 467f2e5157af46c60ad10eff35681edfaa691a85
+# <<<<<<< HEAD
+# name: Haskell CI with Nix
+# =======
+# name: Haskell CI with Nix Flake
+# >>>>>>> 467f2e5157af46c60ad10eff35681edfaa691a85
 
-on:
-  workflow_dispatch:
-  pull_request:
-    branches: [main, unstable]
-  push:
-    branches: [main, unstable]
-  schedule:
-    # Run once per week (At 00:00 on Sunday) to maintain cache
-    - cron: '0 0 * * 0'
+# on:
+#   workflow_dispatch:
+#   pull_request:
+#     branches: [main, unstable]
+#   push:
+#     branches: [main, unstable]
+#   schedule:
+#     # Run once per week (At 00:00 on Sunday) to maintain cache
+#     - cron: '0 0 * * 0'
 
-jobs:
-<<<<<<< HEAD
-<<<<<<< HEAD
-  build-and-test:
-    runs-on: ubuntu-latest
-=======
-  cabal:
-    name: ${{ matrix.os }} / ghc ${{ matrix.ghc }}
-    runs-on: ${{ matrix.os }}
-    packages: [ zlib ]
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macOS-latest, windows-latest]
-        cabal: ["3.6.2.0"]
-        ghc:
-          - "9.2.8"
-        exclude:
-          - os: macOS-latest
-            ghc: 9.0.2
-          - os: macOS-latest
-            ghc: 8.10.7
+# jobs:
+# <<<<<<< HEAD
+# <<<<<<< HEAD
+#   build-and-test:
+#     runs-on: ubuntu-latest
+# =======
+#   cabal:
+#     name: ${{ matrix.os }} / ghc ${{ matrix.ghc }}
+#     runs-on: ${{ matrix.os }}
+#     packages: [ zlib ]
+#     strategy:
+#       matrix:
+#         os: [ubuntu-latest, macOS-latest, windows-latest]
+#         cabal: ["3.6.2.0"]
+#         ghc:
+#           - "9.2.8"
+#         exclude:
+#           - os: macOS-latest
+#             ghc: 9.0.2
+#           - os: macOS-latest
+#             ghc: 8.10.7
 
-          - os: windows-latest
-            ghc: 9.0.2
-          - os: windows-latest
-            ghc: 8.10.7
+#           - os: windows-latest
+#             ghc: 9.0.2
+#           - os: windows-latest
+#             ghc: 8.10.7
 
-    steps:
-    - uses: actions/checkout@v2
+#     steps:
+#     - uses: actions/checkout@v2
 
-    - uses: haskell/actions/setup@v1.2
-      id: setup-haskell-cabal
-      name: Setup Haskell
-      with:
-        ghc-version: ${{ matrix.ghc }}
-        cabal-version: ${{ matrix.cabal }}
+#     - uses: haskell/actions/setup@v1.2
+#       id: setup-haskell-cabal
+#       name: Setup Haskell
+#       with:
+#         ghc-version: ${{ matrix.ghc }}
+#         cabal-version: ${{ matrix.cabal }}
 
-    - name: Configure
-      run: |
-        cabal configure --enable-tests --enable-benchmarks --enable-documentation --test-show-details=direct --write-ghc-environment-files=always
+#     - name: Configure
+#       run: |
+#         cabal configure --enable-tests --enable-benchmarks --enable-documentation --test-show-details=direct --write-ghc-environment-files=always
 
-    - name: Freeze
-      run: |
-        cabal freeze
+#     - name: Freeze
+#       run: |
+#         cabal freeze
 
-    - uses: actions/cache@v2
-      name: Cache ~/.cabal/store
-      with:
-        path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
-        key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+#     - uses: actions/cache@v2
+#       name: Cache ~/.cabal/store
+#       with:
+#         path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
+#         key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
 
-    - name: Install dependencies
-      run: |
-        cabal build all --only-dependencies
+#     - name: Install dependencies
+#       run: |
+#         cabal build all --only-dependencies
 
-    - name: Build
-      run: |
-        cabal build all
+#     - name: Build
+#       run: |
+#         cabal build all
 
-    - name: Test
-      run: |
-        cabal test all
+#     - name: Test
+#       run: |
+#         cabal test all
 
-    - name: Documentation
-      run: |
-        cabal haddock
+#     - name: Documentation
+#       run: |
+#         cabal haddock
 
-  stack:
-    name: stack / ghc ${{ matrix.ghc }}
-    runs-on: ubuntu-latest
-    packages: [ zlib ]
-    strategy:
-      matrix:
-        stack: ["2.7.3"]
-        ghc: ["9.2.8"]
+#   stack:
+#     name: stack / ghc ${{ matrix.ghc }}
+#     runs-on: ubuntu-latest
+#     packages: [ zlib ]
+#     strategy:
+#       matrix:
+#         stack: ["2.7.3"]
+#         ghc: ["9.2.8"]
 
->>>>>>> 8220919 (Update haskell.yml)
-    steps:
-    - uses: actions/checkout@v2
-      name: Checkout code
+# >>>>>>> 8220919 (Update haskell.yml)
+#     steps:
+#     - uses: actions/checkout@v2
+#       name: Checkout code
 
-    - name: Setup Nix
-      uses: cachix/install-nix-action@v14
-      with:
-=======
-  build-and-test:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-      name: Checkout code
+#     - name: Setup Nix
+#       uses: cachix/install-nix-action@v14
+#       with:
+# =======
+#   build-and-test:
+#     runs-on: ubuntu-latest
+#     steps:
+#     - uses: actions/checkout@v2
+#       name: Checkout code
 
-    - name: Setup Nix with Flakes support
-      uses: cachix/install-nix-action@v14
-      with:
->>>>>>> 467f2e5157af46c60ad10eff35681edfaa691a85
-        install_url: https://nixos-nix-install-tests.cachix.org/serve/3g0jw47z2ms7gwm2q5q3b4j2b2vrpq5j/install
-        extra_nix_config: |
-          experimental-features = nix-command flakes
+#     - name: Setup Nix with Flakes support
+#       uses: cachix/install-nix-action@v14
+#       with:
+# >>>>>>> 467f2e5157af46c60ad10eff35681edfaa691a85
+#         install_url: https://nixos-nix-install-tests.cachix.org/serve/3g0jw47z2ms7gwm2q5q3b4j2b2vrpq5j/install
+#         extra_nix_config: |
+#           experimental-features = nix-command flakes
 
-<<<<<<< HEAD
-    - name: Build and Test with Nix Flake
-      run: |
-        nix build .#checks.x86_64-linux
-        nix run .#roster
-=======
-    - name: Enter Nix Shell
-      run: nix develop -c cabal update
+# <<<<<<< HEAD
+#     - name: Build and Test with Nix Flake
+#       run: |
+#         nix build .#checks.x86_64-linux
+#         nix run .#roster
+# =======
+#     - name: Enter Nix Shell
+#       run: nix develop -c cabal update
 
-    - name: Build with Cabal
-      run: nix develop -c cabal build
+#     - name: Build with Cabal
+#       run: nix develop -c cabal build
 
-    - name: Run Executable
-      run: nix develop -c cabal run roster
->>>>>>> 467f2e5157af46c60ad10eff35681edfaa691a85
+#     - name: Run Executable
+#       run: nix develop -c cabal run roster
+# >>>>>>> 467f2e5157af46c60ad10eff35681edfaa691a85
 
-    # Optional: Cache Nix store to speed up builds
-    - uses: actions/cache@v2
-      with:
-        path: /nix/store
-        key: ${{ runner.os }}-nix-${{ hashFiles('flake.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-nix-
+#     # Optional: Cache Nix store to speed up builds
+#     - uses: actions/cache@v2
+#       with:
+#         path: /nix/store
+#         key: ${{ runner.os }}-nix-${{ hashFiles('flake.lock') }}
+#         restore-keys: |
+#           ${{ runner.os }}-nix-
