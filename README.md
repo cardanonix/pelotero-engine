@@ -1,5 +1,7 @@
 # ⚾ Pelotero Engine ⚾
 
+[![Haskell CI using Nix Flake](https://github.com/cardanonix/pelotero-engine/actions/workflows/haskell.yml/badge.svg)](https://github.com/cardanonix/pelotero-engine/actions/workflows/haskell.yml)
+
 This app provides functions to scrape game data from a baseball API for a given date range and process the retrieved data.
 
 Ensure that you have the necessary Haskell libraries installed, such as:
