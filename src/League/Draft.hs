@@ -59,7 +59,7 @@ getPositionLimit position rosterLimits =
 
 findPlayerRanking :: Int -> [PR.PlayerRanking] -> Maybe Int
 findPlayerRanking playerId rankings =
-  fmap PR.rank $ find ((== playerId) . PR.playerId) rankings
+  PR.rank <$> find ((== playerId) . PR.playerId) rankings
 
 -- filters the official roster by position and sorts them by their ranking.
 getRankedPlayersForPosition :: [PR.PlayerRanking] -> [O.OfficialPlayer] -> T.Text -> [T.Text]
