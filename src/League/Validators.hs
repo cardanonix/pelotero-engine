@@ -154,7 +154,7 @@ lookupPlayerInRoster playerId roster =
     let allPlayers = concat [R.cR roster, R.b1R roster, R.b2R roster, R.b3R roster, R.ssR roster, R.ofR roster, R.uR roster, R.spR roster, R.rpR roster]
     in playerId `elem` allPlayers
 
-getRosterDiscrepancies :: R.Roster -> C.DraftRoster -> [String]
+getRosterDiscrepancies :: R.Roster -> C.DraftRosterLimits -> [String]
 getRosterDiscrepancies roster limits =
     mapMaybe validatePosition [ ("catcher", R.cR roster, C.dr_catcher limits)
     , ("first", R.b1R roster, C.dr_first limits)
@@ -194,7 +194,7 @@ validateRoster roster config = do
         (Right duplicates, []) -> Left (map T.unpack duplicates ++ ["Duplicate player IDs found in roster."])
         (_, errors) -> Left errors
 
-lookupLimit :: T.Text -> C.DraftRoster -> Int
+lookupLimit :: T.Text -> C.DraftRosterLimits -> Int
 lookupLimit position limits =
     case position of
         "catcher" -> C.dr_catcher limits

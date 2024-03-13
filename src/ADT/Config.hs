@@ -95,11 +95,11 @@ data LgRoster = LgRoster
 data DraftParameters = DraftParameters
     { autoDraft :: Bool
     , autoDraft_UTC :: Text
-    , draft_limits :: DraftRoster
+    , draft_limits :: DraftRosterLimits
     }
     deriving (Show, Eq)
 
-data DraftRoster = DraftRoster
+data DraftRosterLimits = DraftRosterLimits
     { dr_catcher :: Int
     , dr_first :: Int
     , dr_second :: Int
@@ -194,10 +194,10 @@ instance FromJSON DraftParameters where
             <*> v .: "autoDraft_UTC"
             <*> v .: "draft_limits"
 
-instance FromJSON DraftRoster where
-    parseJSON :: Value -> Parser DraftRoster
-    parseJSON = withObject "DraftRoster" $ \v ->
-        DraftRoster
+instance FromJSON DraftRosterLimits where
+    parseJSON :: Value -> Parser DraftRosterLimits
+    parseJSON = withObject "DraftRosterLimits" $ \v ->
+        DraftRosterLimits
             <$> v .: "catcher"
             <*> v .: "first"
             <*> v .: "second"
@@ -287,9 +287,9 @@ instance ToJSON DraftParameters where
         , "draft_limits" .= draft_limits
         ]
 
-instance ToJSON DraftRoster where
-    toJSON :: DraftRoster -> Value
-    toJSON DraftRoster{..} = object
+instance ToJSON DraftRosterLimits where
+    toJSON :: DraftRosterLimits -> Value
+    toJSON DraftRosterLimits{..} = object
         [ "catcher" .= dr_catcher
         , "first" .= dr_first
         , "second" .= dr_second
