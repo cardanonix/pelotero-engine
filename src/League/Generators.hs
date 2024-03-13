@@ -58,10 +58,12 @@ main = do
       let dataChecksum = computeChecksum rankingDataJson
 
       -- Update rankingData with actual checksum and random teamId
-      let rankingDataWithChecksum = rankingData { PR.dataChecksum = dataChecksum, PR.teamId = randomTeamId }
+      let rankingDataWithChecksum = rankingData { 
+        PR.dataChecksum = dataChecksum, PR.teamId = randomTeamId 
+        }
 
       -- Write the ranking data to a file, using shortTeamId in the filename
-      let fileName = "testFiles/appData/rankings/" ++ T.unpack shortTeamId ++ "_randomRankings.json"
+      let fileName = "testFiles/appData/rankings/" ++ T.unpack shortTeamId ++ ".json"
       writeJson fileName rankingDataWithChecksum
 
       putStrLn $ "Rankings written to JSON file successfully at " ++ fileName
