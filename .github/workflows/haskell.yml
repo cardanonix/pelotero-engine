@@ -3,9 +3,9 @@ name: Haskell CI with Nix Flake
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main, unstable, generators]
+    branches: [main]
   push:
-    branches: [main, unstable, generators]
+    branches: [main]
   schedule:
     - cron: '0 0 * * 0' # Weekly to maintain cache
 
