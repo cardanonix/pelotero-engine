@@ -3,8 +3,8 @@
   "leagueID": "9d0e0f7c5930090008ce462b9daa059ec7faf85e8b62372d2ed764f8c117e6e4",
   "point_parameters": {
     "style": "Head_to_Head",
-    "start_UTC": "2023_08_20",
-    "end_UTC": "2023_08_26",
+    "start_UTC": "2024-03-20T03:15",
+    "end_UTC": "2024-03-27T03:15",
     "batting": {
       "single": "1",
       "double": "2",
@@ -47,7 +47,7 @@
   },
   "draft_parameters": {
     "autoDraft": true,
-    "autoDraft_UTC": "2023_08_16__06_00_01",
+    "autoDraft_UTC": "2024-03-21T03:15",
     "draft_limits": {
       "catcher": 6,
       "first": 6,
@@ -62,9 +62,10 @@
   },
   "commissioner": "436f6d6d697373696f6e6572205363726f74756d_de65ccbedd4c080939eca365a07f06f77d5a3f5854cef00d13db7f3b7be8fc08",
   "lgMembers": [
-    "572e20452e20422e20467563626f6973_12161847fa35995db307c5e28c723589794e58a9024c9de050f79ed817a3fa46",
-    "57697a61726420536c65657665205661676d6f6e67657273_ab8265770bcd5be8f878bd08e3e0c412fbbf0fe2dfbead89b7af87b9b1f80678",
-    "57697a67696e6173_cda45223adff02e6519fba4d850ed6ff68a2f8c993fa42224a18fafd266b5963",
-    "436f6d6d697373696f6e6572205363726f74756d_de65ccbedd4c080939eca365a07f06f77d5a3f5854cef00d13db7f3b7be8fc08"
+    "2f70cf31d26173571cc02a031ae7e310f24ac95a1ecabffd0d9fc5f68270ee63",
+    "3da9fd7edb1b6028b732248a2e0b7f3f0cfdfa4e08c8232df2e81fc6be404eb1",
+    "7f508b2ff35566715f7d4e44340a967003fe468ab2ece26cbf6bad2cf4794232",
+    "575019d3b22de22d4590a35fbb52b749e3f8b271960e447b48b53ae27fe83ef0"
+
   ]
 }
