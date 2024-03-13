@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use tuple-section" #-}
+{-# HLINT ignore "Eta reduce" #-}
 
 module Draft where
 
@@ -109,6 +110,6 @@ addPlayerToPosition position player roster =
        "utility" -> roster { R.uR = playerIdText : R.uR roster }
        _ -> roster -- Default case if position does not match
 
-createLgManager :: T.Text -> T.Text -> T.Text -> T.Text -> R.CurrentLineup -> R.Roster -> R.LgManager
-createLgManager status commissioner teamId leagueID currentLineup roster =
-    R.LgManager status commissioner teamId leagueID currentLineup roster
+createLgManager :: C.Configuration -> T.Text -> R.CurrentLineup -> R.Roster -> R.LgManager
+createLgManager config teamId currentLineup roster =
+    R.LgManager (C.status config) (C.commissioner config) teamId (C.leagueID config) currentLineup roster
