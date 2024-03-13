@@ -49,8 +49,8 @@ main = do
       currentTime <- getCurrentTime
       randomTeamId <- generateRandomSHA256  -- Generate a random SHA256 hash for the teamId
 
-      -- Use only the first 10 characters of the randomTeamId for the filename
-      let shortTeamId = T.take 10 randomTeamId
+      -- Use only the first 12 characters of the randomTeamId for the filename
+      let shortTeamId = T.take 12 randomTeamId
 
       -- Serialize rankingData to JSON for checksum calculation
       let rankingData = PR.RankingData randomTeamId (T.pack "") currentTime rankings
@@ -63,7 +63,7 @@ main = do
         }
 
       -- Write the ranking data to a file, using shortTeamId in the filename
-      let fileName = "testFiles/appData/rankings/" ++ T.unpack shortTeamId ++ ".json"
+      let fileName = "testFiles/appData/rankings/_" ++ T.unpack shortTeamId ++ "_.json"
       writeJson fileName rankingDataWithChecksum
 
       putStrLn $ "Rankings written to JSON file successfully at " ++ fileName
