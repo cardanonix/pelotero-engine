@@ -10,10 +10,20 @@ module Config where
 
 import Control.Applicative ((<|>))
 import Control.Monad (filterM)
-import Data.Aeson (FromJSON (..), Result (Success), Value, decode, eitherDecodeStrict, fromJSON, withObject, ToJSON(..), object, (.=), (.!=), (.:), (.:?))
-import Data.Aeson ()
-
-
+import Data.Aeson
+    ( FromJSON(..),
+      Result(Success),
+      Value,
+      decode,
+      eitherDecodeStrict,
+      fromJSON,
+      withObject,
+      ToJSON(..),
+      object,
+      (.=),
+      (.!=),
+      (.:),
+      (.:?) )
 
 import Data.Aeson.Types (Parser, Result (..), withScientific, withText)
 import Data.ByteString (ByteString)
@@ -95,11 +105,11 @@ data LgRosterLmts = LgRosterLmts
 data DraftParameters = DraftParameters
     { autoDraft :: Bool
     , autoDraft_UTC :: Text
-    , draft_limits :: DraftRosterLimits
+    , draft_limits :: DraftRosterLmts
     }
     deriving (Show, Eq)
 
-data DraftRosterLimits = DraftRosterLimits
+data DraftRosterLmts = DraftRosterLmts
     { dr_catcher :: Int
     , dr_first :: Int
     , dr_second :: Int
@@ -194,10 +204,10 @@ instance FromJSON DraftParameters where
             <*> v .: "autoDraft_UTC"
             <*> v .: "draft_limits"
 
-instance FromJSON DraftRosterLimits where
-    parseJSON :: Value -> Parser DraftRosterLimits
-    parseJSON = withObject "DraftRosterLimits" $ \v ->
-        DraftRosterLimits
+instance FromJSON DraftRosterLmts where
+    parseJSON :: Value -> Parser DraftRosterLmts
+    parseJSON = withObject "DraftRosterLmts" $ \v ->
+        DraftRosterLmts
             <$> v .: "catcher"
             <*> v .: "first"
             <*> v .: "second"
@@ -287,9 +297,9 @@ instance ToJSON DraftParameters where
         , "draft_limits" .= draft_limits
         ]
 
-instance ToJSON DraftRosterLimits where
-    toJSON :: DraftRosterLimits -> Value
-    toJSON DraftRosterLimits{..} = object
+instance ToJSON DraftRosterLmts where
+    toJSON :: DraftRosterLmts -> Value
+    toJSON DraftRosterLmts{..} = object
         [ "catcher" .= dr_catcher
         , "first" .= dr_first
         , "second" .= dr_second

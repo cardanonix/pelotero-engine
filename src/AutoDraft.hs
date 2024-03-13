@@ -22,6 +22,22 @@ import Validators ( countPlayers, findPlayer, lookupLimit )
 import Utility ( readJson, writeJson, positionCodeToDraftText )
 import Draft
 
+
+autoFillLineup :: C.Configuration -> R.Roster -> R.CurrentLineup
+autoFillLineup config roster = R.CurrentLineup
+    { R.cC = take (C.lg_catcher rosterLimits) $ R.cR roster
+    , R.b1C = take (C.lg_first rosterLimits) $ R.b1R roster
+    , R.b2C = take (C.lg_second rosterLimits) $ R.b2R roster
+    , R.b3C = take (C.lg_third rosterLimits) $ R.b3R roster
+    , R.ssC = take (C.lg_shortstop rosterLimits) $ R.ssR roster
+    , R.ofC = take (C.lg_outfield rosterLimits) $ R.ofR roster
+    , R.uC = take (C.lg_utility rosterLimits) $ R.uR roster
+    , R.spC = take (C.lg_s_pitcher rosterLimits) $ R.spR roster
+    , R.rpC = take (C.lg_r_pitcher rosterLimits) $ R.rpR roster
+    }
+  where
+    rosterLimits = C.valid_roster $ C.point_parameters config
+
 main :: IO ()
 main = do
     eitherR1 <- readJson "testFiles/appData/rankings/_2f70cf31d261_.json"
@@ -38,13 +54,15 @@ main = do
                 teamId2 = PR.teamId r2
                 teamId1Short = T.take 12 teamId1
                 teamId2Short = T.take 12 teamId2
-                status = C.status config -- Temporarily Assuming 'status' is accessible directly
-                leagueID = C.leagueID config 
-                commissioner = C.commissioner config
+            -- Draft players for both teams
             (finalRoster1, finalRoster2) <- draftPlayers rankings1 rankings2 op config
-            let currentLineup = R.CurrentLineup "" "" "" "" "" [] "" [] [] -- Example placeholder; replace with actual data
-            let lgManager1 = createLgManager status commissioner teamId1 leagueID currentLineup finalRoster1
-                lgManager2 = createLgManager status commissioner teamId2 leagueID currentLineup finalRoster2
+            -- Automatically fill lineups based on drafted rosters and configuration
+            let currentLineup1 = autoFillLineup config finalRoster1
+                currentLineup2 = autoFillLineup config finalRoster2
+            -- Create LgManager instances with the filled lineups
+            let lgManager1 = createLgManager config teamId1 currentLineup1 finalRoster1
+                lgManager2 = createLgManager config teamId2 currentLineup2 finalRoster2
+            -- Write the LgManager instances to JSON files
             writeJson (T.unpack $ "testFiles/appData/draftResults/" <> teamId1Short <> "_draft_results.json") lgManager1
             writeJson (T.unpack $ "testFiles/appData/draftResults/" <> teamId2Short <> "_draft_results.json") lgManager2
             putStrLn "Draft and LgManager serialization completed successfully."

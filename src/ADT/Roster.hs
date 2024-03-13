@@ -34,26 +34,26 @@ data LgManager = LgManager
     deriving (Show, Eq)
 
 data CurrentLineup = CurrentLineup
-    { cC :: Text
-    , b1C :: Text
-    , b2C :: Text
-    , b3C :: Text
-    , ssC :: Text
+    { cC  :: [Text] 
+    , b1C :: [Text]
+    , b2C :: [Text]
+    , b3C :: [Text]
+    , ssC :: [Text]
     , ofC :: [Text]
-    , uC :: Text
+    , uC  :: [Text] 
     , spC :: [Text]
     , rpC :: [Text]
     }
     deriving (Show, Eq)
 
 data Roster = Roster
-    { cR :: [Text]
+    { cR  :: [Text]
     , b1R :: [Text]
     , b2R :: [Text]
     , b3R :: [Text]
     , ssR :: [Text]
     , ofR :: [Text]
-    , uR :: [Text]
+    , uR  :: [Text]
     , spR :: [Text]
     , rpR :: [Text]
     }

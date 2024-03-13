@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use list comprehension" #-}
 
 module Validators where
 
@@ -154,7 +156,7 @@ lookupPlayerInRoster playerId roster =
     let allPlayers = concat [R.cR roster, R.b1R roster, R.b2R roster, R.b3R roster, R.ssR roster, R.ofR roster, R.uR roster, R.spR roster, R.rpR roster]
     in playerId `elem` allPlayers
 
-getRosterDiscrepancies :: R.Roster -> C.DraftRosterLimits -> [String]
+getRosterDiscrepancies :: R.Roster -> C.DraftRosterLmts -> [String]
 getRosterDiscrepancies roster limits =
     mapMaybe validatePosition [ ("catcher", R.cR roster, C.dr_catcher limits)
     , ("first", R.b1R roster, C.dr_first limits)
@@ -194,7 +196,7 @@ validateRoster roster config = do
         (Right duplicates, []) -> Left (map T.unpack duplicates ++ ["Duplicate player IDs found in roster."])
         (_, errors) -> Left errors
 
-lookupLimit :: T.Text -> C.DraftRosterLimits -> Int
+lookupLimit :: T.Text -> C.DraftRosterLmts -> Int
 lookupLimit position limits =
     case position of
         "catcher" -> C.dr_catcher limits
@@ -242,7 +244,7 @@ intToText = T.pack . show
 
 getUniquePlayerIdsLineup :: R.CurrentLineup -> [Text]
 getUniquePlayerIdsLineup R.CurrentLineup{..} =
-    cC : b1C : b2C : b3C : ssC : uC : (ofC ++ spC ++ rpC)
+    cC ++ b1C ++ b2C ++ b3C ++ ssC ++ uC ++ ofC ++ spC ++ rpC
 
 getLineupDiscrepancies :: R.CurrentLineup -> C.LgRosterLmts -> [(String, Int)]
 getLineupDiscrepancies R.CurrentLineup{..} C.LgRosterLmts{..} =
@@ -283,38 +285,34 @@ validateCurrentLineup R.LgManager{..} C.Configuration{point_parameters = C.Point
 -- addded failure cases to protect against players being in multiple positions or not being found in the lineup
 -- even though this should be impossible if I make the lineup-setting tools correctly
 findPlayerPosition :: Text -> R.LgManager -> Either Text Text
-findPlayerPosition playerId mgr =
-    case matchingPositions of
+findPlayerPosition playerId mgr = 
+    case concatMap (findPosition playerId) checks of
         [] -> Left "Player not found in current lineup."
         [pos] -> Right pos
-        _ -> Left "Player found in multiple positions in the lineup."
+        _ -> Left "Player found in multiple positions in the lineup." -- This should not occur with proper management.
   where
     lineup = R.current_lineup mgr
-    checks =
-        [ ((playerId ==), "C", R.cC)
-        , ((playerId ==), "1B", R.b1C)
-        , ((playerId ==), "2B", R.b2C)
-        , ((playerId ==), "3B", R.b3C)
-        , ((playerId ==), "SS", R.ssC)
-        , ((playerId ==), "U", R.uC)
-        , (\x -> x `elem` R.ofC lineup, "OF", const playerId)
-        , (\x -> x `elem` R.spC lineup, "SP", const playerId)
-        , (\x -> x `elem` R.rpC lineup, "RP", const playerId)
+    checks = 
+        [ ("C", R.cC lineup)
+        , ("1B", R.b1C lineup)
+        , ("2B", R.b2C lineup)
+        , ("3B", R.b3C lineup)
+        , ("SS", R.ssC lineup)
+        , ("U", R.uC lineup)
+        , ("OF", R.ofC lineup)
+        , ("SP", R.spC lineup)
+        , ("RP", R.rpC lineup)
         ]
-
-    matchingPositions = [pos | (check, pos, access) <- checks, check (access lineup)]
+    findPosition pid (pos, players) = if pid `elem` players then [pos] else []
 
 -- takes a playerId as a String and a LgManager
 -- and returns whether the player is to be fielded as a batter or pitcher for points calculation purposes
 batterOrPitcher :: Text -> R.LgManager -> Either Text P.StatType
 batterOrPitcher playerName mgr
-    | isBatter = Right P.Batting
-    | isPitcher = Right P.Pitching
+    | any (\posList -> playerName `elem` posList) batterPositions = Right P.Batting
+    | any (\posList -> playerName `elem` posList) pitcherPositions = Right P.Pitching
     | otherwise = Left "Player not found in current lineup."
   where
     lineup = R.current_lineup mgr
-    batterPositions = [R.cC lineup, R.b1C lineup, R.b2C lineup, R.b3C lineup, R.ssC lineup, R.uC lineup] ++ R.ofC lineup
-    pitcherPositions = R.spC lineup ++ R.rpC lineup
-
-    isBatter = playerName `elem` batterPositions
-    isPitcher = playerName `elem` pitcherPositions
+    batterPositions = [R.cC lineup, R.b1C lineup, R.b2C lineup, R.b3C lineup, R.ssC lineup, R.uC lineup] ++ [R.ofC lineup]
+    pitcherPositions = [R.spC lineup] ++ [R.rpC lineup]
