@@ -103,6 +103,31 @@ instance FromJSON Roster where
             <*> v .: "SP"
             <*> v .: "RP"
 
+-- ToJSON Instances
+instance ToJSON LgManager where
+    toJSON (LgManager status commissioner teamId leagueID currentLineup roster) =
+        object
+            [ "status" .= status
+            , "commissioner" .= commissioner
+            , "teamId" .= teamId
+            , "leagueID" .= leagueID
+            , "current_lineup" .= currentLineup
+            , "roster" .= roster
+            ]
+
+instance ToJSON CurrentLineup where
+    toJSON (CurrentLineup cC b1C b2C b3C ssC ofC uC spC rpC) =
+        object
+            [ "C" .= cC
+            , "1B" .= b1C
+            , "2B" .= b2C
+            , "3B" .= b3C
+            , "SS" .= ssC
+            , "OF" .= ofC
+            , "U" .= uC
+            , "SP" .= spC
+            , "RP" .= rpC
+            ]
 
 instance ToJSON Roster where
     toJSON (Roster cR b1R b2R b3R ssR ofR uR spR rpR) =
