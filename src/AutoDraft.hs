@@ -12,31 +12,54 @@ import GHC.Generics (Generic)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
 
-import Data.Maybe (mapMaybe)
-import Data.List (find, delete)
+import Data.Maybe (mapMaybe, fromMaybe)
+import Data.List
+    ( find,
+      delete,
+      sortOn,
+      sortBy,
+      findIndex,
+      sortOn,
+      findIndex,
+      sortOn,
+      findIndex,
+      sortOn,
+      findIndex )
+
 import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
 import qualified Ranking as PR
-import Validators ( countPlayers, findPlayer, lookupLimit )
-import Utility ( readJson, writeJson, positionCodeToDraftText )
+import Validators 
+    ( countPlayers
+    , findPlayer
+    , lookupLimit 
+    )
+import Utility
+    ( positionCodeToDraftText
+    ,  readJson
+    ,  writeJson
+    , positionCodeToDraftText
+      )
+
 import Draft
 
-
-autoFillLineup :: C.Configuration -> R.Roster -> R.CurrentLineup
-autoFillLineup config roster = R.CurrentLineup
-    { R.cC = take (C.lg_catcher rosterLimits) $ R.cR roster
-    , R.b1C = take (C.lg_first rosterLimits) $ R.b1R roster
-    , R.b2C = take (C.lg_second rosterLimits) $ R.b2R roster
-    , R.b3C = take (C.lg_third rosterLimits) $ R.b3R roster
-    , R.ssC = take (C.lg_shortstop rosterLimits) $ R.ssR roster
-    , R.ofC = take (C.lg_outfield rosterLimits) $ R.ofR roster
-    , R.uC = take (C.lg_utility rosterLimits) $ R.uR roster
-    , R.spC = take (C.lg_s_pitcher rosterLimits) $ R.spR roster
-    , R.rpC = take (C.lg_r_pitcher rosterLimits) $ R.rpR roster
+autoFillLineup :: C.Configuration -> [PR.PlayerRanking] -> [O.OfficialPlayer] -> R.CurrentLineup
+autoFillLineup config rankings officialRoster =
+  let fillPosition position = 
+        let limit = getPositionLimit position (C.valid_roster $ C.point_parameters config)
+        in take limit $ getRankedPlayersForPosition rankings officialRoster position
+  in R.CurrentLineup {
+      R.cC  = fillPosition "C",
+      R.b1C = fillPosition "1B",
+      R.b2C = fillPosition "2B",
+      R.b3C = fillPosition "3B",
+      R.ssC = fillPosition "SS",
+      R.ofC = fillPosition "OF",
+      R.uC  = fillPosition "U",
+      R.spC = fillPosition "SP",
+      R.rpC = fillPosition "RP"
     }
-  where
-    rosterLimits = C.valid_roster $ C.point_parameters config
 
 main :: IO ()
 main = do
@@ -57,8 +80,9 @@ main = do
             -- Draft players for both teams
             (finalRoster1, finalRoster2) <- draftPlayers rankings1 rankings2 op config
             -- Automatically fill lineups based on drafted rosters and configuration
-            let currentLineup1 = autoFillLineup config finalRoster1
-                currentLineup2 = autoFillLineup config finalRoster2
+            let currentLineup1 = autoFillLineup config rankings1 op
+            let currentLineup2 = autoFillLineup config rankings2 op
+
             -- Create LgManager instances with the filled lineups
             let lgManager1 = createLgManager config teamId1 currentLineup1 finalRoster1
                 lgManager2 = createLgManager config teamId2 currentLineup2 finalRoster2

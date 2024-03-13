@@ -102,6 +102,22 @@ import qualified Ranking as PR
 import Data.ByteArray.Encoding (convertToBase, Base(Base16))
 import qualified Data.Text.Encoding as T
 
+
+positionTextToOfficialCode :: T.Text -> T.Text
+positionTextToOfficialCode code =
+  case code of
+    "P" -> "1"
+    "C" -> "2"
+    "1B" -> "3"
+    "2B" -> "4"
+    "3B" -> "5"
+    "SS" -> "6"
+    "LF" -> "7"
+    "CF" -> "8"
+    "RF" -> "9"
+    "U" -> "10"
+    _ -> "Unknown"
+
 positionCodeToText :: T.Text -> T.Text
 positionCodeToText code =
   case code of

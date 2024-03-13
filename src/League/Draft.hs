@@ -7,25 +7,71 @@ module Draft where
 
 import Control.Monad (forM, foldM)
 import Data.Aeson (FromJSON, ToJSON, decode, encode, withObject, (.:))
+import qualified Data.HashMap.Strict as HM
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
 import GHC.Generics (Generic)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
-
-import Data.Maybe (mapMaybe)
-import Data.List (find, delete)
+import Data.Maybe (mapMaybe, fromMaybe)
+import Data.List
+    ( find,
+      delete,
+      sortOn,
+      sortBy,
+      findIndex,
+      sortOn,
+      findIndex,
+      sortOn,
+      findIndex,
+      sortOn,
+      findIndex )
 import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
 import qualified Ranking as PR
 import Validators ( countPlayers, findPlayer, lookupLimit )
-import Utility ( readJson, writeJson, positionCodeToDraftText )
+import Utility
+
+-- Verify if a player is in the official roster
+isPlayerInOfficialRoster :: Int -> [O.OfficialPlayer] -> Bool
+isPlayerInOfficialRoster playerId officialRoster =
+    any (\p -> O.playerId p == playerId) officialRoster
 
 positionTextToRosterPosition :: T.Text -> R.Roster -> O.OfficialPlayer -> R.Roster
 positionTextToRosterPosition position roster player =
   -- Implementation depends on how you're managing roster updates
   undefined
+
+getPositionLimit :: T.Text -> C.LgRosterLmts -> Int
+getPositionLimit position rosterLimits =
+  case position of
+    "C"  -> C.lg_catcher rosterLimits
+    "1B" -> C.lg_first rosterLimits
+    "2B" -> C.lg_second rosterLimits
+    "3B" -> C.lg_third rosterLimits
+    "SS" -> C.lg_shortstop rosterLimits
+    "OF" -> C.lg_outfield rosterLimits
+    "U"  -> C.lg_utility rosterLimits
+    "SP" -> C.lg_s_pitcher rosterLimits
+    "RP" -> C.lg_r_pitcher rosterLimits
+    _    -> error $ "Invalid position: " <> T.unpack position
+
+findPlayerRanking :: Int -> [PR.PlayerRanking] -> Maybe Int
+findPlayerRanking playerId rankings =
+  fmap PR.rank $ find ((== playerId) . PR.playerId) rankings
+
+-- filters the official roster by position and sorts them by their ranking.
+getRankedPlayersForPosition :: [PR.PlayerRanking] -> [O.OfficialPlayer] -> T.Text -> [T.Text]
+getRankedPlayersForPosition rankings officialPlayers positionText =
+  let
+    -- Filter players by position directly without conversion.
+    positionFilteredPlayers = filter (\p -> O.primaryPosition p == positionText) officialPlayers
+    -- Create a mapping of playerId to rank for quicker lookups.
+    playerIdToRankMap = foldr (\r acc -> HM.insert (PR.playerId r) (PR.rank r) acc) HM.empty rankings
+    -- Sort players based on their ranking, placing unranked players at the end.
+    sortedPlayers = sortOn (\p -> HM.lookup (O.playerId p) playerIdToRankMap) positionFilteredPlayers
+  in map (T.pack . show . O.playerId) sortedPlayers
 
 -- Adjusted draftPlayers to include logic for unranked players
 draftPlayers :: [PR.PlayerRanking] -> [PR.PlayerRanking] -> [O.OfficialPlayer] -> C.Configuration -> IO (R.Roster, R.Roster)
