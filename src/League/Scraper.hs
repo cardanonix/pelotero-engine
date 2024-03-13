@@ -5,6 +5,7 @@
 {-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use tuple-section" #-}
+{-# HLINT ignore "Use catMaybes" #-}
 
 module Scraper (
     scrapeStatsForDateRange,
@@ -243,7 +244,7 @@ convertGameDataMapToJsonPlayerData maybeGameDataMap =
     foldl mergePlayerData M.empty allPlayerDataPairs
   where
     allPlayerDataPairs :: [(Text, MI.JsonPlayerData)]
-    allPlayerDataPairs = concatMap gameDataToPlayerDataPairs (catMaybes (M.elems maybeGameDataMap))
+    allPlayerDataPairs = concatMap gameDataToPlayerDataPairs (mapMaybe id (M.elems maybeGameDataMap))
 
     gameDataToPlayerDataPairs :: I.GameData -> [(Text, MI.JsonPlayerData)]
     gameDataToPlayerDataPairs gameData =
