@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use tuple-section" #-}
 
 module Main where
 
@@ -19,8 +21,6 @@ import qualified Ranking as PR
 import Validators ( countPlayers, findPlayer, lookupLimit )
 import Utility ( readJson, writeJson, positionCodeToDraftText )
 
-
-
 positionTextToRosterPosition :: T.Text -> R.Roster -> O.OfficialPlayer -> R.Roster
 positionTextToRosterPosition position roster player =
   -- Implementation depends on how you're managing roster updates
@@ -33,12 +33,9 @@ draftPlayers rankings1 rankings2 officialPlayers config = do
       extendedRankings1 = extendRankingsWithUnrankedPlayers rankings1 officialPlayerIds
       extendedRankings2 = extendRankingsWithUnrankedPlayers rankings2 officialPlayerIds
       rankingsPairs = zip extendedRankings1 extendedRankings2
-      initialTurn = True -- Assume Team 1 starts
+      initialTurn = True -- assuming Team 1 starts
       initialState = (R.makeEmptyRoster, R.makeEmptyRoster, officialPlayerIds, initialTurn)
-
-  -- Correctly pass along the turn indicator in each draft cycle
   (roster1, roster2, _, _) <- foldM (draftCycle config officialPlayers) initialState (map (\pair -> (pair, initialTurn)) rankingsPairs)
-
   return (roster1, roster2)
 
 draftCycle :: C.Configuration -> [O.OfficialPlayer] -> (R.Roster, R.Roster, [Int], Bool) -> ((Int, Int), Bool) -> IO (R.Roster, R.Roster, [Int], Bool)
@@ -112,24 +109,6 @@ addPlayerToPosition position player roster =
        "utility" -> roster { R.uR = playerIdText : R.uR roster }
        _ -> roster -- Default case if position does not match
 
-main :: IO ()
-main = do
-    eitherR1 <- readJson "testFiles/appData/rankings/team001_rankings.json"
-    eitherR2 <- readJson "testFiles/appData/rankings/team002_rankings.json"
-    eitherRoster <- readJson "testFiles/appData/rosters/activePlayers.json"
-    eitherConfig <- readJson "testFiles/appData/config/config.json"
-
-    case (eitherR1, eitherR2, eitherRoster, eitherConfig) of
-        (Right r1, Right r2, Right roster, Right config) -> do
-            let rankings1 = PR.rankings r1
-                rankings2 = PR.rankings r2
-                op = O.people roster
-            (finalRoster1, finalRoster2) <- draftPlayers rankings1 rankings2 op config
-            writeJson "testFiles/appData/draftResults/team1Roster.json" finalRoster1
-            writeJson "testFiles/appData/draftResults/team2Roster.json" finalRoster2
-            putStrLn "Draft completed successfully."
-        _ -> putStrLn "Failed to load one or more necessary files. Check file paths and data integrity."
-
 -- let allRankings = [team1Rankings, team2Rankings, team3Rankings]
 
 -- roundRobinDraft :: C.Configuration -> [[PR.PlayerRanking]] -> [[O.OfficialPlayer]] -> [R.Roster] -> Int -> IO [R.Roster]
@@ -160,3 +139,22 @@ main = do
 --   case find (\p -> O.playerId p == playerId) players of
 --     Just player -> addToRoster config player roster
 --     Nothing -> roster
+
+-- bringing it all together
+main :: IO ()
+main = do
+    eitherR1 <- readJson "testFiles/appData/rankings/_2f70cf31d261_.json"
+    eitherR2 <- readJson "testFiles/appData/rankings/_3da9fd7edb1b_.json"
+    eitherRoster <- readJson "testFiles/appData/rosters/activePlayers.json"
+    eitherConfig <- readJson "testFiles/appData/config/config.json"
+
+    case (eitherR1, eitherR2, eitherRoster, eitherConfig) of
+        (Right r1, Right r2, Right roster, Right config) -> do
+            let rankings1 = PR.rankings r1
+                rankings2 = PR.rankings r2
+                op = O.people roster
+            (finalRoster1, finalRoster2) <- draftPlayers rankings1 rankings2 op config
+            writeJson "testFiles/appData/draftResults/team1Roster.json" finalRoster1
+            writeJson "testFiles/appData/draftResults/team2Roster.json" finalRoster2
+            putStrLn "Draft completed successfully."
+        _ -> putStrLn "Failed to load one or more necessary files. Check file paths and data integrity."
