@@ -244,8 +244,8 @@ getUniquePlayerIdsLineup :: R.CurrentLineup -> [Text]
 getUniquePlayerIdsLineup R.CurrentLineup{..} =
     cC : b1C : b2C : b3C : ssC : uC : (ofC ++ spC ++ rpC)
 
-getLineupDiscrepancies :: R.CurrentLineup -> C.LgRoster -> [(String, Int)]
-getLineupDiscrepancies R.CurrentLineup{..} C.LgRoster{..} =
+getLineupDiscrepancies :: R.CurrentLineup -> C.LgRosterLmts -> [(String, Int)]
+getLineupDiscrepancies R.CurrentLineup{..} C.LgRosterLmts{..} =
     let discrepancies =
             [ validatePositionCount "Catcher" [cC] lg_catcher
             , validatePositionCount "First Base" [b1C] lg_first

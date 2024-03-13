@@ -80,7 +80,7 @@ executable autodraft
   import: shared-libs
   hs-source-dirs: src, src/ADT, src/League
   main-is: AutoDraft.hs
-  other-modules:  Config, OfficialRoster, Roster, Ranking, Input, Middle, Points, Validators, Utility
+  other-modules:  Config, OfficialRoster, Roster, Ranking, Input, Middle, Points, Validators, Utility, Draft
 
 executable generators
   import: shared-libs
