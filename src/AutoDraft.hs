@@ -63,8 +63,10 @@ autoFillLineup config rankings officialRoster =
 
 main :: IO ()
 main = do
-    eitherR1 <- readJson "testFiles/appData/rankings/_2f70cf31d261_.json"
-    eitherR2 <- readJson "testFiles/appData/rankings/_3da9fd7edb1b_.json"
+    eitherR1 <- readJson "testFiles/appData/rankings/_4aeebfdcc387_.json"
+    eitherR2 <- readJson "testFiles/appData/rankings/_4d0f22bec934_.json"
+    eitherR3 <- readJson "testFiles/appData/rankings/_8902a8299c1c_.json"
+    eitherR4 <- readJson "testFiles/appData/rankings/_474414c7ab56_.json"    
     eitherRoster <- readJson "testFiles/appData/rosters/activePlayers.json"
     eitherConfig <- readJson "testFiles/appData/config/config.json"
 
