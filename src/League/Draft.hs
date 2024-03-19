@@ -81,7 +81,7 @@ draftPlayers rankings1 rankings2 officialPlayers config = do
       extendedRankings2 = extendRankingsWithUnrankedPlayers rankings2 officialPlayerIds
       rankingsPairs = zip extendedRankings1 extendedRankings2
       initialTurn = True -- assuming Team 1 starts
-      initialState = (R.makeEmptyRoster, R.makeEmptyRoster, officialPlayerIds, initialTurn)
+      initialState = (R.mkEmptyRoster, R.mkEmptyRoster, officialPlayerIds, initialTurn)
   (roster1, roster2, _, _) <- foldM (draftCycle config officialPlayers) initialState (map (\pair -> (pair, initialTurn)) rankingsPairs)
   return (roster1, roster2)
 
