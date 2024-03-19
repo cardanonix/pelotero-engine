@@ -4,22 +4,31 @@
   inputs = {
     nixpkgs.follows = "haskellNix/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    haskellNix.url = "github:input-output-hk/haskell.nix";
-    iohk-nix.url = "github:input-output-hk/iohk-nix";
+
+    iohkNix = {
+      url = "github:input-output-hk/iohk-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    haskellNix = {
+      url = "github:input-output-hk/haskell.nix/1c329acdaac3d5a600bcaa86b1806414ccd48db6";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     CHaP = {
-      url = "github:input-output-hk/cardano-haskell-packages?ref=repo";
+      url = "github:IntersectMBO/cardano-haskell-packages?rev=35d5d7f7e7cfed87901623262ceea848239fa7f8";
       flake = false;
     };
     plutus.url = "github:input-output-hk/plutus";
     styleguide.url = "github:cardanonix/styleguide";
   };
 
-outputs = { self, nixpkgs, flake-utils, haskellNix, iohk-nix, CHaP, plutus, styleguide, ... }:
+outputs = { self, nixpkgs, flake-utils, haskellNix, iohkNix, CHaP, plutus, styleguide, ... }:
   let
   
     overlays = [
       haskellNix.overlay
-      iohk-nix.overlays.crypto
+      iohkNix.overlays.crypto
       (final: prev: {
         pelotero-engine = final.haskell-nix.project' {
           src = ./src;
