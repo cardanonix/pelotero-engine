@@ -51,6 +51,7 @@ declare -A executables=(
   ["test_adt"]=""
   ["official"]=""
   ["autodraft"]=""
+  ["newdraft"]=""
   ["generators"]=""
 )
 

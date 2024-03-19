@@ -87,3 +87,9 @@ executable generators
   hs-source-dirs: src, src/ADT, src/League
   main-is: Generators.hs
   other-modules:  Config, OfficialRoster, Roster, Ranking, Input, Middle, Points, Validators, Utility
+
+executable newdraft
+  import: shared-libs
+  hs-source-dirs: src, src/ADT, src/League
+  main-is: AutoDraftNEW.hs
+  other-modules:  Config, OfficialRoster, Roster, Ranking, Input, Middle, Points, Validators, Utility, Draft
