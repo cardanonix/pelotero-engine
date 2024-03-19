@@ -60,8 +60,12 @@ data Roster = Roster
     deriving (Show, Eq)
 
 -- Creates an empty roster with no players
-makeEmptyRoster :: Roster
-makeEmptyRoster = Roster [] [] [] [] [] [] [] [] []
+mkEmptyRoster :: Roster
+mkEmptyRoster = Roster [] [] [] [] [] [] [] [] []
+
+-- Creates an empty lineup with no players
+mkEmptyLineup :: CurrentLineup
+mkEmptyLineup = CurrentLineup [] [] [] [] [] [] [] [] []
 
 -- FromJSON Instances
 instance FromJSON LgManager where

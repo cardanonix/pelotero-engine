@@ -210,6 +210,20 @@ lookupLimit position limits =
         "r_pitcher" -> C.dr_r_pitcher limits
         _ -> 0
 
+lookupLgRosterLmts :: T.Text -> C.LgRosterLmts -> Int
+lookupLgRosterLmts position limits =
+    case position of
+        "catcher" -> C.lg_catcher limits
+        "first" -> C.lg_first limits
+        "second" -> C.lg_second limits
+        "third" -> C.lg_third limits
+        "shortstop" -> C.lg_shortstop limits
+        "outfield" -> C.lg_outfield limits
+        "utility" -> C.lg_utility limits
+        "s_pitcher" -> C.lg_s_pitcher limits
+        "r_pitcher" -> C.lg_r_pitcher limits
+        _ -> 0     
+
 -- also used in Leaderboard to verify that the player is valid except with that different player type
 hasValidPositions :: Value -> Bool
 hasValidPositions val = case fromJSON val :: Result I.Player of
@@ -316,3 +330,4 @@ batterOrPitcher playerName mgr
     lineup = R.current_lineup mgr
     batterPositions = [R.cC lineup, R.b1C lineup, R.b2C lineup, R.b3C lineup, R.ssC lineup, R.uC lineup] ++ [R.ofC lineup]
     pitcherPositions = [R.spC lineup] ++ [R.rpC lineup]
+

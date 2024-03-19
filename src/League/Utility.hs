@@ -240,6 +240,20 @@ writeJson :: ToJSON a => FilePath -> a -> IO ()
 writeJson filePath = BL.writeFile filePath . encode
 
 -- Reads and parses all ranking JSON files into data structures
+-- Verify if a player is in the official roster
+isPlayerInOfficialRoster :: Int -> [O.OfficialPlayer] -> Bool
+isPlayerInOfficialRoster playerId
+  = any (\ p -> O.playerId p == playerId)
+
+positionTextToRosterPosition :: T.Text -> R.Roster -> O.OfficialPlayer -> R.Roster
+positionTextToRosterPosition position roster player =
+  -- Implementation depends on how you're managing roster updates
+  undefined
+
+findPlayerRanking :: Int -> [PR.PlayerRanking] -> Maybe Int
+findPlayerRanking playerId rankings =
+  PR.rank <$> find ((== playerId) . PR.playerId) rankings
+
 readRankings :: FilePath -> IO [Either String [PR.PlayerRanking]]
 readRankings dir = do
     jsonFiles <- listJsonFiles dir
@@ -265,3 +279,4 @@ getCurrentFormattedTime = do
     currentTime <- getCurrentTime
     let formattedTime = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M" currentTime
     return formattedTime
+
