@@ -10,11 +10,11 @@ import System.Process (callCommand)
 main :: IO ()
 main = do
     writeConfigurationGraph
-    putStrLn "Configuration graph written to testFiles/configurationGraph.dot"
+    putStrLn "Configuration graph written to configurationGraph.dot"
     -- Convert .dot to .png using system call
-    let dotCommand = "dot -Tpng testFiles/configurationGraph.dot -o testFiles/configurationGraph.png"
+    let dotCommand = "dot -Tpng configurationGraph.dot -o configurationGraph.png"
     callCommand dotCommand
-    putStrLn "Configuration graph image written to testFiles/configurationGraph.png"
+    putStrLn "Configuration graph image written to configurationGraph.png"
 
 -- writeConfigurationGraph :: IO ()
 -- writeConfigurationGraph = do

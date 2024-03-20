@@ -101,12 +101,6 @@ draftCycle config officialPlayers (roster1, roster2, availablePlayers, isTeam1Tu
     let availablePlayersAfterP2 = maybe availablePlayersAfterP1 (\p -> delete (O.playerId p) availablePlayersAfterP1) player2
     return (updatedRoster1, updatedRoster2, availablePlayersAfterP2, not isTeam1Turn)
 
-extendRankingsWithUnrankedPlayers :: [PR.PlayerRanking] -> [Int] -> [Int]
-extendRankingsWithUnrankedPlayers rankedPlayers allPlayerIds =
-    let rankedPlayerIds = map PR.playerId rankedPlayers
-        unrankedPlayerIds = filter (`notElem` rankedPlayerIds) allPlayerIds
-    in rankedPlayerIds ++ unrankedPlayerIds -- Concatenate ranked with unranked
-
 addToRoster :: C.Configuration -> O.OfficialPlayer -> R.Roster -> R.Roster
 addToRoster config player roster =
   let positionCode = O.primaryPosition player
@@ -160,6 +154,15 @@ createLgManager :: C.Configuration -> T.Text -> R.CurrentLineup -> R.Roster -> R
 createLgManager config teamId currentLineup roster =
     R.LgManager (C.status config) (C.commissioner config) teamId (C.leagueID config) currentLineup roster
 
+
+extendRankingsWithUnrankedPlayers :: [PR.PlayerRanking] -> [Int] -> [Int]
+extendRankingsWithUnrankedPlayers rankedPlayers allPlayerIds =
+    let rankedPlayerIds = map PR.playerId rankedPlayers
+        unrankedPlayerIds = filter (`notElem` rankedPlayerIds) allPlayerIds
+    in rankedPlayerIds ++ unrankedPlayerIds -- Concatenate ranked with unranked
+
+
+
 -- New functionality
 -- Refactored to return both Rosters and Lineups for two teams
 
@@ -193,8 +196,16 @@ draftCycleNew config officialPlayers (roster1, lineup1, roster2, lineup2, availa
     return (updatedRoster1, updatedLineup1, updatedRoster2, updatedLineup2, availablePlayersAfterP2, not isTeam1Turn)
 
 
--- Add to both roster and lineup
--- Add a player to both roster and lineup based on availability and position limits
+-- -- Add to both roster and lineup
+-- -- Add a player to both roster and lineup based on availability and position limits
+-- addToRosterAndLineup :: C.Configuration -> O.OfficialPlayer -> R.Roster -> R.CurrentLineup -> (R.Roster, R.CurrentLineup)
+-- addToRosterAndLineup config player roster lineup =
+--   -- Your existing logic here...
+--   let newRoster = addPlayerToPositionNew (O.primaryPosition player) player roster config -- Ensure config is passed
+--       -- Further logic for adding player to lineup if applicable
+--   in (newRoster, lineup) -- or newLineup if modified
+
+
 addToRosterAndLineup :: C.Configuration -> O.OfficialPlayer -> R.Roster -> R.CurrentLineup -> (R.Roster, R.CurrentLineup)
 addToRosterAndLineup config player roster lineup =
     let draftPositionText = positionCodeToDraftText $ O.primaryPosition player
@@ -212,12 +223,11 @@ addToRosterAndLineup config player roster lineup =
        else -- For batters, directly add based on their primary position
             addPlayerToBoth config draftPositionText player roster lineup
 
-
 -- Helper function to add a player to both roster and lineup for a given position
 -- Adjusted to include Configuration as a parameter
 addPlayerToBoth :: C.Configuration -> T.Text -> O.OfficialPlayer -> R.Roster -> R.CurrentLineup -> (R.Roster, R.CurrentLineup)
 addPlayerToBoth config position player roster lineup =
-    let newRoster = addPlayerToPosition position player roster
+    let newRoster = addPlayerToPositionNew position player roster (C.draft_limits . C.draft_parameters $ config)
         newLineup = addPlayerToLineup position player lineup (C.valid_roster . C.point_parameters $ config)
     in (newRoster, newLineup)
 
@@ -237,4 +247,17 @@ addPlayerToLineup position player lineup limits =
         "r_pitcher" -> if length (R.rpC lineup) < C.lg_r_pitcher limits then lineup { R.rpC = playerIdText : R.rpC lineup } else lineup
         _ -> lineup  
 
-
+addPlayerToPositionNew :: T.Text -> O.OfficialPlayer -> R.Roster -> C.DraftRosterLmts -> R.Roster
+addPlayerToPositionNew position player roster limits =
+    let playerIdText = T.pack . show $ O.playerId player
+    in case position of
+          "catcher" -> if length (R.cR roster) < C.dr_catcher limits then roster { R.cR = playerIdText : R.cR roster } else roster
+          "first" -> if length (R.b1R roster) < C.dr_first limits then roster { R.b1R = playerIdText : R.b1R roster } else roster
+          "second" -> if length (R.b2R roster) < C.dr_second limits then roster { R.b2R = playerIdText : R.b2R roster } else roster
+          "third" -> if length (R.b3R roster) < C.dr_third limits then roster { R.b3R = playerIdText : R.b3R roster } else roster
+          "shortstop" -> if length (R.ssR roster) < C.dr_shortstop limits then roster { R.ssR = playerIdText : R.ssR roster } else roster
+          "outfield" -> if length (R.ofR roster) < C.dr_outfield limits then roster { R.ofR = playerIdText : R.ofR roster } else roster
+          "utility" -> if length (R.uR roster) < C.dr_utility limits then roster { R.uR = playerIdText : R.uR roster } else roster
+          "s_pitcher" -> if length (R.spR roster) < C.dr_s_pitcher limits then roster { R.spR = playerIdText : R.spR roster } else roster
+          "r_pitcher" -> if length (R.rpR roster) < C.dr_r_pitcher limits then roster { R.rpR = playerIdText : R.rpR roster } else roster
+          _ -> roster -- Default case if position does not match
