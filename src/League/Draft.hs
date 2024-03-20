@@ -30,7 +30,7 @@ import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
 import qualified Ranking as PR
-import Validators ( countPlayers, findPlayer, lookupLimit )
+import Validators ( countPlayers, findPlayer, queryDraftRosterLmt, queryLgRosterLmts )
 import Utility
 
 -- Verify if a player is in the official roster
@@ -121,8 +121,8 @@ addToRoster config player roster =
 
 addPitcherToRoster :: C.Configuration -> O.OfficialPlayer -> R.Roster -> R.Roster
 addPitcherToRoster config player roster =
-  let rosterLimitSP = lookupLimit "s_pitcher" (C.draft_limits $ C.draft_parameters config)
-      rosterLimitRP = lookupLimit "r_pitcher" (C.draft_limits $ C.draft_parameters config)
+  let rosterLimitSP = queryDraftRosterLmt "s_pitcher" (C.draft_limits $ C.draft_parameters config)
+      rosterLimitRP = queryDraftRosterLmt "r_pitcher" (C.draft_limits $ C.draft_parameters config)
       currentPositionCountSP = countPlayers "s_pitcher" roster
       currentPositionCountRP = countPlayers "r_pitcher" roster
   in if currentPositionCountSP < rosterLimitSP then
@@ -134,7 +134,7 @@ addPitcherToRoster config player roster =
 
 addBatterToRoster :: C.Configuration -> O.OfficialPlayer -> R.Roster -> T.Text -> R.Roster
 addBatterToRoster config player roster position =
-  let rosterLimit = lookupLimit position (C.draft_limits $ C.draft_parameters config)
+  let rosterLimit = queryDraftRosterLmt position (C.draft_limits $ C.draft_parameters config)
       currentPositionCount = countPlayers position roster
   in if currentPositionCount < rosterLimit then
        addPlayerToPosition position player roster
@@ -156,12 +156,9 @@ addPlayerToPosition position player roster =
        "utility" -> roster { R.uR = playerIdText : R.uR roster }
        _ -> roster -- Default case if position does not match
 
-
-
 createLgManager :: C.Configuration -> T.Text -> R.CurrentLineup -> R.Roster -> R.LgManager
 createLgManager config teamId currentLineup roster =
     R.LgManager (C.status config) (C.commissioner config) teamId (C.leagueID config) currentLineup roster
-
 
 -- New functionality
 -- Refactored to return both Rosters and Lineups for two teams
@@ -201,16 +198,16 @@ draftCycleNew config officialPlayers (roster1, lineup1, roster2, lineup2, availa
 addToRosterAndLineup :: C.Configuration -> O.OfficialPlayer -> R.Roster -> R.CurrentLineup -> (R.Roster, R.CurrentLineup)
 addToRosterAndLineup config player roster lineup =
     let draftPositionText = positionCodeToDraftText $ O.primaryPosition player
-        isPitcher = draftPositionText `elem` ["SP", "RP"]
+        isPitcher = draftPositionText `elem` ["s_pitcher", "r_pitcher"]
         positionLimits = C.valid_roster . C.point_parameters $ config
     in if isPitcher
        then -- For pitchers, decide between starting and relief based on available slots
-            let spAvailable = countPlayers "SP" roster < C.lg_s_pitcher positionLimits
-                rpAvailable = countPlayers "RP" roster < C.lg_r_pitcher positionLimits
+            let spAvailable = countPlayers "s_pitcher" roster < C.lg_s_pitcher positionLimits
+                rpAvailable = countPlayers "r_pitcher" roster < C.lg_r_pitcher positionLimits
             in if spAvailable
-               then addPlayerToBoth config "SP" player roster lineup
+               then addPlayerToBoth config "s_pitcher" player roster lineup
                else if rpAvailable
-                    then addPlayerToBoth config "RP" player roster lineup
+                    then addPlayerToBoth config "r_pitcher" player roster lineup
                     else (roster, lineup) -- No slots available
        else -- For batters, directly add based on their primary position
             addPlayerToBoth config draftPositionText player roster lineup
@@ -229,14 +226,15 @@ addPlayerToLineup :: T.Text -> O.OfficialPlayer -> R.CurrentLineup -> C.LgRoster
 addPlayerToLineup position player lineup limits =
     let playerIdText = T.pack . show $ O.playerId player
     in case position of
-        "C" -> if length (R.cC lineup) < C.lg_catcher limits then lineup { R.cC = playerIdText : R.cC lineup } else lineup
-        "1B" -> if length (R.b1C lineup) < C.lg_first limits then lineup { R.b1C = playerIdText : R.b1C lineup } else lineup
-        "2B" -> if length (R.b2C lineup) < C.lg_second limits then lineup { R.b2C = playerIdText : R.b2C lineup } else lineup
-        "3B" -> if length (R.b3C lineup) < C.lg_third limits then lineup { R.b3C = playerIdText : R.b3C lineup } else lineup
-        "SS" -> if length (R.ssC lineup) < C.lg_shortstop limits then lineup { R.ssC = playerIdText : R.ssC lineup } else lineup
-        "OF" -> if length (R.ofC lineup) < C.lg_outfield limits then lineup { R.ofC = playerIdText : R.ofC lineup } else lineup
-        "U" -> if length (R.uC lineup) < C.lg_utility limits then lineup { R.uC = playerIdText : R.uC lineup } else lineup
-        "SP" -> if length (R.spC lineup) < C.lg_s_pitcher limits then lineup { R.spC = playerIdText : R.spC lineup } else lineup
-        "RP" -> if length (R.rpC lineup) < C.lg_r_pitcher limits then lineup { R.rpC = playerIdText : R.rpC lineup } else lineup
+        "catcher" -> if length (R.cC lineup) < C.lg_catcher limits then lineup { R.cC = playerIdText : R.cC lineup } else lineup
+        "first" -> if length (R.b1C lineup) < C.lg_first limits then lineup { R.b1C = playerIdText : R.b1C lineup } else lineup
+        "second" -> if length (R.b2C lineup) < C.lg_second limits then lineup { R.b2C = playerIdText : R.b2C lineup } else lineup
+        "third" -> if length (R.b3C lineup) < C.lg_third limits then lineup { R.b3C = playerIdText : R.b3C lineup } else lineup
+        "shortstop" -> if length (R.ssC lineup) < C.lg_shortstop limits then lineup { R.ssC = playerIdText : R.ssC lineup } else lineup
+        "outfield" -> if length (R.ofC lineup) < C.lg_outfield limits then lineup { R.ofC = playerIdText : R.ofC lineup } else lineup
+        "utility" -> if length (R.uC lineup) < C.lg_utility limits then lineup { R.uC = playerIdText : R.uC lineup } else lineup
+        "s_pitcher" -> if length (R.spC lineup) < C.lg_s_pitcher limits then lineup { R.spC = playerIdText : R.spC lineup } else lineup
+        "r_pitcher" -> if length (R.rpC lineup) < C.lg_r_pitcher limits then lineup { R.rpC = playerIdText : R.rpC lineup } else lineup
         _ -> lineup  
+
 

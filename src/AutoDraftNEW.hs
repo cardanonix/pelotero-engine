@@ -33,7 +33,7 @@ import qualified Ranking as PR
 import Validators 
     ( countPlayers
     , findPlayer
-    , lookupLimit 
+    , queryDraftRosterLmt 
     )
 import Utility
     ( positionCodeToDraftText

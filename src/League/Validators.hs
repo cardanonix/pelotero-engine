@@ -196,8 +196,8 @@ validateRoster roster config = do
         (Right duplicates, []) -> Left (map T.unpack duplicates ++ ["Duplicate player IDs found in roster."])
         (_, errors) -> Left errors
 
-lookupLimit :: T.Text -> C.DraftRosterLmts -> Int
-lookupLimit position limits =
+queryDraftRosterLmt :: T.Text -> C.DraftRosterLmts -> Int
+queryDraftRosterLmt position limits =
     case position of
         "catcher" -> C.dr_catcher limits
         "first" -> C.dr_first limits
@@ -210,8 +210,8 @@ lookupLimit position limits =
         "r_pitcher" -> C.dr_r_pitcher limits
         _ -> 0
 
-lookupLgRosterLmts :: T.Text -> C.LgRosterLmts -> Int
-lookupLgRosterLmts position limits =
+queryLgRosterLmts :: T.Text -> C.LgRosterLmts -> Int
+queryLgRosterLmts position limits =
     case position of
         "catcher" -> C.lg_catcher limits
         "first" -> C.lg_first limits

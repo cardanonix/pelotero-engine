@@ -107,3 +107,4 @@ executable graphviz
                 , containers
                 , async
                 , graphviz
+                , process
