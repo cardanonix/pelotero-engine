@@ -40,33 +40,16 @@ import Utility
     ,  readJson
     ,  writeJson
     , positionCodeToDraftText
+    , createLgManager
       )
 
 import Draft
 
-autoFillLineup :: C.Configuration -> [PR.PlayerRanking] -> [O.OfficialPlayer] -> R.CurrentLineup
-autoFillLineup config rankings officialRoster =
-  let fillPosition position = 
-        let limit = getPositionLimit position (C.valid_roster $ C.point_parameters config)
-        in take limit $ getRankedPlayersForPosition rankings officialRoster position
-  in R.CurrentLineup {
-      R.cC  = fillPosition "C",
-      R.b1C = fillPosition "1B",
-      R.b2C = fillPosition "2B",
-      R.b3C = fillPosition "3B",
-      R.ssC = fillPosition "SS",
-      R.ofC = fillPosition "OF",
-      R.uC  = fillPosition "U",
-      R.spC = fillPosition "SP",
-      R.rpC = fillPosition "RP"
-    }
 
 main :: IO ()
 main = do
     eitherR1 <- readJson "testFiles/appData/rankings/_4aeebfdcc387_.json"
     eitherR2 <- readJson "testFiles/appData/rankings/_4d0f22bec934_.json"
-    -- eitherR3 <- readJson "testFiles/appData/rankings/_8902a8299c1c_.json"
-    -- eitherR4 <- readJson "testFiles/appData/rankings/_474414c7ab56_.json"    
     eitherRoster <- readJson "testFiles/appData/rosters/activePlayers.json"
     eitherConfig <- readJson "testFiles/appData/config/config.json"
 
@@ -79,17 +62,18 @@ main = do
                 teamId2 = PR.teamId r2
                 teamId1Short = T.take 12 teamId1
                 teamId2Short = T.take 12 teamId2
-            -- Draft players for both teams
-            (finalRoster1, finalRoster2) <- draftPlayers rankings1 rankings2 op config
-            -- Automatically fill lineups based on drafted rosters and configuration
-            let currentLineup1 = autoFillLineup config rankings1 op
-            let currentLineup2 = autoFillLineup config rankings2 op
 
-            -- Create LgManager instances with the filled lineups
-            let lgManager1 = createLgManager config teamId1 currentLineup1 finalRoster1
-                lgManager2 = createLgManager config teamId2 currentLineup2 finalRoster2
+            -- Draft players for both teams and obtain rosters and lineups
+            ((finalRoster1, finalLineup1), (finalRoster2, finalLineup2)) <- draftPlayers rankings1 rankings2 op config
+
+            -- Adjust the createLgManager call to include lineups
+            let lgManager1 = createLgManager config teamId1 finalLineup1 finalRoster1
+                lgManager2 = createLgManager config teamId2 finalLineup2 finalRoster2
+
             -- Write the LgManager instances to JSON files
-            writeJson (T.unpack $ "testFiles/appData/draftResults/" <> teamId1Short <> "_draft_results.json") lgManager1
-            writeJson (T.unpack $ "testFiles/appData/draftResults/" <> teamId2Short <> "_draft_results.json") lgManager2
+            writeJson (T.unpack $ "testFiles/appData/draftResults/" <> teamId1Short <> "_draft_results_new.json") lgManager1
+            writeJson (T.unpack $ "testFiles/appData/draftResults/" <> teamId2Short <> "_draft_results_new.json") lgManager2
+
             putStrLn "Draft and LgManager serialization completed successfully."
+
         _ -> putStrLn "Failed to load one or more necessary files. Check file paths and data integrity."

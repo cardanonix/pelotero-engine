@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use list comprehension" #-}
+{-# HLINT ignore "Use :" #-}
 
 module Validators where
 

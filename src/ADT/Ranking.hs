@@ -45,7 +45,6 @@ import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
 import Data.Aeson.Types (toJSON)
 
-
 -- | Represents the top-level ranking data structure.
 data RankingData = RankingData
     { teamId        :: Text

@@ -92,9 +92,7 @@ import GHC.Generics (Generic )
 import System.Random ( randomR, newStdGen, StdGen )
 import qualified Data.HashMap.Strict as HM
 import qualified Config as C
--- import qualified GHC.Generics as R
 import qualified Input as I
-import OfficialRoster as O
 import qualified OfficialRoster as O
 import qualified Points as P
 import qualified Roster as R
@@ -169,6 +167,16 @@ positionCodeToDraftText code =
         "RF" -> "outfield"
         "DH" -> "utility"
         _    -> "Unknown"
+
+createLgManager :: C.Configuration -> T.Text -> R.CurrentLineup -> R.Roster -> R.LgManager
+createLgManager config teamId currentLineup roster =
+    R.LgManager (C.status config) (C.commissioner config) teamId (C.leagueID config) currentLineup roster
+
+extendRankingsWithUnrankedPlayers :: [PR.PlayerRanking] -> [Int] -> [Int]
+extendRankingsWithUnrankedPlayers rankedPlayers allPlayerIds =
+    let rankedPlayerIds = map PR.playerId rankedPlayers
+        unrankedPlayerIds = filter (`notElem` rankedPlayerIds) allPlayerIds
+    in rankedPlayerIds ++ unrankedPlayerIds -- Concatenate ranked with unranked
 
 -- Generate a random ByteString of a specified length
 generateRandomBytes :: Int -> IO ByteString

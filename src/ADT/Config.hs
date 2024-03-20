@@ -36,6 +36,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Vector as V
 
+
 -- ## League Configuration ADT ## --
 data Configuration = Configuration
     { status :: Text
