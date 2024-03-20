@@ -1,0 +1,15 @@
+digraph ConfigurationGraph {
+    Configuration [label="Configuration\nstatus, leagueID, commissioner, lgMembers"];
+    PointParameters [label="PointParameters\nlg_style, start_UTC, end_UTC"];
+    BattingMults [label="BattingMults\nlgb_single, lgb_double, ..."];
+    PitchingMults [label="PitchingMults\nlgp_win, lgp_save, ..."];
+    LgRosterLmts [label="LgRosterLmts\nlg_catcher, lg_first, ..."];
+    DraftParameters [label="DraftParameters\nautoDraft, autoDraft_UTC"];
+    DraftRosterLmts [label="DraftRosterLmts\ndr_catcher, dr_first, ..."];
+    Configuration -> PointParameters;
+    Configuration -> DraftParameters;
+    PointParameters -> BattingMults;
+    PointParameters -> PitchingMults;
+    PointParameters -> LgRosterLmts;
+    DraftParameters -> DraftRosterLmts;
+}
