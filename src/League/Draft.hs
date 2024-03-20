@@ -34,21 +34,6 @@ import Validators ( countPlayers, findPlayer, queryDraftRosterLmt, queryLgRoster
 import Utility
     ( positionCodeToDraftText, extendRankingsWithUnrankedPlayers, createLgManager )
 
-addPlayerToPosition :: T.Text -> O.OfficialPlayer -> R.Roster -> R.Roster
-addPlayerToPosition position player roster =
-  let playerIdText = T.pack $ show $ O.playerId player
-  in case position of
-       "s_pitcher" -> roster { R.spR = playerIdText : R.spR roster }
-       "r_pitcher" -> roster { R.rpR = playerIdText : R.rpR roster }
-       "catcher" -> roster { R.cR = playerIdText : R.cR roster }
-       "first" -> roster { R.b1R = playerIdText : R.b1R roster }
-       "second" -> roster { R.b2R = playerIdText : R.b2R roster }
-       "third" -> roster { R.b3R = playerIdText : R.b3R roster }
-       "shortstop" -> roster { R.ssR = playerIdText : R.ssR roster }
-       "outfield" -> roster { R.ofR = playerIdText : R.ofR roster }
-       "utility" -> roster { R.uR = playerIdText : R.uR roster }
-       _ -> roster -- Default case if position does not match
-
 draftPlayers :: [PR.PlayerRanking] -> [PR.PlayerRanking] -> [O.OfficialPlayer] -> C.Configuration -> IO ((R.Roster, R.CurrentLineup), (R.Roster, R.CurrentLineup))
 draftPlayers rankings1 rankings2 officialPlayers config = do
   let officialPlayerIds = map O.playerId officialPlayers
@@ -96,26 +81,6 @@ addToRosterAndLineup config player roster lineup =
                                else lineup
            in (updatedRoster, updatedLineup)
 
-addPlayerToBoth :: C.Configuration -> O.OfficialPlayer -> R.Roster -> R.CurrentLineup -> (R.Roster, R.CurrentLineup)
-addPlayerToBoth config player roster lineup =
-    let draftPositionText = positionCodeToDraftText $ O.primaryPosition player
-        isPitcher = draftPositionText == "pitcher"
-        draftLimits = C.draft_limits $ C.draft_parameters config
-        lgRosterLimits = C.valid_roster $ C.point_parameters config
-    in if isPitcher
-       then 
-           let (updatedRoster, pitcherPosition) = addPitcherToRoster config player roster
-               updatedLineup = if pitcherPosition /= ""
-                               then addPlayerToLineup pitcherPosition player lineup lgRosterLimits
-                               else lineup
-           in (updatedRoster, updatedLineup)
-       else 
-           let (updatedRoster, isAddedToRoster) = addBatterToRoster config draftPositionText player roster draftLimits
-               updatedLineup = if isAddedToRoster
-                               then addPlayerToLineup draftPositionText player lineup lgRosterLimits
-                               else lineup
-           in (updatedRoster, updatedLineup)
-
 addPlayerToLineup :: T.Text -> O.OfficialPlayer -> R.CurrentLineup -> C.LgRosterLmts -> R.CurrentLineup
 addPlayerToLineup position player lineup limits =
     let playerIdText = T.pack . show $ O.playerId player
@@ -130,6 +95,21 @@ addPlayerToLineup position player lineup limits =
         "s_pitcher" -> if length (R.spC lineup) < C.lg_s_pitcher limits then lineup { R.spC = playerIdText : R.spC lineup } else lineup
         "r_pitcher" -> if length (R.rpC lineup) < C.lg_r_pitcher limits then lineup { R.rpC = playerIdText : R.rpC lineup } else lineup
         _ -> lineup  
+
+addPlayerToPosition :: T.Text -> O.OfficialPlayer -> R.Roster -> R.Roster
+addPlayerToPosition position player roster =
+  let playerIdText = T.pack $ show $ O.playerId player
+  in case position of
+       "s_pitcher" -> roster { R.spR = playerIdText : R.spR roster }
+       "r_pitcher" -> roster { R.rpR = playerIdText : R.rpR roster }
+       "catcher" -> roster { R.cR = playerIdText : R.cR roster }
+       "first" -> roster { R.b1R = playerIdText : R.b1R roster }
+       "second" -> roster { R.b2R = playerIdText : R.b2R roster }
+       "third" -> roster { R.b3R = playerIdText : R.b3R roster }
+       "shortstop" -> roster { R.ssR = playerIdText : R.ssR roster }
+       "outfield" -> roster { R.ofR = playerIdText : R.ofR roster }
+       "utility" -> roster { R.uR = playerIdText : R.uR roster }
+       _ -> roster -- Default case if position does not match
 
 addPitcherToRoster :: C.Configuration -> O.OfficialPlayer -> R.Roster -> (R.Roster, T.Text)
 addPitcherToRoster config player roster =
