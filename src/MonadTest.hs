@@ -16,10 +16,19 @@ import Utility
     , positionCodeToDraftText
     , createLgManager
     )
-import DraftMonad
+import DraftM
 
 
-runDraft :: DraftState -> DraftMonad a -> IO (Either DraftError a, DraftState)
+initialDraftState :: C.Configuration -> [O.OfficialPlayer] -> [Int] -> DraftState
+initialDraftState config players availableIds = DraftState {
+    rosters = [],
+    currentPick = 0,
+    allPlayers = players,
+    availableIds = availableIds,
+    config = config
+}
+
+runDraft :: DraftState -> DraftM a -> IO (Either DraftError a, DraftState)
 runDraft initialState action = runStateT (runExceptT action) initialState
 
 main :: IO ()
