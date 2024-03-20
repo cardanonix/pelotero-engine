@@ -172,11 +172,16 @@ createLgManager :: C.Configuration -> T.Text -> R.CurrentLineup -> R.Roster -> R
 createLgManager config teamId currentLineup roster =
     R.LgManager (C.status config) (C.commissioner config) teamId (C.leagueID config) currentLineup roster
 
-extendRankingsWithUnrankedPlayers :: [PR.PlayerRanking] -> [Int] -> [Int]
-extendRankingsWithUnrankedPlayers rankedPlayers allPlayerIds =
-    let rankedPlayerIds = map PR.playerId rankedPlayers
+extendRankingsWithUnrankedPlayers :: [PR.PlayerRanking] -> [Int] -> [PR.PlayerRanking]
+extendRankingsWithUnrankedPlayers rankedPlayerRankings allPlayerIds =
+    let rankedPlayerIds = map PR.playerId rankedPlayerRankings
+        -- Determine the max rank in the current rankings or default to 0 if empty
+        maxRank = if null rankedPlayerRankings then 0 else maximum $ map PR.rank rankedPlayerRankings
+        -- Filter out player IDs that have already been ranked
         unrankedPlayerIds = filter (`notElem` rankedPlayerIds) allPlayerIds
-    in rankedPlayerIds ++ unrankedPlayerIds -- Concatenate ranked with unranked
+        -- Create rankings for unranked players, assigning a rank one greater than the current max rank and incrementing for each
+        unrankedRankings = zipWith (\pid rn -> PR.PlayerRanking pid (maxRank + rn)) unrankedPlayerIds [1..]
+    in rankedPlayerRankings ++ unrankedRankings
 
 -- Generate a random ByteString of a specified length
 generateRandomBytes :: Int -> IO ByteString

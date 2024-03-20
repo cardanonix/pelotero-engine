@@ -1,20 +1,38 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use tuple-section" #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Main where
 
-import Control.Monad (forM, foldM)
-import Data.Aeson (FromJSON, ToJSON, decode, encode, withObject, (.:))
+
+import Control.Monad (foldM) -- Removed forM since it's not used here directly
+import Control.Monad (forM_) -- Explicit import for forM_
+import Data.Aeson
+    ( decode,
+      encode,
+      FromJSON,
+      ToJSON,
+      decode,
+      encode,
+      withObject,
+      (.:) )
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
-import GHC.Generics (Generic)
-import Data.Time.Clock (UTCTime, getCurrentTime)
-import Data.Time.Format (formatTime, defaultTimeLocale)
-
-import Data.Maybe (mapMaybe, fromMaybe)
+import GHC.Generics ( Generic, Generic )
+import Data.Time.Clock ( getCurrentTime, UTCTime, getCurrentTime )
+import Data.Time.Format
+    ( formatTime, defaultTimeLocale, formatTime, defaultTimeLocale )
+import System.Directory ( listDirectory, listDirectory )
+import System.FilePath
+    ( (</>), takeExtension, (</>), takeExtension )
+import Data.Maybe ( fromMaybe, mapMaybe, fromMaybe )
 import Data.List
     ( find,
+      delete,
+      sortOn,
+      sortBy,
+      findIndex,
+      find,
       delete,
       sortOn,
       sortBy,
@@ -25,54 +43,63 @@ import Data.List
       findIndex,
       sortOn,
       findIndex )
-
 import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
 import qualified Ranking as PR
-import Validators 
-    ( countPlayers
-    , findPlayer
-    , queryDraftRosterLmt 
-    )
+import Validators
+    ( countPlayers,
+      findPlayer,
+      queryDraftRosterLmt,
+      countPlayers,
+      findPlayer,
+      queryDraftRosterLmt )
 import Utility
-    ( positionCodeToDraftText
-    ,  readJson
-    ,  writeJson
-    , positionCodeToDraftText
-    , createLgManager
-      )
-
+    ( readJson,
+      writeJson,
+      createLgManager,
+      positionCodeToDraftText,
+      readJson,
+      writeJson,
+      positionCodeToDraftText,
+      createLgManager )
 import Draft
-
+import Data.Foldable (forM_) -- Add this if forM_ is still not in scope
+import Control.Monad (forM, foldM)
 
 main :: IO ()
 main = do
-    eitherR1 <- readJson "testFiles/appData/rankings/_4aeebfdcc387_.json"
-    eitherR2 <- readJson "testFiles/appData/rankings/_4d0f22bec934_.json"
+    -- Adjust these paths as needed
+    let rankingsDir = "testFiles/appData/rankings"
     eitherRoster <- readJson "testFiles/appData/rosters/activePlayers.json"
     eitherConfig <- readJson "testFiles/appData/config/config.json"
 
-    case (eitherR1, eitherR2, eitherRoster, eitherConfig) of
-        (Right r1, Right r2, Right roster, Right config) -> do
-            let rankings1 = PR.rankings r1
-                rankings2 = PR.rankings r2
+    -- List all JSON files in the rankings directory
+    files <- listDirectory rankingsDir
+    let rankingFiles = filter (\f -> takeExtension f == ".json") files
+
+    -- Read and decode all ranking files
+    rankingDatas <- mapM (\file -> readJson (rankingsDir </> file)) rankingFiles
+    let eitherRankings = sequence rankingDatas -- Convert [Either a] to Either [a]
+
+    case (eitherRankings, eitherRoster, eitherConfig) of
+        (Right rankings, Right roster, Right config) -> do
+            let allRankings = map PR.rankings rankings
                 op = O.people roster
-                teamId1 = PR.teamId r1
-                teamId2 = PR.teamId r2
-                teamId1Short = T.take 12 teamId1
-                teamId2Short = T.take 12 teamId2
 
-            -- Draft players for both teams and obtain rosters and lineups
-            ((finalRoster1, finalLineup1), (finalRoster2, finalLineup2)) <- draftPlayers rankings1 rankings2 op config
+            -- Process the draft for all teams
+            finalStates <- draftPlayers allRankings op config
 
-            -- Adjust the createLgManager call to include lineups
-            let lgManager1 = createLgManager config teamId1 finalLineup1 finalRoster1
-                lgManager2 = createLgManager config teamId2 finalLineup2 finalRoster2
+            -- Process each team's results
+            forM_ (zip finalStates rankings) $ \((finalRoster, finalLineup, _availablePlayerIds), rankingData) -> do
+                let teamId = PR.teamId rankingData
+                    teamIdShort = T.take 12 teamId
 
-            -- Write the LgManager instances to JSON files
-            writeJson (T.unpack $ "testFiles/appData/draftResults/" <> teamId1Short <> "_draft_results_new.json") lgManager1
-            writeJson (T.unpack $ "testFiles/appData/draftResults/" <> teamId2Short <> "_draft_results_new.json") lgManager2
+                -- Create the LgManager with the team's final roster and lineup
+                let lgManager = createLgManager config teamId finalLineup finalRoster
+
+                -- Write the LgManager instance to a JSON file
+                writeJson (T.unpack $ "testFiles/appData/draftResults/" <> teamIdShort <> "_draft_results_new.json") lgManager
 
             putStrLn "Draft and LgManager serialization completed successfully."
 

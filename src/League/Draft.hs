@@ -34,32 +34,40 @@ import Validators ( countPlayers, findPlayer, queryDraftRosterLmt, queryLgRoster
 import Utility
     ( positionCodeToDraftText, extendRankingsWithUnrankedPlayers, createLgManager )
 
-draftPlayers :: [PR.PlayerRanking] -> [PR.PlayerRanking] -> [O.OfficialPlayer] -> C.Configuration -> IO ((R.Roster, R.CurrentLineup), (R.Roster, R.CurrentLineup))
-draftPlayers rankings1 rankings2 officialPlayers config = do
-  let officialPlayerIds = map O.playerId officialPlayers
-      extendedRankings1 = extendRankingsWithUnrankedPlayers rankings1 officialPlayerIds
-      extendedRankings2 = extendRankingsWithUnrankedPlayers rankings2 officialPlayerIds
-      rankingsPairs = zip extendedRankings1 extendedRankings2
-      initialTurn = True -- Team 1 starts
-      initialState = (R.mkEmptyRoster, R.mkEmptyLineup, R.mkEmptyRoster, R.mkEmptyLineup, officialPlayerIds, initialTurn)
-  
-  (finalRoster1, finalLineup1, finalRoster2, finalLineup2, _, _) <- foldM (draftCycle config officialPlayers) initialState (map (\pair -> (pair, initialTurn)) rankingsPairs)
-  
-  return ((finalRoster1, finalLineup1), (finalRoster2, finalLineup2))
 
-draftCycle :: C.Configuration -> [O.OfficialPlayer] -> (R.Roster, R.CurrentLineup, R.Roster, R.CurrentLineup, [Int], Bool) -> ((Int, Int), Bool) -> IO (R.Roster, R.CurrentLineup, R.Roster, R.CurrentLineup, [Int], Bool)
-draftCycle config officialPlayers (roster1, lineup1, roster2, lineup2, availablePlayers, isTeam1Turn) ((rankId1, rankId2), nextIsTeam1Turn) = do
-    putStrLn $ "Drafting players with IDs: " ++ show (rankId1, rankId2)
-    let player1 = findPlayer rankId1 officialPlayers availablePlayers
-        player2 = findPlayer rankId2 officialPlayers (maybe availablePlayers (\p -> delete (O.playerId p) availablePlayers) player1)
+draftPlayers :: [[PR.PlayerRanking]] -> [O.OfficialPlayer] -> C.Configuration -> IO [(R.Roster, R.CurrentLineup, [Int])]
+draftPlayers teamRankings officialPlayers config = do
+    let officialPlayerIds = map O.playerId officialPlayers
+        extendedTeamRankings = map (`extendRankingsWithUnrankedPlayers` officialPlayerIds) teamRankings
+        draftOrder = serpentineOrder $ length teamRankings
+        initialState = replicate (length teamRankings) (R.mkEmptyRoster, R.mkEmptyLineup, officialPlayerIds)
+        
+    foldM (draftCycle config officialPlayers) initialState (zip draftOrder extendedTeamRankings)
+    
+serpentineOrder :: Int -> [[Int]]
+serpentineOrder numTeams = let baseOrder = [0..numTeams - 1]
+                               orders = map (\n -> if even n then baseOrder else reverse baseOrder) [0..numTeams-1]
+                           in orders
 
-    let (updatedRoster1, updatedLineup1) = maybe (roster1, lineup1) (\p -> addToRosterAndLineup config p roster1 lineup1) player1
-        availablePlayersAfterP1 = maybe availablePlayers (\p -> delete (O.playerId p) availablePlayers) player1
+draftCycle :: C.Configuration -> [O.OfficialPlayer] -> [(R.Roster, R.CurrentLineup, [Int])] -> ([Int], [PR.PlayerRanking]) -> IO [(R.Roster, R.CurrentLineup, [Int])]
+draftCycle config officialPlayers teamStates (order, teamRankings) = do
+    -- Process each team's pick in the current order
+    foldM (processPick officialPlayers config) teamStates (zip order teamRankings)
 
-        (updatedRoster2, updatedLineup2) = maybe (roster2, lineup2) (\p -> addToRosterAndLineup config p roster2 lineup2) player2
-        availablePlayersAfterP2 = maybe availablePlayersAfterP1 (\p -> delete (O.playerId p) availablePlayersAfterP1) player2
+processPick :: [O.OfficialPlayer] -> C.Configuration -> [(R.Roster, R.CurrentLineup, [Int])] -> (Int, PR.PlayerRanking) -> IO [(R.Roster, R.CurrentLineup, [Int])]
+processPick officialPlayers config teamStates (teamIndex, playerRanking) = do
+    let (roster, lineup, availablePlayers) = teamStates !! teamIndex
+        maybePlayer = findPlayer (PR.playerId playerRanking) officialPlayers availablePlayers
+    case maybePlayer of
+        Just player -> do
+            let (updatedRoster, updatedLineup) = addToRosterAndLineup config player roster lineup
+                newAvailablePlayers = delete (O.playerId player) availablePlayers
+            return $ updateTeamState teamStates teamIndex (updatedRoster, updatedLineup, newAvailablePlayers)
+        Nothing -> return teamStates -- If player is not found or not available
 
-    return (updatedRoster1, updatedLineup1, updatedRoster2, updatedLineup2, availablePlayersAfterP2, not isTeam1Turn)
+updateTeamState :: [(R.Roster, R.CurrentLineup, [Int])] -> Int -> (R.Roster, R.CurrentLineup, [Int]) -> [(R.Roster, R.CurrentLineup, [Int])]
+updateTeamState teamStates index newState = 
+    take index teamStates ++ [newState] ++ drop (index + 1) teamStates
 
 addToRosterAndLineup :: C.Configuration -> O.OfficialPlayer -> R.Roster -> R.CurrentLineup -> (R.Roster, R.CurrentLineup)
 addToRosterAndLineup config player roster lineup =
