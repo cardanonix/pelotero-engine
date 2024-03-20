@@ -86,7 +86,8 @@ executable draftmonad
   import: shared-libs
   hs-source-dirs: src, src/ADT, src/League
   main-is: MonadTest.hs
-  other-modules:  Config, OfficialRoster, Roster, Ranking, Input, Middle, Points, Validators, Utility, Draft, DraftMonad
+  other-modules:  Config, OfficialRoster, Roster, Ranking, Input, Middle, Points, Validators, Utility, DraftMonad
+  build-depends:  mtl
 
 executable generators
   import: shared-libs

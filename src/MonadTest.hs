@@ -1,27 +1,5 @@
 module Main where
 
--- import Control.Monad (forM, foldM)
--- import Data.Aeson (FromJSON, ToJSON, decode, encode, withObject, (.:))
--- import qualified Data.ByteString.Lazy as BL
--- import qualified Data.Text as T
--- import GHC.Generics (Generic)
--- import Data.Time.Clock (UTCTime, getCurrentTime)
--- import Data.Time.Format (formatTime, defaultTimeLocale)
-
--- import Data.Maybe (mapMaybe, fromMaybe)
--- import Data.List
---     ( find,
---       delete,
---       sortOn,
---       sortBy,
---       findIndex,
---       sortOn,
---       findIndex,
---       sortOn,
---       findIndex,
---       sortOn,
---       findIndex )
-
 import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
@@ -37,9 +15,7 @@ import Utility
     ,  writeJson
     , positionCodeToDraftText
     , createLgManager
-      )
-
--- import Draft
+    )
 import DraftMonad
 
 
