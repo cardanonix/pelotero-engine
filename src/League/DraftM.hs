@@ -59,13 +59,14 @@ data DraftError
 
 type DraftM a = ExceptT DraftError (StateT DraftState IO) a
 
-getTeamByIndex :: Int -> DraftM (R.Roster, R.CurrentLineup, [Int])
-getTeamByIndex index = do
+getTeamByIndexSafe :: Int -> DraftM (R.Roster, R.CurrentLineup, [Int])
+getTeamByIndexSafe index = do
   draftState <- get
   let teams = rosters draftState
-  if index < 0 || index >= length teams
-    then throwError $ InvalidTeamIndex index
-    else return (teams !! index)
+  maybe (throwError $ InvalidTeamIndex index) return (atMay teams index)
+  where
+    atMay :: [a] -> Int -> Maybe a
+    atMay xs n = if n >= 0 && n < length xs then Just (xs !! n) else Nothing
 
 findPlayerMonad :: Int -> [O.OfficialPlayer] -> [Int] -> DraftM O.OfficialPlayer
 findPlayerMonad playerId players availableIds = case findPlayer playerId players availableIds of
