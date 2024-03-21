@@ -4,38 +4,26 @@
 module Ranking where
 
 import Data.Aeson
-    ( FromJSON,
-      ToJSON,
+    ( ToJSON,
       FromJSON(..),
       Result(Success),
       Value,
       decode,
-      eitherDecodeStrict,
       fromJSON,
       withObject,
       (.!=),
       (.:),
-      (.:?),
-      FromJSON(..),
-      Result(Success),
-      Value,
-      decode,
       eitherDecodeStrict,
-      fromJSON,
-      withObject,
       (.!=),
-      (.:),
       (.:?),
       object,
-      (.=) )
-
+      (.=) 
+    )
 import Data.Time (
     Day,
-    addDays,
     defaultTimeLocale,
     diffDays,
     formatTime,
-    parseTimeOrError,
     parseTimeM
  )
 import qualified Data.ByteString.Lazy as BL
@@ -60,7 +48,6 @@ type PlayerRankings = [PlayerRanking]
 -- Creates an empty collection of player rankings
 mkEmptyRankings :: PlayerRankings
 mkEmptyRankings = []
-
 
 -- Represents a player's ranking within the team.
 data PlayerRanking = PlayerRanking

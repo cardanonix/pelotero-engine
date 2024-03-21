@@ -33,7 +33,7 @@ import qualified Ranking as PR
 import Validators 
     ( countPlayers
     , findPlayer
-    , queryDraftRosterLmt 
+    , queryDraftRosterLmts 
     )
 import Utility
     ( positionCodeToDraftText
@@ -66,7 +66,6 @@ main = do
             -- Draft players for both teams and obtain rosters and lineups
             ((finalRoster1, finalLineup1), (finalRoster2, finalLineup2)) <- draftPlayers rankings1 rankings2 op config
 
-            -- Adjust the createLgManager call to include lineups
             let lgManager1 = createLgManager config teamId1 finalLineup1 finalRoster1
                 lgManager2 = createLgManager config teamId2 finalLineup2 finalRoster2
 

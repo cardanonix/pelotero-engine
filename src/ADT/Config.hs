@@ -54,7 +54,7 @@ data PointParameters = PointParameters
     , end_UTC :: Text
     , lg_battingMults :: BattingMults
     , lg_pitchingMults :: PitchingMults
-    , valid_roster :: LgRosterLmts
+    , valid_roster :: LgLineupLmts
     }
     deriving (Show, Eq)
 
@@ -89,7 +89,7 @@ data PitchingMults = PitchingMults
     }
     deriving (Show, Eq)
 
-data LgRosterLmts = LgRosterLmts
+data LgLineupLmts = LgLineupLmts
     { lg_catcher :: Int
     , lg_first :: Int
     , lg_second :: Int
@@ -183,9 +183,9 @@ instance FromJSON PitchingMults where
 
         return PitchingMults{..}
 
-instance FromJSON LgRosterLmts where
-    parseJSON = withObject "LgRosterLmts" $ \v ->
-        LgRosterLmts
+instance FromJSON LgLineupLmts where
+    parseJSON = withObject "LgLineupLmts" $ \v ->
+        LgLineupLmts
             <$> v .: "catcher"
             <*> v .: "first"
             <*> v .: "second"
@@ -275,9 +275,9 @@ instance ToJSON PitchingMults where
         , "loss" .= lgp_loss
         ]
 
-instance ToJSON LgRosterLmts where
-    toJSON :: LgRosterLmts -> Value
-    toJSON LgRosterLmts{..} = object
+instance ToJSON LgLineupLmts where
+    toJSON :: LgLineupLmts -> Value
+    toJSON LgLineupLmts{..} = object
         [ "catcher" .= lg_catcher
         , "first" .= lg_first
         , "second" .= lg_second

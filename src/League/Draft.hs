@@ -30,7 +30,7 @@ import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
 import qualified Ranking as PR
-import Validators ( countPlayers, findPlayer, queryDraftRosterLmt, queryLgRosterLmts )
+import Validators ( countPlayers, findPlayer, queryDraftRosterLmts, queryLgLineupLmts )
 import Utility
     ( positionCodeToDraftText, extendRankingsWithUnrankedPlayers, createLgManager )
 
@@ -81,7 +81,7 @@ addToRosterAndLineup config player roster lineup =
                                else lineup
            in (updatedRoster, updatedLineup)
 
-addPlayerToLineup :: T.Text -> O.OfficialPlayer -> R.CurrentLineup -> C.LgRosterLmts -> R.CurrentLineup
+addPlayerToLineup :: T.Text -> O.OfficialPlayer -> R.CurrentLineup -> C.LgLineupLmts -> R.CurrentLineup
 addPlayerToLineup position player lineup limits =
     let playerIdText = T.pack . show $ O.playerId player
     in case position of
@@ -113,8 +113,8 @@ addPlayerToPosition position player roster =
 
 addPitcherToRoster :: C.Configuration -> O.OfficialPlayer -> R.Roster -> (R.Roster, T.Text)
 addPitcherToRoster config player roster =
-  let spLimit = queryDraftRosterLmt "s_pitcher" $ C.draft_limits $ C.draft_parameters config
-      rpLimit = queryDraftRosterLmt "r_pitcher" $ C.draft_limits $ C.draft_parameters config
+  let spLimit = queryDraftRosterLmts "s_pitcher" $ C.draft_limits $ C.draft_parameters config
+      rpLimit = queryDraftRosterLmts "r_pitcher" $ C.draft_limits $ C.draft_parameters config
       spCount = length $ R.spR roster
       rpCount = length $ R.rpR roster
   in if spCount < spLimit
@@ -127,7 +127,7 @@ addBatterToRoster :: C.Configuration -> T.Text -> O.OfficialPlayer -> R.Roster -
 addBatterToRoster config position player roster limits =
     let playerIdText = T.pack . show $ O.playerId player
         currentCount = countPlayers position roster
-        limit = queryDraftRosterLmt position limits
+        limit = queryDraftRosterLmts position limits
     in if currentCount < limit
        then (addPlayerToPosition position player roster, True)
        else (roster, False)       

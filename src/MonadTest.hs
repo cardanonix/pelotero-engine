@@ -7,7 +7,7 @@ import qualified Ranking as PR
 import Validators
     ( countPlayers
     , findPlayer
-    , queryDraftRosterLmt
+    , queryDraftRosterLmts
     )
 import Utility
     ( positionCodeToDraftText,
@@ -40,10 +40,10 @@ runDraft initialState action = runStateT (runExceptT action) initialState
 
 main :: IO ()
 main = do
-    eitherConfig <- readJson "testFiles/appData/config/config.json" :: IO (Either String C.Configuration)
-    eitherPlayers <- readJson "testFiles/appData/rosters/activePlayers.json" :: IO (Either String [O.OfficialPlayer])
-    eitherRankings1 <- readJson "testFiles/appData/rankings/_4aeebfdcc387_.json" :: IO (Either String PR.RankingData)
-    eitherRankings2 <- readJson "testFiles/appData/rankings/_4d0f22bec934_.json" :: IO (Either String PR.RankingData)
+    eitherRankings1 <- readJson "testFiles/appData/rankings/_4aeebfdcc387_.json"
+    eitherRankings2 <- readJson "testFiles/appData/rankings/_4d0f22bec934_.json"
+    eitherPlayers <- readJson "testFiles/appData/rosters/activePlayers.json"
+    eitherConfig <- readJson "testFiles/appData/config/config.json"
 
     case (eitherConfig, eitherPlayers, eitherRankings1, eitherRankings2) of
         (Right config, Right players, Right r1, Right r2) -> do

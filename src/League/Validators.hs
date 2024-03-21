@@ -197,8 +197,8 @@ validateRoster roster config = do
         (Right duplicates, []) -> Left (map T.unpack duplicates ++ ["Duplicate player IDs found in roster."])
         (_, errors) -> Left errors
 
-queryDraftRosterLmt :: T.Text -> C.DraftRosterLmts -> Int
-queryDraftRosterLmt position limits =
+queryDraftRosterLmts :: T.Text -> C.DraftRosterLmts -> Int
+queryDraftRosterLmts position limits =
     case position of
         "catcher" -> C.dr_catcher limits
         "first" -> C.dr_first limits
@@ -211,8 +211,8 @@ queryDraftRosterLmt position limits =
         "r_pitcher" -> C.dr_r_pitcher limits
         _ -> 0
 
-queryLgRosterLmts :: T.Text -> C.LgRosterLmts -> Int
-queryLgRosterLmts position limits =
+queryLgLineupLmts :: T.Text -> C.LgLineupLmts -> Int
+queryLgLineupLmts position limits =
     case position of
         "catcher" -> C.lg_catcher limits
         "first" -> C.lg_first limits
@@ -261,8 +261,8 @@ getUniquePlayerIdsLineup :: R.CurrentLineup -> [Text]
 getUniquePlayerIdsLineup R.CurrentLineup{..} =
     cC ++ b1C ++ b2C ++ b3C ++ ssC ++ uC ++ ofC ++ spC ++ rpC
 
-getLineupDiscrepancies :: R.CurrentLineup -> C.LgRosterLmts -> [(String, Int)]
-getLineupDiscrepancies R.CurrentLineup{..} C.LgRosterLmts{..} =
+getLineupDiscrepancies :: R.CurrentLineup -> C.LgLineupLmts -> [(String, Int)]
+getLineupDiscrepancies R.CurrentLineup{..} C.LgLineupLmts{..} =
     let discrepancies =
             [ validatePositionCount "Catcher" [cC] lg_catcher
             , validatePositionCount "First Base" [b1C] lg_first

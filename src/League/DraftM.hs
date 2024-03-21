@@ -32,7 +32,7 @@ import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
 import qualified Ranking as PR
-import Validators ( countPlayers, findPlayer, queryDraftRosterLmt, queryLgRosterLmts )
+import Validators ( countPlayers, findPlayer, queryDraftRosterLmts, queryLgLineupLmts )
 import Utility
     ( positionCodeToDraftText, extendRankingsWithUnrankedPlayers, createLgManager )
 
@@ -82,12 +82,12 @@ serpentineOrder numTeams rounds = return $ map generateOrder [1..rounds]
   where
     generateOrder round = if even round then reverse [1..numTeams] else [1..numTeams]
 
-
--- Draft players for each team, given a list of player rankings for each team
 draftPlayersMonad :: [[PR.PlayerRanking]] -> DraftM ()
 draftPlayersMonad teamRankings = do
+  when (null teamRankings) $
+    throwError $ OtherDraftError "Team rankings cannot be empty."
   let numTeams = length teamRankings
-  draftOrder <- serpentineOrder numTeams (length (head teamRankings)) -- Adjust based on actual rounds
+  draftOrder <- serpentineOrder numTeams (length $ head teamRankings)
   mapM_ draftCycleMonad (zip draftOrder teamRankings)
 
 -- Assuming allPlayers and availableIds are fields in DraftState
@@ -118,7 +118,7 @@ addToRosterAndLineupM player = do
   -- Perform actions based on player position (pitcher or batter)
   (updatedRoster, updatedLineup) <- if draftPositionText == "pitcher" then do
       updatedRoster <- addPitcherToRosterM player currentRoster
-      updatedLineup <- addPlayerToLineupM draftPositionText player currentLineup 
+      updatedLineup <- addPlayerToLineupM draftPositionText player currentLineup
       return (updatedRoster, updatedLineup)
     else do
       (updatedRoster, isAddedToRoster) <- addBatterToRosterM draftPositionText player currentRoster
@@ -136,8 +136,8 @@ addPitcherToRosterM :: O.OfficialPlayer -> R.Roster -> DraftM R.Roster
 addPitcherToRosterM player roster = do
   draftState <- get
   let configData = config draftState  -- Use a different name to avoid shadowing
-      spLimit = queryDraftRosterLmt "s_pitcher" $ C.draft_limits $ C.draft_parameters configData
-      rpLimit = queryDraftRosterLmt "r_pitcher" $ C.draft_limits $ C.draft_parameters configData
+      spLimit = queryDraftRosterLmts "s_pitcher" $ C.draft_limits $ C.draft_parameters configData
+      rpLimit = queryDraftRosterLmts "r_pitcher" $ C.draft_limits $ C.draft_parameters configData
       spCount = length $ R.spR roster
       rpCount = length $ R.rpR roster
   if spCount < spLimit then
@@ -152,7 +152,7 @@ addBatterToRosterM position player roster = do
   draftState <- get
   let configData = config draftState
       currentCount = countPlayers position roster
-      limit = queryDraftRosterLmt position $ C.draft_limits $ C.draft_parameters configData
+      limit = queryDraftRosterLmts position $ C.draft_limits $ C.draft_parameters configData
   if currentCount < limit then do
       updatedRoster <- addPlayerToPositionM position player roster
       return (updatedRoster, True)
@@ -161,16 +161,12 @@ addBatterToRosterM position player roster = do
 
 addPlayerToLineupM :: T.Text -> O.OfficialPlayer -> R.CurrentLineup -> DraftM R.CurrentLineup
 addPlayerToLineupM position player lineup = do
-    -- Access the state to get the configuration
     draftState <- get
-    let configData = config draftState
-        playerIdText = T.pack . show $ O.playerId player
-        limits = C.valid_roster $ C.point_parameters configData -- This accesses league roster limits from the configuration
-        
-        -- This function needs the specific limit for the player's position
-        limit = queryLgRosterLmts position limits
-        
-    -- Based on the player's position, update the lineup accordingly
+    let playerIdText = T.pack . show $ O.playerId player
+        limits = C.valid_roster $ C.point_parameters (config draftState)
+        -- the specific limit for the player's position
+        limit = queryLgLineupLmts position limits
+
     case position of
         "catcher" -> updateLineup limit (R.cC lineup) R.cC (\l -> lineup{R.cC = l}) playerIdText
         "first" -> updateLineup limit (R.b1C lineup) R.b1C (\l -> lineup{R.b1C = l}) playerIdText
