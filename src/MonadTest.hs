@@ -4,38 +4,66 @@ import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
 import qualified Ranking as PR
-import Validators 
+import Validators
     ( countPlayers
     , findPlayer
-    , queryDraftRosterLmt 
+    , queryDraftRosterLmt
     )
 import Utility
-    ( positionCodeToDraftText
-    ,  readJson
-    ,  writeJson
-    , positionCodeToDraftText
-    , createLgManager
-    )
+    ( positionCodeToDraftText,
+      readJson,
+      writeJson,
+      positionCodeToDraftText,
+      createLgManager,
+      readJson,
+      writeJson,
+      createLgManager )
 import DraftM
-
+import Control.Monad.State ( runStateT, runStateT )
+import Control.Monad.Except ( runExceptT, runExceptT )
+import Data.Text as T (unpack, take)
+import Data.Maybe (fromMaybe)
+import Data.Either (fromRight)
 
 initialDraftState :: C.Configuration -> [O.OfficialPlayer] -> [Int] -> DraftState
-initialDraftState config players availableIds = DraftState {
-    rosters = [],
-    currentPick = 0,
-    allPlayers = players,
-    availableIds = availableIds,
-    config = config
-}
+initialDraftState config players availableIds = DraftState
+    { rosters = []
+    , currentPick = 0
+    , allPlayers = players
+    , availableIds = availableIds
+    , config = config
+    }
 
+-- Adjusted function to run the draft and handle the result
 runDraft :: DraftState -> DraftM a -> IO (Either DraftError a, DraftState)
 runDraft initialState action = runStateT (runExceptT action) initialState
 
 main :: IO ()
 main = do
-  let initialState = DraftState { rosters = [], currentPick = 0 }
-  (result, finalState) <- runDraft initialState $ draftCycleMonad [1,2,3] rankings -- replace with actual call
-  case result of
-    Left err -> putStrLn $ "Error: " ++ show err
-    Right _ -> putStrLn "Draft completed successfully"
-  -- More logic as needed...
+    eitherConfig <- readJson "testFiles/appData/config/config.json" :: IO (Either String C.Configuration)
+    eitherPlayers <- readJson "testFiles/appData/rosters/activePlayers.json" :: IO (Either String [O.OfficialPlayer])
+    eitherRankings1 <- readJson "testFiles/appData/rankings/_4aeebfdcc387_.json" :: IO (Either String PR.RankingData)
+    eitherRankings2 <- readJson "testFiles/appData/rankings/_4d0f22bec934_.json" :: IO (Either String PR.RankingData)
+
+    case (eitherConfig, eitherPlayers, eitherRankings1, eitherRankings2) of
+        (Right config, Right players, Right r1, Right r2) -> do
+            let rankings1 = PR.rankings r1
+                rankings2 = PR.rankings r2
+                availableIds = map O.playerId players
+                initialState = initialDraftState config players availableIds
+
+            (result, finalState) <- runDraft initialState (draftPlayersMonad [rankings1, rankings2])
+
+            case result of
+                Left err -> putStrLn $ "Draft error: " ++ show err
+                Right _ -> do
+                    -- Directly pattern match on the first two elements of the rosters list
+                    let [(finalRoster1, finalLineup1, _), (finalRoster2, finalLineup2, _)] = rosters finalState
+                        teamId1 = T.take 12 $ PR.teamId r1
+                        teamId2 = T.take 12 $ PR.teamId r2
+
+                    writeJson ("testFiles/appData/draftResults/" <> T.unpack teamId1 <> "_draft_results_new.json") (createLgManager config teamId1 finalLineup1 finalRoster1)
+                    writeJson ("testFiles/appData/draftResults/" <> T.unpack teamId2 <> "_draft_results_new.json") (createLgManager config teamId2 finalLineup2 finalRoster2)
+
+                    putStrLn "Draft and LgManager serialization completed successfully."
+        _ -> putStrLn "Failed to load one or more necessary files. Check file paths and data integrity."

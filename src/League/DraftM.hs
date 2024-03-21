@@ -40,11 +40,6 @@ import Utility
 import Control.Monad.State
 import Control.Monad.Except
 
-data DraftError = PlayerNotFound Int
-                | PositionFull T.Text
-                | OtherDraftError String
-                deriving (Show, Eq)
-
 -- Draft StateT Monad Representation
 data DraftState = DraftState {
     rosters :: [(R.Roster, R.CurrentLineup, [Int])],
@@ -54,7 +49,23 @@ data DraftState = DraftState {
     config :: C.Configuration
 }
 
+-- Example: More specific errors for common operations
+data DraftError
+  = PlayerNotFound Int
+  | PositionFull T.Text
+  | InvalidTeamIndex Int
+  | OtherDraftError String
+  deriving (Show, Eq)
+
 type DraftM a = ExceptT DraftError (StateT DraftState IO) a
+
+getTeamByIndex :: Int -> DraftM (R.Roster, R.CurrentLineup, [Int])
+getTeamByIndex index = do
+  draftState <- get
+  let teams = rosters draftState
+  if index < 0 || index >= length teams
+    then throwError $ InvalidTeamIndex index
+    else return (teams !! index)
 
 findPlayerMonad :: Int -> [O.OfficialPlayer] -> [Int] -> DraftM O.OfficialPlayer
 findPlayerMonad playerId players availableIds = case findPlayer playerId players availableIds of
@@ -148,27 +159,35 @@ addBatterToRosterM position player roster = do
   else
       return (roster, False)
 
-addPlayerToLineupM :: T.Text -> O.OfficialPlayer -> R.CurrentLineup -> C.LgRosterLmts -> DraftM R.CurrentLineup
-addPlayerToLineupM position player lineup limits = do
+addPlayerToLineupM :: T.Text -> O.OfficialPlayer -> R.CurrentLineup -> DraftM R.CurrentLineup
+addPlayerToLineupM position player lineup = do
+    -- Access the state to get the configuration
     draftState <- get
-    let playerIdText = T.pack . show $ O.playerId player
-        configData = config draftState
+    let configData = config draftState
+        playerIdText = T.pack . show $ O.playerId player
+        limits = C.valid_roster $ C.point_parameters configData -- This accesses league roster limits from the configuration
+        
+        -- This function needs the specific limit for the player's position
+        limit = queryLgRosterLmts position limits
+        
+    -- Based on the player's position, update the lineup accordingly
     case position of
-        "catcher" -> updateLineup (R.cC lineup) (C.lg_catcher limits) R.cC (\l -> lineup{R.cC = l}) playerIdText
-        "first" -> updateLineup (R.b1C lineup) (C.lg_first limits) R.b1C (\l -> lineup{R.b1C = l}) playerIdText
-        "second" -> updateLineup (R.b2C lineup) (C.lg_second limits) R.b2C (\l -> lineup{R.b2C = l}) playerIdText
-        "third" -> updateLineup (R.b3C lineup) (C.lg_third limits) R.b3C (\l -> lineup{R.b3C = l}) playerIdText
-        "shortstop" -> updateLineup (R.ssC lineup) (C.lg_shortstop limits) R.ssC (\l -> lineup{R.ssC = l}) playerIdText
-        "outfield" -> updateLineup (R.ofC lineup) (C.lg_outfield limits) R.ofC (\l -> lineup{R.ofC = l}) playerIdText
-        "utility" -> updateLineup (R.uC lineup) (C.lg_utility limits) R.uC (\l -> lineup{R.uC = l}) playerIdText
-        "s_pitcher" -> updateLineup (R.spC lineup) (C.lg_s_pitcher limits) R.spC (\l -> lineup{R.spC = l}) playerIdText
-        "r_pitcher" -> updateLineup (R.rpC lineup) (C.lg_r_pitcher limits) R.rpC (\l -> lineup{R.rpC = l}) playerIdText
+        "catcher" -> updateLineup limit (R.cC lineup) R.cC (\l -> lineup{R.cC = l}) playerIdText
+        "first" -> updateLineup limit (R.b1C lineup) R.b1C (\l -> lineup{R.b1C = l}) playerIdText
+        "second" -> updateLineup limit (R.b2C lineup) R.b2C (\l -> lineup{R.b2C = l}) playerIdText
+        "third" -> updateLineup limit (R.b3C lineup) R.b3C (\l -> lineup{R.b3C = l}) playerIdText
+        "shortstop" -> updateLineup limit (R.ssC lineup) R.ssC (\l -> lineup{R.ssC = l}) playerIdText
+        "outfield" -> updateLineup limit (R.ofC lineup) R.ofC (\l -> lineup{R.ofC = l}) playerIdText
+        "utility" -> updateLineup limit (R.uC lineup) R.uC (\l -> lineup{R.uC = l}) playerIdText
+        "s_pitcher" -> updateLineup limit (R.spC lineup) R.spC (\l -> lineup{R.spC = l}) playerIdText
+        "r_pitcher" -> updateLineup limit (R.rpC lineup) R.rpC (\l -> lineup{R.rpC = l}) playerIdText
         _ -> throwError $ OtherDraftError $ "Unknown position " <> T.unpack position
   where
-    updateLineup currentPos limitPos accessor updater playerIdText =
-      if length currentPos < limitPos
-      then return $ updater (playerIdText : accessor lineup)
-      else throwError $ PositionFull $ "Position " <> position <> " is full"
+    updateLineup limit currentPos accessor updater playerIdText =
+        if length currentPos < limit
+        then return $ updater (playerIdText : accessor lineup)
+        else throwError $ PositionFull $ "Position " <> position <> " is full"
+
 
 addPlayerToPositionM :: T.Text -> O.OfficialPlayer -> R.Roster -> DraftM R.Roster
 addPlayerToPositionM position player roster = do
