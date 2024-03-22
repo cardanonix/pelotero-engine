@@ -4,27 +4,6 @@
 
 module Main where
 
-import qualified Config as C
-import qualified OfficialRoster as O
-import qualified Roster as R
-import qualified Ranking as PR
-import Validators
-    ( countPlayers,
-      findPlayer,
-      queryDraftRosterLmts,
-      countPlayers,
-      findPlayer,
-      queryDraftRosterLmts,
-      countPlayers,
-      findPlayer,
-      queryDraftRosterLmts )
-
-import Utility
-    ( readJson,
-      writeJson,
-      createLgManager 
-    )
-
 import DraftM
 import Control.Monad.State ( runStateT, runStateT )
 import Control.Monad.Except ( runExceptT, runExceptT )
@@ -44,17 +23,49 @@ import Data.List
       sortBy,
       findIndex,
       sortOn )
+import qualified Config as C
+import qualified OfficialRoster as O
+import qualified Roster as R
+import qualified PlayerRanking as PR
+import Validators
+    ( countPlayers,
+      findPlayer,
+      queryDraftRosterLmts,
+      countPlayers,
+      findPlayer,
+      queryDraftRosterLmts,
+      countPlayers,
+      findPlayer,
+      queryDraftRosterLmts )
+
+import Utility
+    ( readJson,
+      writeJson,
+      createLgManager 
+    )      
 
 initializeRosters :: Int -> [(R.Roster, R.CurrentLineup, [Int])]
 initializeRosters numTeams = replicate numTeams (R.mkEmptyRoster, R.mkEmptyLineup, [])
 
-initialDraftState :: C.Configuration -> [O.OfficialPlayer] -> [Int] -> Int -> DraftState
-initialDraftState config players availableIds numTeams = DraftState
-    { rosters = initializeRosters numTeams
+mkEmptyLgManager :: C.Configuration -> R.LgManager
+mkEmptyLgManager config = R.LgManager
+  { R.status = "active"
+  , R.commissioner = "" -- fetch this from `config`
+  , R.teamId = "" -- fetch this from `config`
+  , R.leagueID = "" -- fetch this from `config`
+  , R.current_lineup = R.mkEmptyLineup
+  , R.roster = R.mkEmptyRoster
+  }
+
+initializeDraftState :: C.Configuration -> O.OfficialRoster -> PR.PlayerRankings -> Int -> DraftState
+initializeDraftState config validPlayers rankings numTeams = DraftState
+    { config = config
+    , officialRoster = validPlayers
+    , rankings = rankings
+    , availableIds = map O.playerId $ O.people validPlayers -- Extract player IDs from officialRoster
     , currentPick = 0
-    , allPlayers = players
-    , availableIds = availableIds
-    , config = config
+    , currentRound = 1 -- Assuming the first round starts with 1
+    , draft_rosters = replicate numTeams (mkEmptyLgManager config, [])
     }
 
 -- Adjusted function to run the draft and handle the result
@@ -65,7 +76,7 @@ main :: IO ()
 main = do
     eitherRankings1 <- readJson "testFiles/appData/rankings/_4aeebfdcc387_.json" :: IO (Either String PR.RankingData)
     eitherRankings2 <- readJson "testFiles/appData/rankings/_4d0f22bec934_.json" :: IO (Either String PR.RankingData)
-    eitherPlayers <- readJson "testFiles/appData/rosters/activePlayers.json" :: IO (Either String O.OfficialRoster)
+    eitherPlayers <- readJson "testFiles/appData/draft_rosters/activePlayers.json" :: IO (Either String O.OfficialRoster)
     eitherConfig <- readJson "testFiles/appData/config/config.json" :: IO (Either String C.Configuration)
 
     case (eitherConfig, eitherPlayers, eitherRankings1, eitherRankings2) of
@@ -75,13 +86,13 @@ main = do
                 rankings2 = PR.rankings rankingsData2
                 availableIds = map O.playerId players
                 numTeams = 2 -- Ensure this matches the expected number of teams
-                initialState = initialDraftState config players availableIds numTeams
+                initialState = initializeDraftState config players availableIds numTeams
                 
             (result, finalState) <- runDraft initialState $ draftPlayersM [rankings1, rankings2]
 
             case result of
                 Left err -> putStrLn $ "Draft error: " ++ show err
-                Right _ -> case rosters finalState of
+                Right _ -> case draft_rosters finalState of
                     (roster1:roster2:_) -> do
                         let (finalRoster1, finalLineup1, _) = roster1
                             (finalRoster2, finalLineup2, _) = roster2

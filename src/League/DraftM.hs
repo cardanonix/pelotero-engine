@@ -30,7 +30,7 @@ import Data.List
 import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
-import qualified Ranking as PR
+import qualified PlayerRanking as PR
 import Validators ( countPlayers, findPlayer, queryDraftRosterLmts, queryLgLineupLmts )
 import Utility
     ( positionCodeToDraftText, extendRankingsWithUnrankedPlayers, createLgManager )
@@ -41,17 +41,21 @@ import Control.Monad.Except
 
 -- Draft StateT Monad Representation
 data DraftState = DraftState {
-    rosters :: [(R.Roster, R.CurrentLineup, [Int])],
+    config :: C.Configuration, -- should be immutable once initialized
+    officialRoster :: O.OfficialRoster, -- should be immutable once initialized
+    rankings :: PR.PlayerRankings, -- should be immutable once initialized 
+    availableIds :: [Int],  -- initialize with roster and config
     currentPick :: Int,
-    allPlayers :: [O.OfficialPlayer],
-    availableIds :: [Int],
-    config :: C.Configuration
+    currentRound :: Int, -- to facilitate serpentine draft
+    draft_rosters :: [(R.LgManager, [Int])]
 }
 
 -- Example: More specific errors for common operations
 data DraftError
   = PlayerNotFound Int
   | PositionFull T.Text
+  | RankingNotFound T.Text
+  | ConfigNotFound T.Text
   | InvalidTeamIndex Int
   | OtherDraftError String
   deriving (Show, Eq)
@@ -64,7 +68,7 @@ updateDraftState f = get >>= put . f
 getTeamByIndexSafe :: Int -> DraftM (R.Roster, R.CurrentLineup, [Int])
 getTeamByIndexSafe index = do
   draftState <- get
-  let teams = rosters draftState
+  let teams = draft_rosters draftState
   maybe (throwError $ InvalidTeamIndex index) return (atMay teams index)
   where
     atMay :: [a] -> Int -> Maybe a
@@ -114,8 +118,8 @@ draftCycleMonad (order, teamRankings) = do
 -- Function to update a single team's data in the draft state
 updateTeamDataInState :: Int -> (R.Roster, R.CurrentLineup, [Int]) -> DraftM ()
 updateTeamDataInState teamIndex updatedTeamData = modify' $ \ds ->
-  let updatedTeams = updateTeamAtIndex (rosters ds) teamIndex updatedTeamData
-  in ds { rosters = updatedTeams }
+  let updatedTeams = updateTeamAtIndex (draft_rosters ds) teamIndex updatedTeamData
+  in ds { draft_rosters = updatedTeams }
 
 -- Function to safely update the list of teams at a specific index
 updateTeamAtIndex :: [(R.Roster, R.CurrentLineup, [Int])] -> Int -> (R.Roster, R.CurrentLineup, [Int]) -> [(R.Roster, R.CurrentLineup, [Int])]
@@ -125,7 +129,7 @@ updateTeamAtIndex teams index newTeamData =
 addToRosterAndLineupM :: O.OfficialPlayer -> DraftM ()
 addToRosterAndLineupM player = do
   draftState <- get
-  let teamIndex = currentPick draftState `mod` length (rosters draftState)
+  let teamIndex = currentPick draftState `mod` length (draft_rosters draftState)
   (currentRoster, currentLineup, currentAvailableIds) <- getTeamByIndexSafe teamIndex
 
   let positionText = O.primaryPosition player
@@ -144,9 +148,9 @@ addToRosterAndLineupM player = do
         let newAvailableIds = if added then delete (O.playerId player) currentAvailableIds else currentAvailableIds
         return (updatedRoster, updatedLineup, newAvailableIds)
 
-  -- Update state with new rosters, lineups, and available IDs
-  let updatedTeams = updateTeamState (rosters draftState) teamIndex (updatedRoster, updatedLineup, newAvailableIds)
-  put draftState { rosters = updatedTeams, availableIds = newAvailableIds }
+  -- Update state with new draft_rosters, lineups, and available IDs
+  let updatedTeams = updateTeamState (draft_rosters draftState) teamIndex (updatedRoster, updatedLineup, newAvailableIds)
+  put draftState { draft_rosters = updatedTeams, availableIds = newAvailableIds }
 
 
 addPitcherToRosterM :: O.OfficialPlayer -> R.Roster -> DraftM R.Roster
@@ -180,7 +184,7 @@ addPlayerToLineupM :: T.Text -> O.OfficialPlayer -> R.CurrentLineup -> DraftM R.
 addPlayerToLineupM position player lineup = do
     draftState <- get
     let playerIdText = T.pack . show $ O.playerId player
-        limits = C.valid_roster $ C.point_parameters (config draftState)
+        limits = C.lineup_limits $ C.point_parameters (config draftState)
         -- the specific limit for the player's position
         limit = queryLgLineupLmts position limits
 
@@ -229,13 +233,13 @@ updateRosterAndLineup teamIndex updatedRoster updatedLineup newAvailableIds = do
 
 updateDraftStateWithNewTeamData :: Int -> R.Roster -> R.CurrentLineup -> [Int] -> DraftM ()
 updateDraftStateWithNewTeamData teamIndex updatedRoster updatedLineup newAvailableIds = modify' $ \ds ->
-  let updatedTeams = take teamIndex (rosters ds) ++
+  let updatedTeams = take teamIndex (draft_rosters ds) ++
                      [(updatedRoster, updatedLineup, newAvailableIds)] ++
-                     drop (teamIndex + 1) (rosters ds)
-  in ds { rosters = updatedTeams, availableIds = newAvailableIds }
+                     drop (teamIndex + 1) (draft_rosters ds)
+  in ds { draft_rosters = updatedTeams, availableIds = newAvailableIds }
 
 updateDraftStateWithTeam :: Int -> R.Roster -> R.CurrentLineup -> [Int] -> DraftM ()
 updateDraftStateWithTeam teamIndex updatedRoster updatedLineup newAvailableIds = updateDraftState $ \ds ->
-    let updatedTeams = updateTeamAtIndex (rosters ds) teamIndex (updatedRoster, updatedLineup, newAvailableIds)
-    in ds { rosters = updatedTeams, availableIds = newAvailableIds }
+    let updatedTeams = updateTeamAtIndex (draft_rosters ds) teamIndex (updatedRoster, updatedLineup, newAvailableIds)
+    in ds { draft_rosters = updatedTeams, availableIds = newAvailableIds }
 

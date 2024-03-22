@@ -32,7 +32,7 @@ league parameters json
         "hit_batsman": "- 1",
         "loss": "- 0.5"
       },
-      "valid_roster": {
+      "lineup_limits": {
         "C": "1",
         "1B": "1",
         "2B": "1",
