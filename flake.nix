@@ -2,6 +2,15 @@
   description = "Pelotero Hix/Pix/Plutus dApp DevEnv";
 
   inputs = {
+    
+    iogx = {
+      url = "github:input-output-hk/iogx";
+      inputs.hackage.follows = "hackage";
+      inputs.CHaP.follows = "CHaP";
+      inputs.haskell-nix.follows = "haskellNix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     nixpkgs.follows = "haskellNix/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
 
@@ -10,16 +19,24 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    hackage = {
+      url = "github:input-output-hk/hackage.nix";
+      flake = false;
+    };
+
     haskellNix = {
       url = "github:input-output-hk/haskell.nix/1c329acdaac3d5a600bcaa86b1806414ccd48db6";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.hackage.follows = "hackage";
     };
 
     CHaP = {
       url = "github:IntersectMBO/cardano-haskell-packages?rev=35d5d7f7e7cfed87901623262ceea848239fa7f8";
       flake = false;
     };
-    plutus.url = "github:input-output-hk/plutus";
+
+    plutus.url = "github:IntersectMBO/plutus";
+
     styleguide.url = "github:cardanonix/styleguide";
   };
 
