@@ -174,13 +174,13 @@ mkLgManagers config = map (\teamId -> mkSingleLgManager config (C.commissioner c
 
 -- helper function creates a single LgManager, given the teamId and other details.
 mkSingleLgManager :: C.Configuration -> Text -> Text -> Text -> R.LgManager
-mkSingleLgManager config commissioner leagueID teamId = LgManager
-  { status = "active"
-  , commissioner = commissioner
-  , teamId = teamId
-  , leagueID = leagueID
-  , current_lineup = mkEmptyLineup
-  , roster = mkEmptyRoster
+mkSingleLgManager config commissioner leagueID teamId = R.LgManager
+  { R.status = "active"
+  , R.commissioner = commissioner
+  , R.teamId = teamId
+  , R.leagueID = leagueID
+  , R.current_lineup = mkEmptyLineup
+  , R.roster = mkEmptyRoster
   }
 
 -- Creates an empty roster with no players

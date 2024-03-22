@@ -32,7 +32,6 @@ import qualified Roster as R
 import qualified PlayerRanking as PR
 import Validators ( countPlayers, findPlayer, queryDraftRosterLmts, queryLgLineupLmts )
 import Utility
-    ( positionCodeToDraftText, extendRankingsWithUnrankedPlayers, createLgManager )
 
 draftPlayers :: [PR.PlayerRanking] -> [PR.PlayerRanking] -> [O.OfficialPlayer] -> C.Configuration -> IO ((R.Roster, R.CurrentLineup), (R.Roster, R.CurrentLineup))
 draftPlayers rankings1 rankings2 officialPlayers config = do
@@ -41,7 +40,7 @@ draftPlayers rankings1 rankings2 officialPlayers config = do
       extendedRankings2 = extendRankingsWithUnrankedPlayers rankings2 officialPlayerIds
       rankingsPairs = zip extendedRankings1 extendedRankings2
       initialTurn = True -- Team 1 starts
-      initialState = (R.mkEmptyRoster, R.mkEmptyLineup, R.mkEmptyRoster, R.mkEmptyLineup, officialPlayerIds, initialTurn)
+      initialState = (mkEmptyRoster, mkEmptyLineup, mkEmptyRoster, mkEmptyLineup, officialPlayerIds, initialTurn)
   
   (finalRoster1, finalLineup1, finalRoster2, finalLineup2, _, _) <- foldM (draftCycle config officialPlayers) initialState (map (\pair -> (pair, initialTurn)) rankingsPairs)
   
