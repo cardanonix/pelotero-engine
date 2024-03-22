@@ -168,9 +168,35 @@ positionCodeToDraftText code =
         "DH" -> "utility"
         _    -> "Unknown"
 
+-- generates a list of LgManager for each team ID provided in lgMembers.
+mkLgManagers :: C.Configuration -> [R.LgManager]
+mkLgManagers config = map (\teamId -> mkSingleLgManager config (C.commissioner config) (C.leagueID config) teamId) (C.lgMembers config)
+
+-- helper function creates a single LgManager, given the teamId and other details.
+mkSingleLgManager :: C.Configuration -> Text -> Text -> Text -> R.LgManager
+mkSingleLgManager config commissioner leagueID teamId = LgManager
+  { status = "active"
+  , commissioner = commissioner
+  , teamId = teamId
+  , leagueID = leagueID
+  , current_lineup = mkEmptyLineup
+  , roster = mkEmptyRoster
+  }
+
+-- Creates an empty roster with no players
+mkEmptyRoster :: R.Roster
+mkEmptyRoster = R.Roster [] [] [] [] [] [] [] [] []
+
+-- Creates an empty lineup with no players
+mkEmptyLineup :: R.CurrentLineup
+mkEmptyLineup = R.CurrentLineup [] [] [] [] [] [] [] [] []
+
+
 createLgManager :: C.Configuration -> T.Text -> R.CurrentLineup -> R.Roster -> R.LgManager
-createLgManager config teamId currentLineup roster =
-    R.LgManager (C.status config) (C.commissioner config) teamId (C.leagueID config) currentLineup roster
+createLgManager config teamId
+  = R.LgManager
+      (C.status config) (C.commissioner config) teamId
+      (C.leagueID config)
 
 extendRankingsWithUnrankedPlayers :: [PR.PlayerRanking] -> [Int] -> [Int]
 extendRankingsWithUnrankedPlayers rankedPlayers allPlayerIds =
