@@ -59,6 +59,21 @@ data Roster = Roster
     }
     deriving (Show, Eq)
 
+-- generates a list of LgManager for each team ID provided in lgMembers.
+mkLgManagers :: C.Configuration -> [LgManager]
+mkLgManagers config = map (\teamId -> mkSingleLgManager config (C.commissioner config) (C.leagueID config) teamId) (C.lgMembers config)
+
+-- helper function creates a single LgManager, given the teamId and other details.
+mkSingleLgManager :: C.Configuration -> Text -> Text -> Text -> LgManager
+mkSingleLgManager config commissioner leagueID teamId = LgManager
+  { status = "active"
+  , commissioner = commissioner
+  , teamId = teamId
+  , leagueID = leagueID
+  , current_lineup = mkEmptyLineup
+  , roster = mkEmptyRoster
+  }
+
 -- Creates an empty roster with no players
 mkEmptyRoster :: Roster
 mkEmptyRoster = Roster [] [] [] [] [] [] [] [] []
