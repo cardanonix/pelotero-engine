@@ -2,8 +2,6 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use tuple-section" #-}
 {-# HLINT ignore "Eta reduce" #-}
-{-# LANGUAGE LambdaCase #-}
-
 
 module DraftM where
 
@@ -87,36 +85,49 @@ serpentineOrder numTeams rounds = return $ map generateOrder [1..rounds]
   where
     generateOrder round = if even round then reverse [1..numTeams] else [1..numTeams]
 
-draftPlayersMonad :: [[PR.PlayerRanking]] -> DraftM ()
-draftPlayersMonad teamRankings = do
+
+draftPlayersM :: [[PR.PlayerRanking]] -> DraftM ()
+draftPlayersM teamRankings = do
   when (null teamRankings) $
     throwError $ OtherDraftError "Team rankings cannot be empty."
   let numTeams = length teamRankings
   draftOrder <- serpentineOrder numTeams (length $ head teamRankings)
   mapM_ draftCycleMonad (zip draftOrder teamRankings)
 
--- Assuming allPlayers and availableIds are fields in DraftState
 draftCycleMonad :: ([Int], [PR.PlayerRanking]) -> DraftM ()
 draftCycleMonad (order, teamRankings) = do
   draftState <- get
-  -- Loop through each teamIndex and corresponding playerRanking
+  -- Iterate over each team index and its corresponding rankings
   forM_ (zip order teamRankings) $ \(teamIndex, playerRankings) -> do
-    -- Retrieve the current roster, lineup, and available IDs for the team
-    let (roster, lineup, _) = rosters draftState !! teamIndex
-    -- Process each playerRanking for the current team
-    -- (Simplified for demonstration; implement your logic here)
-    let updatedRoster = roster  -- Placeholder for the actual roster update logic
-    let updatedLineup = lineup  -- Placeholder for the actual lineup update logic
-    -- Update the state with the new roster and lineup
-    let newRosters = updateTeamState (rosters draftState) teamIndex (updatedRoster, updatedLineup, availableIds draftState)
-    put $ draftState { rosters = newRosters }
+    -- Safely retrieve the current roster, lineup, and available IDs for the team
+    (currentRoster, currentLineup, availableIds) <- getTeamByIndexSafe teamIndex
 
+    -- Here, you'll process the player rankings for this team
+    -- This is a placeholder for where you'd update the roster and lineup based on your logic
+    let updatedRoster = currentRoster -- Placeholder: Update with your logic
+    let updatedLineup = currentLineup -- Placeholder: Update with your logic
+    let newAvailableIds = availableIds -- Update this list as you add/remove players
+
+    -- Update the team's data in the state
+    updateTeamDataInState teamIndex (updatedRoster, updatedLineup, newAvailableIds)
+
+-- Function to update a single team's data in the draft state
+updateTeamDataInState :: Int -> (R.Roster, R.CurrentLineup, [Int]) -> DraftM ()
+updateTeamDataInState teamIndex updatedTeamData = modify' $ \ds ->
+  let updatedTeams = updateTeamAtIndex (rosters ds) teamIndex updatedTeamData
+  in ds { rosters = updatedTeams }
+
+-- Function to safely update the list of teams at a specific index
+updateTeamAtIndex :: [(R.Roster, R.CurrentLineup, [Int])] -> Int -> (R.Roster, R.CurrentLineup, [Int]) -> [(R.Roster, R.CurrentLineup, [Int])]
+updateTeamAtIndex teams index newTeamData =
+  let (before, after) = splitAt index teams
+  in before ++ [newTeamData] ++ drop 1 after
 addToRosterAndLineupM :: O.OfficialPlayer -> DraftM ()
 addToRosterAndLineupM player = do
   draftState <- get
   let teamIndex = currentPick draftState `mod` length (rosters draftState)
   (currentRoster, currentLineup, currentAvailableIds) <- getTeamByIndexSafe teamIndex
-  
+
   let positionText = O.primaryPosition player
       draftPositionText = positionCodeToDraftText positionText
 
@@ -207,7 +218,7 @@ addPlayerToPositionM position player roster = do
 
 -- Helper function to determine if a player can be added based on position limits
 canAddPlayerToPosition :: T.Text -> R.Roster -> C.Configuration -> Bool
-canAddPlayerToPosition position roster config = 
+canAddPlayerToPosition position roster config =
   let limit = queryDraftRosterLmts position $ C.draft_limits $ C.draft_parameters config
       currentCount = countPlayers position roster
   in currentCount < limit
@@ -228,6 +239,3 @@ updateDraftStateWithTeam teamIndex updatedRoster updatedLineup newAvailableIds =
     let updatedTeams = updateTeamAtIndex (rosters ds) teamIndex (updatedRoster, updatedLineup, newAvailableIds)
     in ds { rosters = updatedTeams, availableIds = newAvailableIds }
 
-updateTeamAtIndex :: [(R.Roster, R.CurrentLineup, [Int])] -> Int -> (R.Roster, R.CurrentLineup, [Int]) -> [(R.Roster, R.CurrentLineup, [Int])]
-updateTeamAtIndex teams index newTeamData =
-    take index teams ++ [newTeamData] ++ drop (index + 1) teams

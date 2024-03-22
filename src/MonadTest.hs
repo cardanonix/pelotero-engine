@@ -45,9 +45,12 @@ import Data.List
       findIndex,
       sortOn )
 
-initialDraftState :: C.Configuration -> [O.OfficialPlayer] -> [Int] -> DraftState
-initialDraftState config players availableIds = DraftState
-    { rosters = []
+initializeRosters :: Int -> [(R.Roster, R.CurrentLineup, [Int])]
+initializeRosters numTeams = replicate numTeams (R.mkEmptyRoster, R.mkEmptyLineup, [])
+
+initialDraftState :: C.Configuration -> [O.OfficialPlayer] -> [Int] -> Int -> DraftState
+initialDraftState config players availableIds numTeams = DraftState
+    { rosters = initializeRosters numTeams
     , currentPick = 0
     , allPlayers = players
     , availableIds = availableIds
@@ -60,30 +63,35 @@ runDraft initialState action = runStateT (runExceptT action) initialState
 
 main :: IO ()
 main = do
-    eitherRankings1 <- readJson "testFiles/appData/rankings/_4aeebfdcc387_.json"
-    eitherRankings2 <- readJson "testFiles/appData/rankings/_4d0f22bec934_.json"
-    eitherPlayers <- readJson "testFiles/appData/rosters/activePlayers.json"
-    eitherConfig <- readJson "testFiles/appData/config/config.json"
+    eitherRankings1 <- readJson "testFiles/appData/rankings/_4aeebfdcc387_.json" :: IO (Either String PR.RankingData)
+    eitherRankings2 <- readJson "testFiles/appData/rankings/_4d0f22bec934_.json" :: IO (Either String PR.RankingData)
+    eitherPlayers <- readJson "testFiles/appData/rosters/activePlayers.json" :: IO (Either String O.OfficialRoster)
+    eitherConfig <- readJson "testFiles/appData/config/config.json" :: IO (Either String C.Configuration)
 
     case (eitherConfig, eitherPlayers, eitherRankings1, eitherRankings2) of
-        (Right config, Right players, Right r1, Right r2) -> do
-            let rankings1 = PR.rankings r1
-                rankings2 = PR.rankings r2
+        (Right config, Right officialRoster, Right rankingsData1, Right rankingsData2) -> do
+            let players = O.people officialRoster
+                rankings1 = PR.rankings rankingsData1
+                rankings2 = PR.rankings rankingsData2
                 availableIds = map O.playerId players
-                initialState = initialDraftState config players availableIds
-
-            (result, finalState) <- runDraft initialState (draftPlayersMonad [rankings1, rankings2])
+                numTeams = 2 -- Ensure this matches the expected number of teams
+                initialState = initialDraftState config players availableIds numTeams
+                
+            (result, finalState) <- runDraft initialState $ draftPlayersM [rankings1, rankings2]
 
             case result of
                 Left err -> putStrLn $ "Draft error: " ++ show err
-                Right _ -> do
-                    -- Directly pattern match on the first two elements of the rosters list
-                    let [(finalRoster1, finalLineup1, _), (finalRoster2, finalLineup2, _)] = rosters finalState
-                        teamId1 = T.take 12 $ PR.teamId r1
-                        teamId2 = T.take 12 $ PR.teamId r2
+                Right _ -> case rosters finalState of
+                    (roster1:roster2:_) -> do
+                        let (finalRoster1, finalLineup1, _) = roster1
+                            (finalRoster2, finalLineup2, _) = roster2
+                            teamId1 = T.take 12 $ PR.teamId rankingsData1
+                            teamId2 = T.take 12 $ PR.teamId rankingsData2
 
-                    writeJson ("testFiles/appData/draftResults/" <> T.unpack teamId1 <> "_draft_results_new.json") (createLgManager config teamId1 finalLineup1 finalRoster1)
-                    writeJson ("testFiles/appData/draftResults/" <> T.unpack teamId2 <> "_draft_results_new.json") (createLgManager config teamId2 finalLineup2 finalRoster2)
+                        writeJson ("testFiles/appData/draftResults/" <> T.unpack teamId1 <> "_draft_results_monadic.json") (createLgManager config teamId1 finalLineup1 finalRoster1)
+                        writeJson ("testFiles/appData/draftResults/" <> T.unpack teamId2 <> "_draft_results_monadic.json") (createLgManager config teamId2 finalLineup2 finalRoster2)
 
-                    putStrLn "Draft and LgManager serialization completed successfully."
+                        putStrLn "Draft and LgManager serialization completed successfully."
+                    _ -> putStrLn "Not enough teams in the final state to generate output."
+
         _ -> putStrLn "Failed to load one or more necessary files. Check file paths and data integrity."
