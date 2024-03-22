@@ -44,34 +44,6 @@ import Utility
       createLgManager 
     )      
 
-initializeRosters :: Int -> [(R.Roster, R.CurrentLineup, [Int])]
-initializeRosters numTeams = replicate numTeams (R.mkEmptyRoster, R.mkEmptyLineup, [])
-
-mkEmptyLgManager :: C.Configuration -> R.LgManager
-mkEmptyLgManager config = R.LgManager
-  { R.status = "active"
-  , R.commissioner = "" -- fetch this from `config`
-  , R.teamId = "" -- fetch this from `config`
-  , R.leagueID = "" -- fetch this from `config`
-  , R.current_lineup = R.mkEmptyLineup
-  , R.roster = R.mkEmptyRoster
-  }
-
-initializeDraftState :: C.Configuration -> O.OfficialRoster -> PR.PlayerRankings -> Int -> DraftState
-initializeDraftState config validPlayers rankings numTeams = DraftState
-    { config = config
-    , officialRoster = validPlayers
-    , rankings = rankings
-    , availableIds = map O.playerId $ O.people validPlayers -- Extract player IDs from officialRoster
-    , currentPick = 0
-    , currentRound = 1 -- Assuming the first round starts with 1
-    , draft_rosters = replicate numTeams (mkEmptyLgManager config, [])
-    }
-
--- Adjusted function to run the draft and handle the result
-runDraft :: DraftState -> DraftM a -> IO (Either DraftError a, DraftState)
-runDraft initialState action = runStateT (runExceptT action) initialState
-
 main :: IO ()
 main = do
     eitherRankings1 <- readJson "testFiles/appData/rankings/_4aeebfdcc387_.json" :: IO (Either String PR.RankingData)

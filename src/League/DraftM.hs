@@ -4,40 +4,47 @@
 {-# HLINT ignore "Eta reduce" #-}
 
 module DraftM where
-
-import Control.Monad (forM, foldM)
-import Data.Aeson (FromJSON, ToJSON, decode, encode, withObject, (.:))
+import Control.Monad ( forM, foldM )
+import Control.Monad.State
+import Control.Monad.Except
+import Data.Aeson
+    ( FromJSON,
+      ToJSON,
+      decode,
+      encode,
+      withObject,
+      (.:) )
 import qualified Data.HashMap.Strict as HM
 import qualified Data.ByteString.Lazy as BL
+import Data.Text as T ( unpack, take )
 import qualified Data.Text as T
-
+import Data.Time.Clock
+    ( UTCTime,
+      getCurrentTime )
+import Data.Time.Format
+    ( formatTime, defaultTimeLocale, formatTime, defaultTimeLocale )
+import Data.Maybe
+    ( mapMaybe,
+      fromMaybe )
+import DraftM
+import Data.Either (fromRight)
 import GHC.Generics (Generic)
-import Data.Time.Clock (UTCTime, getCurrentTime)
-import Data.Time.Format (formatTime, defaultTimeLocale)
-import Data.Maybe (mapMaybe, fromMaybe)
 import Data.List
     ( find,
       delete,
-      sortOn,
       sortBy,
-      findIndex,
-      sortOn,
-      findIndex,
-      sortOn,
-      findIndex,
       sortOn,
       findIndex )
 import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
 import qualified PlayerRanking as PR
-import Validators ( countPlayers, findPlayer, queryDraftRosterLmts, queryLgLineupLmts )
+import Validators
 import Utility
-    ( positionCodeToDraftText, extendRankingsWithUnrankedPlayers, createLgManager )
 
--- import Draft
-import Control.Monad.State
-import Control.Monad.Except
+-- run the draft and handle the result
+runDraft :: DraftState -> DraftM a -> IO (Either DraftError a, DraftState)
+runDraft initialState action = runStateT (runExceptT action) initialState
 
 -- Draft StateT Monad Representation
 data DraftState = DraftState {
@@ -49,6 +56,20 @@ data DraftState = DraftState {
     currentRound :: Int, -- to facilitate serpentine draft
     draft_rosters :: [(R.LgManager, [Int])]
 }
+
+initializeRosters :: Int -> [(R.Roster, R.CurrentLineup, [Int])]
+initializeRosters numTeams = replicate numTeams (R.mkEmptyRoster, R.mkEmptyLineup, [])
+
+initializeDraftState :: C.Configuration -> O.OfficialRoster -> PR.PlayerRankings -> DraftState
+initializeDraftState config validPlayers rankings = DraftState
+    { config = config
+    , officialRoster = validPlayers
+    , rankings = rankings
+    , availableIds = map O.playerId $ O.people validPlayers
+    , currentPick = 0
+    , currentRound = 1
+    , draft_rosters = zip (mkLgManagers config) (repeat [])
+    }
 
 -- Example: More specific errors for common operations
 data DraftError
@@ -101,19 +122,18 @@ draftPlayersM teamRankings = do
 draftCycleMonad :: ([Int], [PR.PlayerRanking]) -> DraftM ()
 draftCycleMonad (order, teamRankings) = do
   draftState <- get
-  -- Iterate over each team index and its corresponding rankings
-  forM_ (zip order teamRankings) $ \(teamIndex, playerRankings) -> do
-    -- Safely retrieve the current roster, lineup, and available IDs for the team
-    (currentRoster, currentLineup, availableIds) <- getTeamByIndexSafe teamIndex
-
-    -- Here, you'll process the player rankings for this team
-    -- This is a placeholder for where you'd update the roster and lineup based on your logic
-    let updatedRoster = currentRoster -- Placeholder: Update with your logic
-    let updatedLineup = currentLineup -- Placeholder: Update with your logic
-    let newAvailableIds = availableIds -- Update this list as you add/remove players
-
-    -- Update the team's data in the state
-    updateTeamDataInState teamIndex (updatedRoster, updatedLineup, newAvailableIds)
+  -- Assuming rankings are now handled at a higher level to align with LgManager updates.
+  forM_ order $ \teamIndex -> do
+    -- Ensure we're within bounds and have valid rankings.
+    when (teamIndex < length (draft_rosters draftState)) $ do
+      let (lgManager, availableIds) = draft_rosters draftState !! teamIndex
+      -- Placeholder: Implement logic to select a player based on rankings and availability.
+      let selectedPlayerId = head availableIds -- Simplified for illustration.
+      player <- findPlayerMonad selectedPlayerId (O.people $ officialRoster draftState) availableIds
+      -- Update LgManager with selected player.
+      let updatedLgManager = updateLgManagerWithPlayer lgManager player
+      let newAvailableIds = delete selectedPlayerId availableIds
+      updateTeamInDraftState teamIndex (updatedLgManager, newAvailableIds)
 
 -- Function to update a single team's data in the draft state
 updateTeamDataInState :: Int -> (R.Roster, R.CurrentLineup, [Int]) -> DraftM ()
