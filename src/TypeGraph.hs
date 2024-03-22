@@ -42,7 +42,7 @@ writeConfigurationGraph :: IO ()
 writeConfigurationGraph = do
     let dotGraph = digraph (Str "ConfigurationGraph") $ do
           node (pack "Configuration") [Label $ StrLabel "Configuration\nstatus, leagueID, commissioner, lgMembers"]
-          node (pack "PointParameters") [Label $ StrLabel "PointParameters\nlg_style, start_UTC, end_UTC, lg_battingMults, lg_pitchingMults, valid_roster"]
+          node (pack "PointParameters") [Label $ StrLabel "PointParameters\nlg_style, start_UTC, end_UTC, lg_battingMults, lg_pitchingMults, lineup_limits"]
           node (pack "DraftParameters") [Label $ StrLabel "DraftParameters\nautoDraft, autoDraft_UTC, draft_limits"]
           node (pack "BattingMults") [Label $ StrLabel "BattingMults\nlgb_single, lgb_double, lgb_triple, lgb_homerun, lgb_rbi, lgb_run, lgb_base_on_balls, lgb_stolen_base, lgb_hit_by_pitch, lgb_strikeout, lgb_caught_stealing"]
           node (pack "PitchingMults") [Label $ StrLabel "PitchingMults\nlgp_win, lgp_save, lgp_quality_start, lgp_inning_pitched, lgp_strikeout, lgp_complete_game, lgp_shutout, lgp_base_on_balls, lgp_hits_allowed, lgp_earned_runs, lgp_hit_batsman, lgp_loss"]

@@ -55,7 +55,7 @@ testLineup config (Right lgManager) = do
 
 validateLineup :: R.LgManager -> C.Configuration -> Either [String] ()
 validateLineup manager config = do
-    let discrepancies = getLineupDiscrepancies (R.current_lineup manager) (C.valid_roster . C.point_parameters $ config)
+    let discrepancies = getLineupDiscrepancies (R.current_lineup manager) (C.lineup_limits . C.point_parameters $ config)
     let duplicateCheck = lineupHasUniquePlayers (R.current_lineup manager)
     case (duplicateCheck, discrepancies) of
         (Left _, []) -> Right ()
@@ -68,7 +68,7 @@ validateLineup manager config = do
 
 validateAndPrintLineup :: R.LgManager -> C.Configuration -> IO Bool
 validateAndPrintLineup manager config = do
-    let rosterConfig = C.valid_roster . C.point_parameters $ config
+    let rosterConfig = C.lineup_limits . C.point_parameters $ config
     let discrepancies = getLineupDiscrepancies (R.current_lineup manager) rosterConfig
     let validPositions = null discrepancies
     let validRosterSize = all (\(_, diff) -> diff <= 0) discrepancies
@@ -197,6 +197,101 @@ validateRoster roster config = do
         (Right duplicates, []) -> Left (map T.unpack duplicates ++ ["Duplicate player IDs found in roster."])
         (_, errors) -> Left errors
 
+
+-- -- ## League Configuration ADT ## --
+-- data Configuration = Configuration
+--     { status :: Text
+--     , leagueID :: Text
+--     , point_parameters :: PointParameters
+--     , draft_parameters :: DraftParameters
+--     , commissioner :: Text
+--     , lgMembers :: [Text]
+--     }
+--     deriving (Show, Eq)
+
+-- data PointParameters = PointParameters
+--     { lg_style :: Text
+--     , start_UTC :: Text
+--     , end_UTC :: Text
+--     , lg_battingMults :: BattingMults
+--     , lg_pitchingMults :: PitchingMults
+--     , lineup_limits :: LgLineupLmts
+--     }
+--     deriving (Show, Eq)
+
+-- data BattingMults = BattingMults
+--     { lgb_single :: Double
+--     , lgb_double :: Double
+--     , lgb_triple :: Double
+--     , lgb_homerun :: Double
+--     , lgb_rbi :: Double
+--     , lgb_run :: Double
+--     , lgb_base_on_balls :: Double
+--     , lgb_stolen_base :: Double
+--     , lgb_hit_by_pitch :: Double
+--     , lgb_strikeout :: Double
+--     , lgb_caught_stealing :: Double
+--     }
+--     deriving (Show, Eq)
+
+-- data PitchingMults = PitchingMults
+--     { lgp_win :: Double
+--     , lgp_save :: Double
+--     , lgp_quality_start :: Double
+--     , lgp_inning_pitched :: Double
+--     , lgp_strikeout :: Double
+--     , lgp_complete_game :: Double
+--     , lgp_shutout :: Double
+--     , lgp_base_on_balls :: Double
+--     , lgp_hits_allowed :: Double
+--     , lgp_earned_runs :: Double
+--     , lgp_hit_batsman :: Double
+--     , lgp_loss :: Double
+--     }
+--     deriving (Show, Eq)
+
+-- data LgLineupLmts = LgLineupLmts
+--     { lg_catcher :: Int
+--     , lg_first :: Int
+--     , lg_second :: Int
+--     , lg_third :: Int
+--     , lg_shortstop :: Int
+--     , lg_outfield :: Int
+--     , lg_utility :: Int
+--     , lg_s_pitcher :: Int
+--     , lg_r_pitcher :: Int
+--     , lg_max_size :: Int
+--     }
+--     deriving (Show, Eq)
+
+-- data DraftParameters = DraftParameters
+--     { autoDraft :: Bool
+--     , autoDraft_UTC :: Text
+--     , draft_limits :: DraftRosterLmts
+--     }
+--     deriving (Show, Eq)
+
+-- data DraftRosterLmts = DraftRosterLmts
+--     { dr_catcher :: Int
+--     , dr_first :: Int
+--     , dr_second :: Int
+--     , dr_third :: Int
+--     , dr_shortstop :: Int
+--     , dr_outfield :: Int
+--     , dr_utility :: Int
+--     , dr_s_pitcher :: Int
+--     , dr_r_pitcher :: Int
+--     }
+--     deriving (Show, Eq)
+
+
+queryLimits :: T.Text -> T.Text -> C.Configuration -> Int
+queryLimits limtype position config =
+    case limtype of
+        "draft" -> queryDraftRosterLmts position (C.draft_limits $ C.draft_parameters config)
+        "lineup" -> queryLgLineupLmts position (C.lineup_limits $ C.point_parameters config)
+        _ -> 0
+
 queryDraftRosterLmts :: T.Text -> C.DraftRosterLmts -> Int
 queryDraftRosterLmts position limits =
     case position of
@@ -290,7 +385,7 @@ totalPlayersInLineup R.CurrentLineup{..} =
     1 + 1 + 1 + 1 + 1 + 1 + length ofC + length spC + length rpC -- counting players from all positions
 
 validateCurrentLineup :: R.LgManager -> C.Configuration -> Bool
-validateCurrentLineup R.LgManager{..} C.Configuration{point_parameters = C.PointParameters{valid_roster = rosterConfig}} =
+validateCurrentLineup R.LgManager{..} C.Configuration{point_parameters = C.PointParameters{lineup_limits = rosterConfig}} =
     let positionalValid = null (getLineupDiscrepancies current_lineup rosterConfig)
      in case lineupHasUniquePlayers current_lineup of
             Left _ -> positionalValid

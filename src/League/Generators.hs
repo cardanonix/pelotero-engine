@@ -17,7 +17,7 @@ import OfficialRoster as O
 import qualified OfficialRoster as O
 import qualified Points as P
 import qualified Roster as R
-import qualified Ranking as PR
+import qualified PlayerRanking as PR
 import Validators
 import Utility
     ( computeChecksum,

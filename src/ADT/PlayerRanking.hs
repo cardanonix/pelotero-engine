@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings, DeriveGeneric, RecordWildCards #-}
 {-# LANGUAGE GADTs #-}
 
-module Ranking where
+module PlayerRanking where
 
 import Data.Aeson
     ( ToJSON,
@@ -33,7 +33,6 @@ import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
 import Data.Aeson.Types (toJSON)
 
-
 -- | Represents the top-level ranking data structure.
 data RankingData = RankingData
     { teamId        :: Text
@@ -45,15 +44,15 @@ data RankingData = RankingData
 -- Represents a collection of player rankings, possibly empty
 type PlayerRankings = [PlayerRanking]
 
--- Creates an empty collection of player rankings
-mkEmptyRankings :: PlayerRankings
-mkEmptyRankings = []
-
 -- Represents a player's ranking within the team.
 data PlayerRanking = PlayerRanking
     { playerId :: Int
     , rank     :: Int
     } deriving (Show, Eq, Generic)
+
+-- Creates an empty collection of player rankings
+mkEmptyRankings :: PlayerRankings
+mkEmptyRankings = []
 
 instance FromJSON PlayerRanking
 

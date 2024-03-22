@@ -29,7 +29,7 @@ import Data.List
 import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
-import qualified Ranking as PR
+import qualified PlayerRanking as PR
 import Validators 
     ( countPlayers
     , findPlayer

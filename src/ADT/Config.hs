@@ -54,7 +54,7 @@ data PointParameters = PointParameters
     , end_UTC :: Text
     , lg_battingMults :: BattingMults
     , lg_pitchingMults :: PitchingMults
-    , valid_roster :: LgLineupLmts
+    , lineup_limits :: LgLineupLmts
     }
     deriving (Show, Eq)
 
@@ -142,7 +142,7 @@ instance FromJSON PointParameters where
             <*> v .: "end_UTC"
             <*> v .: "batting"
             <*> v .: "pitching"
-            <*> v .: "valid_roster"
+            <*> v .: "lineup_limits"
 
 parseDouble :: Value -> Parser Double
 parseDouble = withText "double" $ \t ->
@@ -239,7 +239,7 @@ instance ToJSON PointParameters where
         , "end_UTC" .= end_UTC
         , "batting" .= lg_battingMults
         , "pitching" .= lg_pitchingMults
-        , "valid_roster" .= valid_roster
+        , "lineup_limits" .= lineup_limits
         ]
 
 instance ToJSON BattingMults where

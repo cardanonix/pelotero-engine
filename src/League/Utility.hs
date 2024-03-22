@@ -96,7 +96,7 @@ import qualified Input as I
 import qualified OfficialRoster as O
 import qualified Points as P
 import qualified Roster as R
-import qualified Ranking as PR
+import qualified PlayerRanking as PR
 import Data.ByteArray.Encoding (convertToBase, Base(Base16))
 import qualified Data.Text.Encoding as T
 

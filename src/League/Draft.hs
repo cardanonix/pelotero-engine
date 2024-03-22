@@ -29,7 +29,7 @@ import Data.List
 import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
-import qualified Ranking as PR
+import qualified PlayerRanking as PR
 import Validators ( countPlayers, findPlayer, queryDraftRosterLmts, queryLgLineupLmts )
 import Utility
     ( positionCodeToDraftText, extendRankingsWithUnrankedPlayers, createLgManager )
@@ -66,18 +66,18 @@ addToRosterAndLineup config player roster lineup =
     let positionText = O.primaryPosition player
         draftPositionText = positionCodeToDraftText positionText
         draftLimits = C.draft_limits $ C.draft_parameters config
-        lgRosterLimits = C.valid_roster $ C.point_parameters config
+        lgLineupLimits = C.lineup_limits $ C.point_parameters config
     in if draftPositionText == "pitcher"
        then 
            let (updatedRoster, pitcherPosition) = addPitcherToRoster config player roster
                updatedLineup = if pitcherPosition /= ""
-                               then addPlayerToLineup pitcherPosition player lineup lgRosterLimits
+                               then addPlayerToLineup pitcherPosition player lineup lgLineupLimits
                                else lineup
            in (updatedRoster, updatedLineup)
        else 
            let (updatedRoster, isAddedToRoster) = addBatterToRoster config draftPositionText player roster draftLimits
                updatedLineup = if isAddedToRoster
-                               then addPlayerToLineup draftPositionText player lineup lgRosterLimits
+                               then addPlayerToLineup draftPositionText player lineup lgLineupLimits
                                else lineup
            in (updatedRoster, updatedLineup)
 

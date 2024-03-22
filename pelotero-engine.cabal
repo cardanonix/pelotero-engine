@@ -22,40 +22,65 @@ common shared-libs
                 , directory
   ghc-options: -O2
 
-executable playground
-  import: shared-libs
-  hs-source-dirs: src, src/ADT, src/League
-  main-is: Playground.hs
-  other-modules:  Config, Points, Input, Leaderboard, Middle, OfficialRoster, Roster, Scraper, Ranking, Validators, PointCalc, Utility
-  build-depends:  async
-
-executable head2head
-  import: shared-libs
-  hs-source-dirs: src, src/ADT, src/League
-  main-is: Head2Head.hs
-  other-modules:  Scraper, Input, Middle, Roster, Config, Points, OfficialRoster, Validators, Ranking, PointCalc, Stats, Utility
-  build-depends:  async
-
 executable fetchStats
   import: shared-libs
   hs-source-dirs: src, src/ADT, src/League
   main-is: FetchStats.hs
-  other-modules:  Input, Middle, Scraper, Points, Config, Roster, OfficialRoster, Validators, Ranking, PointCalc, Utility
+  other-modules:  Input, Middle, Scraper, Points, Config, Roster, OfficialRoster, Validators, PlayerRanking, PointCalc, Utility
   build-depends:  async
 
 executable roster
   import: shared-libs
   hs-source-dirs: src, src/ADT, src/League
   main-is: FetchActiveRoster.hs
-  other-modules:  Input, Middle, Scraper, Points, Roster, Config, Leaderboard, OfficialRoster, Ranking, Validators, PointCalc, Conversion, Utility
+  other-modules:  Input, Middle, Scraper, Points, Roster, Config, Leaderboard, OfficialRoster, PlayerRanking, Validators, PointCalc, Conversion, Utility
   build-depends:  cassava
                 , async  
+
+executable playground
+  import: shared-libs
+  hs-source-dirs: src, src/ADT, src/League
+  main-is: Playground.hs
+  other-modules:  Config, Points, Input, Leaderboard, Middle, OfficialRoster, Roster, Scraper, PlayerRanking, Validators, PointCalc, Utility
+  build-depends:  async
+
+executable head2head
+  import: shared-libs
+  hs-source-dirs: src, src/ADT, src/League
+  main-is: Head2Head.hs
+  other-modules:  Scraper, Input, Middle, Roster, Config, Points, OfficialRoster, Validators, PlayerRanking, PointCalc, Stats, Utility
+  build-depends:  async
 
 executable league
   import: shared-libs
   hs-source-dirs: src, src/ADT, src/League
   main-is: LeagueTEST.hs
-  other-modules:  Validators, Config, Points, Input, Middle, OfficialRoster, Roster, Ranking, PointCalc, Utility
+  other-modules:  Validators, Config, Points, Input, Middle, OfficialRoster, Roster, PlayerRanking, PointCalc, Utility
+
+executable official
+  import: shared-libs
+  hs-source-dirs: src, src/ADT, src/League
+  main-is: OfficialTest.hs
+  other-modules:  Roster, Config, Input, OfficialRoster, Points, Middle, PointCalc, PlayerRanking, Validators, Utility
+
+executable generators
+  import: shared-libs
+  hs-source-dirs: src, src/ADT, src/League
+  main-is: Generators.hs
+  other-modules:  Config, OfficialRoster, Roster, PlayerRanking, Input, Middle, Points, Validators, Utility
+
+executable autodraft
+  import: shared-libs
+  hs-source-dirs: src, src/ADT, src/League
+  main-is: AutoDraft.hs
+  other-modules:  Config, OfficialRoster, Roster, PlayerRanking, Input, Middle, Points, Validators, Utility, Draft
+
+executable draftmonad
+  import: shared-libs
+  hs-source-dirs: src, src/ADT, src/League
+  main-is: MonadTest.hs
+  other-modules:  Config, OfficialRoster, Roster, PlayerRanking, Input, Middle, Points, Validators, Utility, DraftM
+  build-depends:  mtl
 
 executable test_adt
   import: shared-libs
@@ -70,36 +95,11 @@ executable test_adt
                 , containers
                 , async
 
-executable official
-  import: shared-libs
-  hs-source-dirs: src, src/ADT, src/League
-  main-is: OfficialTest.hs
-  other-modules:  Roster, Config, Input, OfficialRoster, Points, Middle, PointCalc, Ranking, Validators, Utility
-
-executable autodraft
-  import: shared-libs
-  hs-source-dirs: src, src/ADT, src/League
-  main-is: AutoDraft.hs
-  other-modules:  Config, OfficialRoster, Roster, Ranking, Input, Middle, Points, Validators, Utility, Draft
-
-executable draftmonad
-  import: shared-libs
-  hs-source-dirs: src, src/ADT, src/League
-  main-is: MonadTest.hs
-  other-modules:  Config, OfficialRoster, Roster, Ranking, Input, Middle, Points, Validators, Utility, DraftM
-  build-depends:  mtl
-
-executable generators
-  import: shared-libs
-  hs-source-dirs: src, src/ADT, src/League
-  main-is: Generators.hs
-  other-modules:  Config, OfficialRoster, Roster, Ranking, Input, Middle, Points, Validators, Utility
-
 executable graphviz
   import: shared-libs
   hs-source-dirs: src, src/ADT, src/League
   main-is: TypeGraph.hs
-  other-modules:  Roster, Config, Input, OfficialRoster, Points, Middle, PointCalc, Ranking, Validators, Utility
+  other-modules:  Roster, Config, Input, OfficialRoster, Points, Middle, PointCalc, PlayerRanking, Validators, Utility
   build-depends:  base >=4.11 && <4.18
                 , debug-trace-var
                 , bytestring
