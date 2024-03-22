@@ -2,6 +2,7 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use tuple-section" #-}
 {-# HLINT ignore "Eta reduce" #-}
+{-# LANGUAGE LambdaCase #-}
 
 
 module DraftM where
@@ -59,6 +60,9 @@ data DraftError
 
 type DraftM a = ExceptT DraftError (StateT DraftState IO) a
 
+updateDraftState :: (DraftState -> DraftState) -> DraftM ()
+updateDraftState f = get >>= put . f
+
 getTeamByIndexSafe :: Int -> DraftM (R.Roster, R.CurrentLineup, [Int])
 getTeamByIndexSafe index = do
   draftState <- get
@@ -111,27 +115,28 @@ addToRosterAndLineupM :: O.OfficialPlayer -> DraftM ()
 addToRosterAndLineupM player = do
   draftState <- get
   let teamIndex = currentPick draftState `mod` length (rosters draftState)
-      (currentRoster, currentLineup, currentAvailableIds) = rosters draftState !! teamIndex
-      positionText = O.primaryPosition player
+  (currentRoster, currentLineup, currentAvailableIds) <- getTeamByIndexSafe teamIndex
+  
+  let positionText = O.primaryPosition player
       draftPositionText = positionCodeToDraftText positionText
-      configData = config draftState  -- Access configuration from state
 
-  -- Perform actions based on player position (pitcher or batter)
-  (updatedRoster, updatedLineup) <- if draftPositionText == "pitcher" then do
-      updatedRoster <- addPitcherToRosterM player currentRoster
-      updatedLineup <- addPlayerToLineupM draftPositionText player currentLineup
-      return (updatedRoster, updatedLineup)
-    else do
-      (updatedRoster, isAddedToRoster) <- addBatterToRosterM draftPositionText player currentRoster
-      updatedLineup <- if isAddedToRoster
-                       then addPlayerToLineupM draftPositionText player currentLineup
-                       else return currentLineup
-      return (updatedRoster, updatedLineup)
+  -- Process player addition based on the position
+  (updatedRoster, updatedLineup, newAvailableIds) <- case draftPositionText of
+      "pitcher" -> do
+        updatedRoster <- addPitcherToRosterM player currentRoster
+        updatedLineup <- addPlayerToLineupM draftPositionText player currentLineup
+        let newAvailableIds = delete (O.playerId player) currentAvailableIds
+        return (updatedRoster, updatedLineup, newAvailableIds)
+      position -> do
+        (updatedRoster, added) <- addBatterToRosterM position player currentRoster
+        updatedLineup <- if added then addPlayerToLineupM position player currentLineup else pure currentLineup
+        let newAvailableIds = if added then delete (O.playerId player) currentAvailableIds else currentAvailableIds
+        return (updatedRoster, updatedLineup, newAvailableIds)
 
-  -- Update available IDs and rosters
-  let newAvailableIds = delete (O.playerId player) currentAvailableIds
-  let newRosters = updateTeamState (rosters draftState) teamIndex (updatedRoster, updatedLineup, newAvailableIds)
-  put $ draftState { rosters = newRosters, availableIds = newAvailableIds }
+  -- Update state with new rosters, lineups, and available IDs
+  let updatedTeams = updateTeamState (rosters draftState) teamIndex (updatedRoster, updatedLineup, newAvailableIds)
+  put draftState { rosters = updatedTeams, availableIds = newAvailableIds }
+
 
 addPitcherToRosterM :: O.OfficialPlayer -> R.Roster -> DraftM R.Roster
 addPitcherToRosterM player roster = do
@@ -185,7 +190,6 @@ addPlayerToLineupM position player lineup = do
         then return $ updater (playerIdText : accessor lineup)
         else throwError $ PositionFull $ "Position " <> position <> " is full"
 
-
 addPlayerToPositionM :: T.Text -> O.OfficialPlayer -> R.Roster -> DraftM R.Roster
 addPlayerToPositionM position player roster = do
   let playerIdText = T.pack $ show $ O.playerId player
@@ -201,6 +205,29 @@ addPlayerToPositionM position player roster = do
     "utility" -> roster { R.uR = playerIdText : R.uR roster }
     _ -> roster  -- Default case if position does not match
 
+-- Helper function to determine if a player can be added based on position limits
+canAddPlayerToPosition :: T.Text -> R.Roster -> C.Configuration -> Bool
+canAddPlayerToPosition position roster config = 
+  let limit = queryDraftRosterLmts position $ C.draft_limits $ C.draft_parameters config
+      currentCount = countPlayers position roster
+  in currentCount < limit
 
--- Add necessary utility functions here, adapted to work within DraftM
--- For instance, adding players to rosters/lineups, checking position limits, etc.
+updateRosterAndLineup :: Int -> R.Roster -> R.CurrentLineup -> [Int] -> DraftM ()
+updateRosterAndLineup teamIndex updatedRoster updatedLineup newAvailableIds = do
+  updateDraftStateWithNewTeamData teamIndex updatedRoster updatedLineup newAvailableIds
+
+updateDraftStateWithNewTeamData :: Int -> R.Roster -> R.CurrentLineup -> [Int] -> DraftM ()
+updateDraftStateWithNewTeamData teamIndex updatedRoster updatedLineup newAvailableIds = modify' $ \ds ->
+  let updatedTeams = take teamIndex (rosters ds) ++
+                     [(updatedRoster, updatedLineup, newAvailableIds)] ++
+                     drop (teamIndex + 1) (rosters ds)
+  in ds { rosters = updatedTeams, availableIds = newAvailableIds }
+
+updateDraftStateWithTeam :: Int -> R.Roster -> R.CurrentLineup -> [Int] -> DraftM ()
+updateDraftStateWithTeam teamIndex updatedRoster updatedLineup newAvailableIds = updateDraftState $ \ds ->
+    let updatedTeams = updateTeamAtIndex (rosters ds) teamIndex (updatedRoster, updatedLineup, newAvailableIds)
+    in ds { rosters = updatedTeams, availableIds = newAvailableIds }
+
+updateTeamAtIndex :: [(R.Roster, R.CurrentLineup, [Int])] -> Int -> (R.Roster, R.CurrentLineup, [Int]) -> [(R.Roster, R.CurrentLineup, [Int])]
+updateTeamAtIndex teams index newTeamData =
+    take index teams ++ [newTeamData] ++ drop (index + 1) teams

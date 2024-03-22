@@ -1,3 +1,7 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use tuple-section" #-}
+
 module Main where
 
 import qualified Config as C
@@ -5,25 +9,41 @@ import qualified OfficialRoster as O
 import qualified Roster as R
 import qualified Ranking as PR
 import Validators
-    ( countPlayers
-    , findPlayer
-    , queryDraftRosterLmts
-    )
+    ( countPlayers,
+      findPlayer,
+      queryDraftRosterLmts,
+      countPlayers,
+      findPlayer,
+      queryDraftRosterLmts,
+      countPlayers,
+      findPlayer,
+      queryDraftRosterLmts )
+
 import Utility
-    ( positionCodeToDraftText,
-      readJson,
+    ( readJson,
       writeJson,
-      positionCodeToDraftText,
-      createLgManager,
-      readJson,
-      writeJson,
-      createLgManager )
+      createLgManager 
+    )
+
 import DraftM
 import Control.Monad.State ( runStateT, runStateT )
 import Control.Monad.Except ( runExceptT, runExceptT )
 import Data.Text as T (unpack, take)
-import Data.Maybe (fromMaybe)
+import Data.Maybe ( fromMaybe, mapMaybe, fromMaybe )
 import Data.Either (fromRight)
+import Control.Monad (forM, foldM)
+import Data.Aeson (FromJSON, ToJSON, decode, encode, withObject, (.:))
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.Text as T
+import GHC.Generics (Generic)
+import Data.Time.Clock (UTCTime, getCurrentTime)
+import Data.Time.Format (formatTime, defaultTimeLocale)
+import Data.List
+    ( find,
+      delete,
+      sortBy,
+      findIndex,
+      sortOn )
 
 initialDraftState :: C.Configuration -> [O.OfficialPlayer] -> [Int] -> DraftState
 initialDraftState config players availableIds = DraftState
