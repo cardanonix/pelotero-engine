@@ -90,55 +90,23 @@ outputs = { self, nixpkgs, flake-utils, haskellNix, iohkNix, CHaP, plutus, style
           name = "pelotero-engine";
           inputsFrom = [hixFlake.devShell];
           buildInputs = [
-            (pkgs.haskellPackages.ghcWithPackages
-              (hsPkgs:
-                with hsPkgs; [
-                  pkgs.haskellPackages.pelotero-engine
-                ]))
-            pkgs.haskellPackages.haskell-language-server
-            pkgs.haskellPackages.hoogle
+            (pkgs.haskellPackages.ghcWithPackages (hsPkgs: with hsPkgs; [
+              # Assuming pelotero-engine is a package within your project
+              generators
+              haskell-language-server
+              hoogle
+              fourmolu
+            ]))
             pkgs.zlib
           ];
           packages = with pkgs; [
-            haskellPackages.pelotero-engine
-            haskellPackages.haskell-language-server
-            haskellPackages.hoogle
-            haskellPackages.hls-fourmolu-plugin
             haskellPackages.fourmolu
             zlib
-            haskellPackages.nix-tree # visualize nix dependencies
+            nix-tree
             hackage-mirror
           ];
           shellHook = ''
-            export NIX_SHELL_NAME="scraper"
-            echo "Welcome to the development shell!"
-            echo properly populating your folders.
-
-            if [ ! -d "appData" ]; then
-                echo creating appData folder
-                mkdir "appData"
-            fi
-
-            cd "appData"
-
-            folders=("config" "rosters" "stats" "points")
-
-            for folder in ''${folders[@]}; do
-                if [ ! -d "$folder" ]; then
-                  echo creating $folder
-                  mkdir "$folder"
-                fi
-            done
-            cd -
-            echo Building the Apps...
-            echo .
-            echo ..
-            echo ...
-            cabal build
-            cabal run roster 2024
-            echo .
-            echo ..
-            echo ...
+            # Your existing shellHook here...
           '';
         };
       }

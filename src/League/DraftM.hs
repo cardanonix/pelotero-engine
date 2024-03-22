@@ -57,7 +57,7 @@ data DraftState = DraftState {
 }
 
 initializeRosters :: Int -> [(R.Roster, R.CurrentLineup, [Int])]
-initializeRosters numTeams = replicate numTeams (R.mkEmptyRoster, R.mkEmptyLineup, [])
+initializeRosters numTeams = replicate numTeams (mkEmptyRoster, mkEmptyLineup, [])
 
 initializeDraftState :: C.Configuration -> O.OfficialRoster -> PR.PlayerRankings -> DraftState
 initializeDraftState config validPlayers rankings = DraftState
@@ -101,7 +101,7 @@ findPlayerMonad playerId players availableIds = case findPlayer playerId players
 
 updateTeamState :: [(R.Roster, R.CurrentLineup, [Int])] -> Int -> (R.Roster, R.CurrentLineup, [Int]) -> [(R.Roster, R.CurrentLineup, [Int])]
 updateTeamState teams index (newRoster, newLineup, newAvailableIds) =
-    take index teams ++ [(newRoster, newLineup, newAvailableIds)] ++ drop (index + 1) teams
+    Prelude.take index teams ++ [(newRoster, newLineup, newAvailableIds)] ++ drop (index + 1) teams
 
 -- serpentine order generator
 serpentineOrder :: Int -> Int -> DraftM [[Int]]
@@ -252,7 +252,7 @@ updateRosterAndLineup teamIndex updatedRoster updatedLineup newAvailableIds = do
 
 updateDraftStateWithNewTeamData :: Int -> R.Roster -> R.CurrentLineup -> [Int] -> DraftM ()
 updateDraftStateWithNewTeamData teamIndex updatedRoster updatedLineup newAvailableIds = modify' $ \ds ->
-  let updatedTeams = take teamIndex (draft_rosters ds) ++
+  let updatedTeams = Prelude.take teamIndex (draft_rosters ds) ++
                      [(updatedRoster, updatedLineup, newAvailableIds)] ++
                      drop (teamIndex + 1) (draft_rosters ds)
   in ds { draft_rosters = updatedTeams, availableIds = newAvailableIds }
