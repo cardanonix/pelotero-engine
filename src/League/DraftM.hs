@@ -47,13 +47,13 @@ runDraft initialState action = runStateT (runExceptT action) initialState
 
 -- Draft StateT Monad Representation
 data DraftState = DraftState {
-    config :: C.Configuration, -- should be immutable once initialized
+    config :: C.Configuration, -- Top Level Configuration (should be immutable once initialized)
     officialRoster :: O.OfficialRoster, -- should be immutable once initialized
-    rankings :: PR.PlayerRankings, -- should be immutable once initialized 
-    availableIds :: [Int],  -- initialize with roster and config
+    rankings :: PR.PlayerRankings, -- should only be subtracted from once initialized (we night not even need to subtract at all)
+    availableIds :: [Int],  -- initialize with roster and config then subtract
     currentPick :: Int,
     currentRound :: Int, -- to facilitate serpentine draft
-    draft_rosters :: [(R.LgManager, [Int])]
+    draft_rosters :: [(R.LgManager, [Int])] -- Top Level LgManager containing roster and lineup which needs to be initialized empty then added to 
 }
 
 initializeRosters :: Int -> [(R.Roster, R.CurrentLineup, [Int])]
@@ -85,7 +85,13 @@ type DraftM a = ExceptT DraftError (StateT DraftState IO) a
 updateDraftState :: (DraftState -> DraftState) -> DraftM ()
 updateDraftState f = get >>= put . f
 
-getTeamByIndexSafe :: Int -> DraftM (R.Roster, R.CurrentLineup, [Int])
+-- -- serpentine order generator
+-- serpentineOrder :: Int -> Int -> DraftM [[Int]]
+-- serpentineOrder numTeams rounds = return $ map generateOrder [1..rounds]
+--   where
+--     generateOrder round = if even round then reverse [1..numTeams] else [1..numTeams]
+
+getTeamByIndexSafe :: Int -> DraftM (R.LgManager, [Int])
 getTeamByIndexSafe index = do
   draftState <- get
   let teams = draft_rosters draftState
@@ -94,20 +100,14 @@ getTeamByIndexSafe index = do
     atMay :: [a] -> Int -> Maybe a
     atMay xs n = if n >= 0 && n < length xs then Just (xs !! n) else Nothing
 
-findPlayerMonad :: Int -> [O.OfficialPlayer] -> [Int] -> DraftM O.OfficialPlayer
-findPlayerMonad playerId players availableIds = case findPlayer playerId players availableIds of
+findPlayerM :: Int -> [O.OfficialPlayer] -> [Int] -> DraftM O.OfficialPlayer
+findPlayerM playerId players availableIds = case findPlayer playerId players availableIds of
     Just player -> return player
     Nothing -> throwError $ PlayerNotFound playerId
 
 updateTeamState :: [(R.Roster, R.CurrentLineup, [Int])] -> Int -> (R.Roster, R.CurrentLineup, [Int]) -> [(R.Roster, R.CurrentLineup, [Int])]
 updateTeamState teams index (newRoster, newLineup, newAvailableIds) =
     Prelude.take index teams ++ [(newRoster, newLineup, newAvailableIds)] ++ drop (index + 1) teams
-
--- serpentine order generator
-serpentineOrder :: Int -> Int -> DraftM [[Int]]
-serpentineOrder numTeams rounds = return $ map generateOrder [1..rounds]
-  where
-    generateOrder round = if even round then reverse [1..numTeams] else [1..numTeams]
 
 
 draftPlayersM :: [[PR.PlayerRanking]] -> DraftM ()
@@ -116,10 +116,10 @@ draftPlayersM teamRankings = do
     throwError $ OtherDraftError "Team rankings cannot be empty."
   let numTeams = length teamRankings
   draftOrder <- serpentineOrder numTeams (length $ head teamRankings)
-  mapM_ draftCycleMonad (zip draftOrder teamRankings)
+  mapM_ draftCycleM (zip draftOrder teamRankings)
 
-draftCycleMonad :: ([Int], [PR.PlayerRanking]) -> DraftM ()
-draftCycleMonad (order, teamRankings) = do
+draftCycleM :: ([Int], [PR.PlayerRanking]) -> DraftM ()
+draftCycleM (order, teamRankings) = do
   draftState <- get
   -- Assuming rankings are now handled at a higher level to align with LgManager updates.
   forM_ order $ \teamIndex -> do
@@ -128,7 +128,7 @@ draftCycleMonad (order, teamRankings) = do
       let (lgManager, availableIds) = draft_rosters draftState !! teamIndex
       -- Placeholder: Implement logic to select a player based on rankings and availability.
       let selectedPlayerId = head availableIds -- Simplified for illustration.
-      player <- findPlayerMonad selectedPlayerId (O.people $ officialRoster draftState) availableIds
+      player <- findPlayerM selectedPlayerId (O.people $ officialRoster draftState) availableIds
       -- Update LgManager with selected player.
       let updatedLgManager = updateLgManagerWithPlayer lgManager player
       let newAvailableIds = delete selectedPlayerId availableIds
