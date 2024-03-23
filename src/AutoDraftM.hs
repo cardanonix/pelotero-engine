@@ -28,15 +28,10 @@ import qualified OfficialRoster as O
 import qualified Roster as R
 import qualified PlayerRanking as PR
 import Validators
-    ( countPlayers,
-      findPlayer,
-      queryDraftRosterLmts,
-      countPlayers,
-      findPlayer,
-      queryDraftRosterLmts,
-      countPlayers,
-      findPlayer,
-      queryDraftRosterLmts )
+    ( queryDraftRosterLmts,
+      countPlayersOnRoster,
+      findPlayer
+    )
 
 import Utility
     ( readJson,

@@ -31,7 +31,7 @@ import qualified OfficialRoster as O
 import qualified Roster as R
 import qualified PlayerRanking as PR
 import Validators 
-    ( countPlayers
+    ( countPlayersOnRoster
     , findPlayer
     , queryDraftRosterLmts 
     )

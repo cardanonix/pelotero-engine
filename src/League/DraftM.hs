@@ -194,7 +194,7 @@ initializeRosters numTeams = replicate numTeams (mkEmptyRoster, mkEmptyLineup, [
 -- addBatterToRosterM position player roster = do
 --   draftState <- get
 --   let configData = config draftState
---       currentCount = countPlayers position roster
+--       currentCount = countPlayersOnRoster position roster
 --       limit = queryDraftRosterLmts position $ C.draft_limits $ C.draft_parameters configData
 --   if currentCount < limit then do
 --       updatedRoster <- addPlayerToPositionM position player roster
@@ -246,7 +246,7 @@ initializeRosters numTeams = replicate numTeams (mkEmptyRoster, mkEmptyLineup, [
 -- canAddPlayerToPosition :: T.Text -> R.Roster -> C.Configuration -> Bool
 -- canAddPlayerToPosition position roster config =
 --   let limit = queryDraftRosterLmts position $ C.draft_limits $ C.draft_parameters config
---       currentCount = countPlayers position roster
+--       currentCount = countPlayersOnRoster position roster
 --   in currentCount < limit
 
 -- updateRosterAndLineup :: Int -> R.LgManager -> [Int] -> DraftM ()

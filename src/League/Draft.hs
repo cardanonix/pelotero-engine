@@ -30,7 +30,7 @@ import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
 import qualified PlayerRanking as PR
-import Validators ( countPlayers, findPlayer, queryDraftRosterLmts, queryLgLineupLmts )
+import Validators ( countPlayersOnRoster, findPlayer, queryDraftRosterLmts, queryLgLineupLmts )
 import Utility
 
 draftPlayers :: [PR.PlayerRanking] -> [PR.PlayerRanking] -> [O.OfficialPlayer] -> C.Configuration -> IO ((R.Roster, R.CurrentLineup), (R.Roster, R.CurrentLineup))
@@ -125,7 +125,7 @@ addPitcherToRoster config player roster =
 addBatterToRoster :: C.Configuration -> T.Text -> O.OfficialPlayer -> R.Roster -> C.DraftRosterLmts -> (R.Roster, Bool)
 addBatterToRoster config position player roster limits =
     let playerIdText = T.pack . show $ O.playerId player
-        currentCount = countPlayers position roster
+        currentCount = countPlayersOnRoster position roster
         limit = queryDraftRosterLmts position limits
     in if currentCount < limit
        then (addPlayerToPosition position player roster, True)
