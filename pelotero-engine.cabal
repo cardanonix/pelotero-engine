@@ -75,10 +75,10 @@ executable autodraft
   main-is: AutoDraft.hs
   other-modules:  Config, OfficialRoster, Roster, PlayerRanking, Input, Middle, Points, Validators, Utility, Draft
 
-executable draftmonad
+executable autodraftM
   import: shared-libs
   hs-source-dirs: src, src/ADT, src/League
-  main-is: MonadTest.hs
+  main-is: AutoDraftM.hs
   other-modules:  Config, OfficialRoster, Roster, PlayerRanking, Input, Middle, Points, Validators, Utility, DraftM
   build-depends:  mtl
 

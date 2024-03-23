@@ -41,14 +41,14 @@ data RankingData = RankingData
     , rankings      :: [PlayerRanking]
     } deriving (Show, Eq, Generic)
 
--- Represents a collection of player rankings, possibly empty
-type PlayerRankings = [PlayerRanking]
-
 -- Represents a player's ranking within the team.
 data PlayerRanking = PlayerRanking
     { playerId :: Int
     , rank     :: Int
     } deriving (Show, Eq, Generic)
+
+-- -- Represents a collection of player rankings, possibly empty
+type PlayerRankings = [PlayerRanking]
 
 -- Creates an empty collection of player rankings
 mkEmptyRankings :: PlayerRankings
