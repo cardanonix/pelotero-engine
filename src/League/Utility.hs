@@ -275,7 +275,7 @@ writeJson filePath = BL.writeFile filePath . encode
 
 -- Reads and parses all ranking JSON files into data structures
 -- Verify if a player is in the official roster
-isPlayerInOfficialRoster :: Int -> [O.OfficialPlayer] -> Bool
+isPlayerInOfficialRoster :: O.PlayerID -> [O.OfficialPlayer] -> Bool
 isPlayerInOfficialRoster playerId
   = any (\ p -> O.playerId p == playerId)
 

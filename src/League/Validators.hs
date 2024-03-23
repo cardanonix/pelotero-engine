@@ -16,7 +16,7 @@ import Data.ByteString.Lazy.Char8 (pack)
 import Data.Foldable (foldl', forM_)
 import qualified Data.Map.Strict as M
 import Data.Maybe (catMaybes, mapMaybe)
-import Data.Text (Text)
+
 import qualified Data.Text as T
 import Debug.Trace (traceShow, traceShowM)
 
@@ -53,7 +53,7 @@ testLineup config (Right lgManager) = do
         then putStrLn "This Lineup is valid."
         else putStrLn "That lineup has discrepancies."
 
-findPlayer :: Int -> [O.OfficialPlayer] -> [Int] -> Maybe O.OfficialPlayer
+findPlayer :: O.PlayerID -> [O.OfficialPlayer] -> [O.PlayerID] -> Maybe O.OfficialPlayer
 findPlayer playerId players availableIds =
     find (\p -> O.playerId p == playerId && playerId `elem` availableIds) players
 
@@ -108,7 +108,7 @@ getLineupValidationErrors manager config =
         Left errors -> errors
         Right _ -> []
 
-hasUniqueLineupPlayers :: R.CurrentLineup -> Either String [Text]
+hasUniqueLineupPlayers :: R.CurrentLineup -> Either String [T.Text]
 hasUniqueLineupPlayers lineup =
     let allPlayers = getUniquePlayerIdsLineup lineup
         duplicates = allPlayers \\ nub allPlayers
@@ -117,18 +117,18 @@ hasUniqueLineupPlayers lineup =
             else Right duplicates
 
 -- Roster Validation
-hasUniqueRosterPlayers :: R.Roster -> Either String [Text]
+hasUniqueRosterPlayers :: R.Roster -> Either String [T.Text]
 hasUniqueRosterPlayers roster =
     let allPlayers = concat [R.cR roster, R.b1R roster, R.b2R roster, R.b3R roster, R.ssR roster, R.ofR roster, R.uR roster, R.spR roster, R.rpR roster]
         duplicates = allPlayers \\ nub allPlayers
     in if null duplicates then Left "No duplicate players found in roster." else Right duplicates
 
-lookupPlayerInRoster :: Text -> R.Roster -> Bool
+lookupPlayerInRoster :: T.Text -> R.Roster -> Bool
 lookupPlayerInRoster playerId roster =
     let allPlayers = concat [R.cR roster, R.b1R roster, R.b2R roster, R.b3R roster, R.ssR roster, R.ofR roster, R.uR roster, R.spR roster, R.rpR roster]
     in playerId `elem` allPlayers
 
-lookupPlayerInLineup :: Text -> R.CurrentLineup -> Bool
+lookupPlayerInLineup :: T.Text -> R.CurrentLineup -> Bool
 lookupPlayerInLineup playerId lineup =
     let allPlayers = concat [R.cC lineup, R.b1C lineup, R.b2C lineup, R.b3C lineup, R.ssC lineup, R.ofC lineup, R.uC lineup, R.spC lineup, R.rpC lineup]
     in playerId `elem` allPlayers
@@ -150,7 +150,7 @@ getRosterDiscrepancies roster limits =
         let diff = length players - limit
         in if diff > 0 then Just $ posName ++ ": Too many players in Roster - " ++ show diff else Nothing
 
-getLineupDiscrepancies :: R.CurrentLineup -> C.LgLineupLmts -> [String]
+getLineupDiscrepancies :: R.CurrentLineup -> C.LgLineupLmts -> [(String, Int)]
 getLineupDiscrepancies lineup limits =
     mapMaybe validatePosition [ 
       ("catcher", R.cC lineup, C.lg_catcher limits)
@@ -166,7 +166,25 @@ getLineupDiscrepancies lineup limits =
   where
     validatePosition (posName, players, limit) =
         let diff = length players - limit
-        in if diff > 0 then Just $ posName ++ ": Too many players in Lineup - " ++ show diff else Nothing
+        in if diff > 0 then Just (posName, diff) else Nothing
+
+-- getLineupDiscrepancies :: R.CurrentLineup -> C.LgLineupLmts -> [String]
+-- getLineupDiscrepancies lineup limits =
+--     mapMaybe validatePosition [ 
+--       ("catcher", R.cC lineup, C.lg_catcher limits)
+--     , ("first", R.b1C lineup, C.lg_first limits)
+--     , ("second", R.b2C lineup, C.lg_second limits)
+--     , ("third", R.b3C lineup, C.lg_third limits)
+--     , ("shortstop", R.ssC lineup, C.lg_shortstop limits)
+--     , ("outfield", R.ofC lineup, C.lg_outfield limits)
+--     , ("utility", R.uC lineup, C.lg_utility limits)
+--     , ("s_pitcher", R.spC lineup, C.lg_s_pitcher limits)
+--     , ("r_pitcher", R.rpC lineup, C.lg_r_pitcher limits)
+--     ]
+--   where
+--     validatePosition (posName, players, limit) =
+--         let diff = length players - limit
+--         in if diff > 0 then Just $ posName ++ ": Too many players in Lineup - " ++ show diff else Nothing
 
 countPlayersOnRoster :: T.Text -> R.Roster -> Int
 countPlayersOnRoster position roster =
@@ -210,15 +228,15 @@ validateAndPrintLineup manager config = do
     let rosterConfig = C.lineup_limits . C.point_parameters $ config
     let discrepancies = getLineupDiscrepancies (R.current_lineup manager) rosterConfig
     let validPositions = null discrepancies
-    let validRosterSize = all (\(_, diff) -> diff <= 0) discrepancies
+    let validLineupSize = all (\(_, diff) -> diff <= 0) discrepancies
 
     playerIdValidation <- validatePlayerId (R.current_lineup manager)
 
     case (playerIdValidation, hasUniqueLineupPlayers (R.current_lineup manager)) of
         (Left successMessage, Left _) -> do
             putStrLn successMessage
-            mapM_ (\(pos, diff) -> putStrLn $ "This roster has " ++ show diff ++ " too many players at " ++ pos ++ ".") discrepancies
-            return $ validPositions && validRosterSize
+            mapM_ (\(pos, diff) -> putStrLn $ "This lineup has " ++ show diff ++ " too many players at " ++ pos ++ ".") discrepancies
+            return $ validPositions && validLineupSize
         (Right nonexistent, _) -> do
             putStrLn "Invalid player IDs found:"
             mapM_ (putStrLn . T.unpack) nonexistent
@@ -305,18 +323,18 @@ hasValidPositions val = case fromJSON val :: Result I.Player of
     _ -> False
 
 -- Lookup a playerId in an OfficialRoster
-lookupPlayerInOfficialRoster :: Text -> O.OfficialRoster -> Bool
+lookupPlayerInOfficialRoster :: T.Text -> O.OfficialRoster -> Bool
 lookupPlayerInOfficialRoster pid roster =
     any (\player -> T.pack (show $ playerId player) == pid) (people roster)
 
-lookupPlayerId :: Text -> IO Bool
+lookupPlayerId :: T.Text -> IO Bool
 lookupPlayerId playerId = do
     parsedRoster <- readJson "appData/rosters/activePlayers.json" :: IO (Either String O.OfficialRoster)
     case parsedRoster of
         Left _ -> return False
         Right activeRoster -> return $ lookupPlayerInOfficialRoster playerId activeRoster
 
-validatePlayerId :: R.CurrentLineup -> IO (Either String [Text])
+validatePlayerId :: R.CurrentLineup -> IO (Either String [T.Text])
 validatePlayerId lineup = do
     let allPlayers = getUniquePlayerIdsLineup lineup
     nonexistent <- filterM (fmap not . lookupPlayerId) allPlayers
@@ -324,11 +342,19 @@ validatePlayerId lineup = do
         then return $ Left "All Players are valid."
         else return $ Right nonexistent
 
--- Utility function to convert an Int ID to Text
-intToText :: Int -> Text
+-- validatePlayerIdNEW :: R.LgManager -> IO (Either String [T.Text])
+-- validatePlayerIdNEW manager = do
+--     let allPlayers = getUniquePlayerIdsLineup (R.current_lineup manager)
+--     nonexistent <- filterM (fmap not . lookupPlayerId) allPlayers
+--     if null nonexistent
+--         then return $ Left "All players are valid."
+--         else return $ Right nonexistent
+
+-- Utility function to convert an Int ID to T.Text
+intToText :: Int -> T.Text
 intToText = T.pack . show
 
-getUniquePlayerIdsLineup :: R.CurrentLineup -> [Text]
+getUniquePlayerIdsLineup :: R.CurrentLineup -> [T.Text]
 getUniquePlayerIdsLineup R.CurrentLineup{..} =
     cC ++ b1C ++ b2C ++ b3C ++ ssC ++ uC ++ ofC ++ spC ++ rpC
 
@@ -371,7 +397,7 @@ validateCurrentLineup R.LgManager{..} C.Configuration{point_parameters = C.Point
 -- takes a playerId as a String and a LgManager and returns the player's position or fails with an error message
 -- addded failure cases to protect against players being in multiple positions or not being found in the lineup
 -- even though this should be impossible if I make the lineup-setting tools correctly
-findPlayerPosition :: Text -> R.LgManager -> Either Text Text
+findPlayerPosition :: T.Text -> R.LgManager -> Either T.Text T.Text
 findPlayerPosition playerId mgr = 
     case concatMap (findPosition playerId) checks of
         [] -> Left "Player not found in current lineup."
@@ -394,7 +420,7 @@ findPlayerPosition playerId mgr =
 
 -- takes a playerId as a String and a LgManager
 -- and returns whether the player is to be fielded as a batter or pitcher for points calculation purposes
-batterOrPitcher :: Text -> R.LgManager -> Either Text P.StatType
+batterOrPitcher :: T.Text -> R.LgManager -> Either T.Text P.StatType
 batterOrPitcher playerName mgr
     | any (\posList -> playerName `elem` posList) batterPositions = Right P.Batting
     | any (\posList -> playerName `elem` posList) pitcherPositions = Right P.Pitching
