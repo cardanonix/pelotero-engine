@@ -28,7 +28,7 @@ a suite of functions for validating, processing, and managing baseball team line
 
 - hasValidPositions: Checks if a player has valid position assignments, ensuring they're eligible to play in their designated spots.
 
-- lookupPlayerInOfficialRoster and validatePlayerId: Functions to ensure player IDs are valid and exist within an official roster, facilitating integrity checks for player data.
+- isPlayerIdInOfficialRoster and validatePlayerId: Functions to ensure player IDs are valid and exist within an official roster, facilitating integrity checks for player data.
 
 - intToText, getUniquePlayerIdsLineup, and getLineupDiscrepancies: Utility functions for converting integers to text, extracting unique player IDs from a lineup, and identifying discrepancies in lineup configurations against league rules.
 
