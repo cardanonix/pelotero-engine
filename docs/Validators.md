@@ -18,7 +18,7 @@ a suite of functions for validating, processing, and managing baseball team line
 
 - isLineupValid and getRosterValidationErrors: Provide a boolean validity check for a lineup and a way to retrieve specific roster validation errors, respectively.
 
-- lineupHasUniquePlayers and hasUniqueRosterPlayers: Check for duplicate player IDs within a lineup or roster, ensuring player uniqueness.
+- hasUniqueLineupPlayers and hasUniqueRosterPlayers: Check for duplicate player IDs within a lineup or roster, ensuring player uniqueness.
 
 - lookupPlayerInRoster: Determines if a player ID is present within a specific roster.
 

@@ -53,42 +53,6 @@ testLineup config (Right lgManager) = do
         then putStrLn "This Lineup is valid."
         else putStrLn "That lineup has discrepancies."
 
-validateLineup :: R.LgManager -> C.Configuration -> Either [String] ()
-validateLineup manager config = do
-    let discrepancies = getLineupDiscrepancies (R.current_lineup manager) (C.lineup_limits . C.point_parameters $ config)
-    let duplicateCheck = lineupHasUniquePlayers (R.current_lineup manager)
-    case (duplicateCheck, discrepancies) of
-        (Left _, []) -> Right ()
-        (Right duplicates, []) -> Left (map T.unpack duplicates ++ ["Duplicate player IDs found."])
-        (_, errors) -> Left (map discrepancyToString errors)
-  where
-    discrepancyToString (pos, diff)
-        | diff > 0 = "This roster has " ++ show diff ++ " too many players at " ++ pos ++ "."
-        | diff < 0 = "This roster needs " ++ show (abs diff) ++ " more players at " ++ pos ++ "."
-
-validateAndPrintLineup :: R.LgManager -> C.Configuration -> IO Bool
-validateAndPrintLineup manager config = do
-    let rosterConfig = C.lineup_limits . C.point_parameters $ config
-    let discrepancies = getLineupDiscrepancies (R.current_lineup manager) rosterConfig
-    let validPositions = null discrepancies
-    let validRosterSize = all (\(_, diff) -> diff <= 0) discrepancies
-
-    playerIdValidation <- validatePlayerId (R.current_lineup manager)
-
-    case (playerIdValidation, lineupHasUniquePlayers (R.current_lineup manager)) of
-        (Left successMessage, Left _) -> do
-            putStrLn successMessage
-            mapM_ (\(pos, diff) -> putStrLn $ "This roster has " ++ show diff ++ " too many players at " ++ pos ++ ".") discrepancies
-            return $ validPositions && validRosterSize
-        (Right nonexistent, _) -> do
-            putStrLn "Invalid player IDs found:"
-            mapM_ (putStrLn . T.unpack) nonexistent
-            return False
-        (_, Right duplicates) -> do
-            putStrLn "Duplicate player IDs found:"
-            mapM_ (putStrLn . T.unpack) duplicates
-            return False
-
 findPlayer :: Int -> [O.OfficialPlayer] -> [Int] -> Maybe O.OfficialPlayer
 findPlayer playerId players availableIds =
     find (\p -> O.playerId p == playerId && playerId `elem` availableIds) players
@@ -137,8 +101,15 @@ getRosterValidationErrors manager config =
         Left errors -> errors
         Right _ -> []
 
-lineupHasUniquePlayers :: R.CurrentLineup -> Either String [Text]
-lineupHasUniquePlayers lineup =
+-- This function validates a roster and returns the error messages if there are any.
+getLineupValidationErrors :: R.LgManager -> C.Configuration -> [String]
+getLineupValidationErrors manager config =
+    case validateLineup manager config of
+        Left errors -> errors
+        Right _ -> []
+
+hasUniqueLineupPlayers :: R.CurrentLineup -> Either String [Text]
+hasUniqueLineupPlayers lineup =
     let allPlayers = getUniquePlayerIdsLineup lineup
         duplicates = allPlayers \\ nub allPlayers
      in if null duplicates
@@ -157,6 +128,11 @@ lookupPlayerInRoster playerId roster =
     let allPlayers = concat [R.cR roster, R.b1R roster, R.b2R roster, R.b3R roster, R.ssR roster, R.ofR roster, R.uR roster, R.spR roster, R.rpR roster]
     in playerId `elem` allPlayers
 
+lookupPlayerInLineup :: Text -> R.CurrentLineup -> Bool
+lookupPlayerInLineup playerId lineup =
+    let allPlayers = concat [R.cC lineup, R.b1C lineup, R.b2C lineup, R.b3C lineup, R.ssC lineup, R.ofC lineup, R.uC lineup, R.spC lineup, R.rpC lineup]
+    in playerId `elem` allPlayers
+
 getRosterDiscrepancies :: R.Roster -> C.DraftRosterLmts -> [String]
 getRosterDiscrepancies roster limits =
     mapMaybe validatePosition [ ("catcher", R.cR roster, C.dr_catcher limits)
@@ -172,10 +148,28 @@ getRosterDiscrepancies roster limits =
   where
     validatePosition (posName, players, limit) =
         let diff = length players - limit
-        in if diff > 0 then Just $ posName ++ ": Too many players - " ++ show diff else Nothing
+        in if diff > 0 then Just $ posName ++ ": Too many players in Roster - " ++ show diff else Nothing
 
-countPlayers :: T.Text -> R.Roster -> Int
-countPlayers position roster =
+getLineupDiscrepancies :: R.CurrentLineup -> C.LgLineupLmts -> [String]
+getLineupDiscrepancies lineup limits =
+    mapMaybe validatePosition [ 
+      ("catcher", R.cC lineup, C.lg_catcher limits)
+    , ("first", R.b1C lineup, C.lg_first limits)
+    , ("second", R.b2C lineup, C.lg_second limits)
+    , ("third", R.b3C lineup, C.lg_third limits)
+    , ("shortstop", R.ssC lineup, C.lg_shortstop limits)
+    , ("outfield", R.ofC lineup, C.lg_outfield limits)
+    , ("utility", R.uC lineup, C.lg_utility limits)
+    , ("s_pitcher", R.spC lineup, C.lg_s_pitcher limits)
+    , ("r_pitcher", R.rpC lineup, C.lg_r_pitcher limits)
+    ]
+  where
+    validatePosition (posName, players, limit) =
+        let diff = length players - limit
+        in if diff > 0 then Just $ posName ++ ": Too many players in Lineup - " ++ show diff else Nothing
+
+countPlayersOnRoster :: T.Text -> R.Roster -> Int
+countPlayersOnRoster position roster =
     case position of
         "catcher" -> length $ R.cR roster
         "first" -> length $ R.b1R roster
@@ -188,6 +182,20 @@ countPlayers position roster =
         "r_pitcher" -> length $ R.rpR roster
         _ -> 0
 
+countPlayersInLineup :: T.Text -> R.CurrentLineup -> Int
+countPlayersInLineup position lineup =
+    case position of
+        "catcher" -> length $ R.cC lineup
+        "first" -> length $ R.b1C lineup
+        "second" -> length $ R.b2C lineup
+        "third" -> length $ R.b3C lineup
+        "shortstop" -> length $ R.ssC lineup
+        "outfield" -> length $ R.ofC lineup
+        "utility" -> length $ R.uC lineup
+        "s_pitcher" -> length $ R.spC lineup
+        "r_pitcher" -> length $ R.rpC lineup
+        _ -> 0
+
 validateRoster :: R.Roster -> C.Configuration -> Either [String] ()
 validateRoster roster config = do
     let discrepancies = getRosterDiscrepancies roster (C.draft_limits $ C.draft_parameters config)
@@ -197,93 +205,61 @@ validateRoster roster config = do
         (Right duplicates, []) -> Left (map T.unpack duplicates ++ ["Duplicate player IDs found in roster."])
         (_, errors) -> Left errors
 
+validateAndPrintLineup :: R.LgManager -> C.Configuration -> IO Bool
+validateAndPrintLineup manager config = do
+    let rosterConfig = C.lineup_limits . C.point_parameters $ config
+    let discrepancies = getLineupDiscrepancies (R.current_lineup manager) rosterConfig
+    let validPositions = null discrepancies
+    let validRosterSize = all (\(_, diff) -> diff <= 0) discrepancies
 
--- -- ## League Configuration ADT ## --
--- data Configuration = Configuration
---     { status :: Text
---     , leagueID :: Text
---     , point_parameters :: PointParameters
---     , draft_parameters :: DraftParameters
---     , commissioner :: Text
---     , lgMembers :: [Text]
---     }
---     deriving (Show, Eq)
+    playerIdValidation <- validatePlayerId (R.current_lineup manager)
 
--- data PointParameters = PointParameters
---     { lg_style :: Text
---     , start_UTC :: Text
---     , end_UTC :: Text
---     , lg_battingMults :: BattingMults
---     , lg_pitchingMults :: PitchingMults
---     , lineup_limits :: LgLineupLmts
---     }
---     deriving (Show, Eq)
+    case (playerIdValidation, hasUniqueLineupPlayers (R.current_lineup manager)) of
+        (Left successMessage, Left _) -> do
+            putStrLn successMessage
+            mapM_ (\(pos, diff) -> putStrLn $ "This roster has " ++ show diff ++ " too many players at " ++ pos ++ ".") discrepancies
+            return $ validPositions && validRosterSize
+        (Right nonexistent, _) -> do
+            putStrLn "Invalid player IDs found:"
+            mapM_ (putStrLn . T.unpack) nonexistent
+            return False
+        (_, Right duplicates) -> do
+            putStrLn "Duplicate player IDs found:"
+            mapM_ (putStrLn . T.unpack) duplicates
+            return False
 
--- data BattingMults = BattingMults
---     { lgb_single :: Double
---     , lgb_double :: Double
---     , lgb_triple :: Double
---     , lgb_homerun :: Double
---     , lgb_rbi :: Double
---     , lgb_run :: Double
---     , lgb_base_on_balls :: Double
---     , lgb_stolen_base :: Double
---     , lgb_hit_by_pitch :: Double
---     , lgb_strikeout :: Double
---     , lgb_caught_stealing :: Double
---     }
---     deriving (Show, Eq)
 
--- data PitchingMults = PitchingMults
---     { lgp_win :: Double
---     , lgp_save :: Double
---     , lgp_quality_start :: Double
---     , lgp_inning_pitched :: Double
---     , lgp_strikeout :: Double
---     , lgp_complete_game :: Double
---     , lgp_shutout :: Double
---     , lgp_base_on_balls :: Double
---     , lgp_hits_allowed :: Double
---     , lgp_earned_runs :: Double
---     , lgp_hit_batsman :: Double
---     , lgp_loss :: Double
---     }
---     deriving (Show, Eq)
+-- validateLineup :: R.LgManager -> C.Configuration -> Either [String] ()
+-- validateLineup manager config = do
+--     let discrepancies = getLineupDiscrepancies (R.current_lineup manager) (C.lineup_limits . C.point_parameters $ config)
+--     let duplicateCheck = hasUniqueLineupPlayers (R.current_lineup manager)
+--     case (duplicateCheck, discrepancies) of
+--         (Left _, []) -> Right ()
+--         (Right duplicates, []) -> Left (map T.unpack duplicates ++ ["Duplicate player IDs found."])
+--         (_, errors) -> Left (map discrepancyToString errors)
+--   where
+--     discrepancyToString (pos, diff)
+--         | diff > 0 = "This roster has " ++ show diff ++ " too many players at " ++ pos ++ "."
+--         | diff < 0 = "This roster needs " ++ show (abs diff) ++ " more players at " ++ pos ++ "."
 
--- data LgLineupLmts = LgLineupLmts
---     { lg_catcher :: Int
---     , lg_first :: Int
---     , lg_second :: Int
---     , lg_third :: Int
---     , lg_shortstop :: Int
---     , lg_outfield :: Int
---     , lg_utility :: Int
---     , lg_s_pitcher :: Int
---     , lg_r_pitcher :: Int
---     , lg_max_size :: Int
---     }
---     deriving (Show, Eq)
 
--- data DraftParameters = DraftParameters
---     { autoDraft :: Bool
---     , autoDraft_UTC :: Text
---     , draft_limits :: DraftRosterLmts
---     }
---     deriving (Show, Eq)
+-- validateLineup :: R.CurrentLineup -> C.Configuration -> Either [String] ()
+-- validateLineup lineup config = do
+--     let discrepancies = getRosterDiscrepancies lineup (C.lineup_limits $ C.point_parameters config)
+--     let duplicateCheck = hasUniqueRosterPlayers lineup
+--     case (duplicateCheck, discrepancies) of
+--         (Left _, []) -> Right ()
+--         (Right duplicates, []) -> Left (map T.unpack duplicates ++ ["Duplicate player IDs found in roster."])
+--         (_, errors) -> Left errors
 
--- data DraftRosterLmts = DraftRosterLmts
---     { dr_catcher :: Int
---     , dr_first :: Int
---     , dr_second :: Int
---     , dr_third :: Int
---     , dr_shortstop :: Int
---     , dr_outfield :: Int
---     , dr_utility :: Int
---     , dr_s_pitcher :: Int
---     , dr_r_pitcher :: Int
---     }
---     deriving (Show, Eq)
-
+validateLineup :: R.LgManager -> C.Configuration -> Either [String] ()
+validateLineup manager config = do
+    let discrepancies = getLineupDiscrepancies (R.current_lineup manager) (C.lineup_limits . C.point_parameters $ config)
+    let duplicateCheck = hasUniqueLineupPlayers (R.current_lineup manager)
+    case (duplicateCheck, discrepancies) of
+        (Left _, []) -> Right ()
+        (Right duplicates, []) -> Left (map T.unpack duplicates ++ ["Duplicate player IDs found in lineup."])
+        (_, errors) -> Left errors
 
 queryLimits :: T.Text -> T.Text -> C.Configuration -> Int
 queryLimits limtype position config =
@@ -356,22 +332,22 @@ getUniquePlayerIdsLineup :: R.CurrentLineup -> [Text]
 getUniquePlayerIdsLineup R.CurrentLineup{..} =
     cC ++ b1C ++ b2C ++ b3C ++ ssC ++ uC ++ ofC ++ spC ++ rpC
 
-getLineupDiscrepancies :: R.CurrentLineup -> C.LgLineupLmts -> [(String, Int)]
-getLineupDiscrepancies R.CurrentLineup{..} C.LgLineupLmts{..} =
-    let discrepancies =
-            [ validatePositionCount "Catcher" [cC] lg_catcher
-            , validatePositionCount "First Base" [b1C] lg_first
-            , validatePositionCount "Second Base" [b2C] lg_second
-            , validatePositionCount "Third Base" [b3C] lg_third
-            , validatePositionCount "Shortstop" [ssC] lg_shortstop
-            , validatePositionCount "Outfield" ofC lg_outfield
-            , validatePositionCount "Utility" [uC] lg_utility
-            , validatePositionCount "Starting Pitcher" spC lg_s_pitcher
-            , validatePositionCount "Relief Pitcher" rpC lg_r_pitcher
-            ]
-        totalSizeDiscrepancy = totalPlayersInLineup R.CurrentLineup{..} - lg_max_size
-        rosterSizeDiscrepancy = ([("Team Total", totalSizeDiscrepancy) | totalSizeDiscrepancy > 0])
-     in catMaybes discrepancies ++ rosterSizeDiscrepancy
+-- getLineupDiscrepancies :: R.CurrentLineup -> C.LgLineupLmts -> [(String, Int)]
+-- getLineupDiscrepancies R.CurrentLineup{..} C.LgLineupLmts{..} =
+--     let discrepancies =
+--             [ validatePositionCount "Catcher" [cC] lg_catcher
+--             , validatePositionCount "First Base" [b1C] lg_first
+--             , validatePositionCount "Second Base" [b2C] lg_second
+--             , validatePositionCount "Third Base" [b3C] lg_third
+--             , validatePositionCount "Shortstop" [ssC] lg_shortstop
+--             , validatePositionCount "Outfield" ofC lg_outfield
+--             , validatePositionCount "Utility" [uC] lg_utility
+--             , validatePositionCount "Starting Pitcher" spC lg_s_pitcher
+--             , validatePositionCount "Relief Pitcher" rpC lg_r_pitcher
+--             ]
+--         totalSizeDiscrepancy = totalPlayersInLineup R.CurrentLineup{..} - lg_max_size
+--         rosterSizeDiscrepancy = ([("Team Total", totalSizeDiscrepancy) | totalSizeDiscrepancy > 0])
+--      in catMaybes discrepancies ++ rosterSizeDiscrepancy
 
 validatePositionCount :: String -> [a] -> Int -> Maybe (String, Int)
 validatePositionCount positionName players maxAllowed
@@ -382,12 +358,13 @@ validatePositionCount positionName players maxAllowed
 
 totalPlayersInLineup :: R.CurrentLineup -> Int
 totalPlayersInLineup R.CurrentLineup{..} =
-    1 + 1 + 1 + 1 + 1 + 1 + length ofC + length spC + length rpC -- counting players from all positions
+    length cC + length b1C + length b2C + length b3C + length ssC + 
+    length uC + length ofC + length spC + length rpC
 
 validateCurrentLineup :: R.LgManager -> C.Configuration -> Bool
 validateCurrentLineup R.LgManager{..} C.Configuration{point_parameters = C.PointParameters{lineup_limits = rosterConfig}} =
     let positionalValid = null (getLineupDiscrepancies current_lineup rosterConfig)
-     in case lineupHasUniquePlayers current_lineup of
+     in case hasUniqueLineupPlayers current_lineup of
             Left _ -> positionalValid
             Right _ -> False
 
