@@ -1,40 +1,25 @@
 {-# LANGUAGE FlexibleContexts, DoAndIfThenElse #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-{-# HLINT ignore "Use tuple-section" #-}
 {-# HLINT ignore "Eta reduce" #-}
 
-module DraftM where
+module DraftM (runDraft) where
+
 import Control.Monad ( forM, foldM )
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Monad.Except
-import Data.Aeson
-    ( FromJSON,
-      ToJSON,
-      decode,
-      encode,
-      withObject,
-      (.:) )
-import qualified Data.HashMap.Strict as HM
-import qualified Data.ByteString.Lazy as BL
-import Data.Text as T ( unpack, take )
-import qualified Data.Text as T
-import Data.Time.Clock
-    ( UTCTime,
-      getCurrentTime )
-import Data.Time.Format
-    ( formatTime, defaultTimeLocale, formatTime, defaultTimeLocale )
-import Data.Maybe
-    ( mapMaybe,
-      fromMaybe )
+import Data.Aeson ( FromJSON, ToJSON, decode, encode, withObject, (.:) )
+import Data.Time.Clock ( UTCTime, getCurrentTime )
+import Data.Time.Format ( formatTime, defaultTimeLocale, formatTime, defaultTimeLocale )
+import Data.Maybe ( mapMaybe, fromMaybe )
 import Data.Either (fromRight)
 import GHC.Generics (Generic)
-import Data.List
-    ( find,
-      delete,
-      sortBy,
-      sortOn,
-      findIndex )
+import Data.List ( find, delete, sortBy, sortOn, findIndex)
+import qualified Data.Text as T
+import Data.Text as T ( unpack, take )
+import qualified Data.HashMap.Strict as HM
+import qualified Data.ByteString.Lazy as BL
+
 import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
@@ -90,7 +75,7 @@ initializeDraftEnv config validPlayers rankings =
         { availableIds = map O.playerId $ O.people validPlayers
         , currentPick = 0
         , currentRound = 1
-        , draft_rosters = map (, []) (mkLgManagers config)
+        , draft_rosters = zip (mkLgManagers config) (repeat [])
         }
     )
 

@@ -3,8 +3,8 @@
   "leagueID": "9d0e0f7c5930090008ce462b9daa059ec7faf85e8b62372d2ed764f8c117e6e4",
   "point_parameters": {
     "style": "Head_to_Head",
-    "start_UTC": "2024-03-20T03:15",
-    "end_UTC": "2024-03-27T03:15",
+    "start_UTC": "2024-04-01T03:15",
+    "end_UTC": "2024-04-15T03:15",
     "batting": {
       "single": "1",
       "double": "2",
@@ -62,10 +62,10 @@
   },
   "commissioner": "436f6d6d697373696f6e6572205363726f74756d_de65ccbedd4c080939eca365a07f06f77d5a3f5854cef00d13db7f3b7be8fc08",
   "lgMembers": [
-    "2f70cf31d26173571cc02a031ae7e310f24ac95a1ecabffd0d9fc5f68270ee63",
-    "3da9fd7edb1b6028b732248a2e0b7f3f0cfdfa4e08c8232df2e81fc6be404eb1",
-    "7f508b2ff35566715f7d4e44340a967003fe468ab2ece26cbf6bad2cf4794232",
-    "575019d3b22de22d4590a35fbb52b749e3f8b271960e447b48b53ae27fe83ef0"
+    "4aeebfdcc38788796206045dfd1c1607fd8ecd322fe22b0ba3f40d65cf64fd64",
+    "4d0f22bec93471d9255fd0f6543ff94dee22afb632d15ab862042eedad8536a8",
+    "8902a8299c1c635b3d13255c25db466ab49022441e65d5adb139cad8e063f272",
+    "d0ec788eb8a0a6bb6d99c15cfc0e4be3bba257ed9566e1d0e1e41ed438d31476"
 
   ]
 }

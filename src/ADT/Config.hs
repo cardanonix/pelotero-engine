@@ -32,26 +32,25 @@ import Data.ByteString.Lazy.Char8 (pack)
 import qualified Data.Map.Strict as M
 import Data.Maybe (catMaybes, fromMaybe)
 import Data.Scientific (toBoundedInteger)
-import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Vector as V
 
 
 -- ## League Configuration ADT ## --
 data Configuration = Configuration
-    { status :: Text
-    , leagueID :: Text
+    { status :: T.Text
+    , leagueID :: T.Text
     , point_parameters :: PointParameters
     , draft_parameters :: DraftParameters
-    , commissioner :: Text
-    , lgMembers :: [Text]
+    , commissioner :: T.Text
+    , lgMembers :: [T.Text]
     }
     deriving (Show, Eq)
 
 data PointParameters = PointParameters
-    { lg_style :: Text
-    , start_UTC :: Text
-    , end_UTC :: Text
+    { lg_style :: T.Text
+    , start_UTC :: T.Text
+    , end_UTC :: T.Text
     , lg_battingMults :: BattingMults
     , lg_pitchingMults :: PitchingMults
     , lineup_limits :: LgLineupLmts
@@ -105,7 +104,7 @@ data LgLineupLmts = LgLineupLmts
 
 data DraftParameters = DraftParameters
     { autoDraft :: Bool
-    , autoDraft_UTC :: Text
+    , autoDraft_UTC :: T.Text
     , draft_limits :: DraftRosterLmts
     }
     deriving (Show, Eq)
