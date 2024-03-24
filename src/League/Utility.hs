@@ -198,7 +198,7 @@ createLgManager config teamId
       (C.status config) (C.commissioner config) teamId
       (C.leagueID config)
 
-extendRankingsWithUnrankedPlayers :: [PR.PlayerRanking] -> [Int] -> [Int]
+extendRankingsWithUnrankedPlayers :: [PR.PlayerRanking] -> [O.PlayerID] -> [O.PlayerID]
 extendRankingsWithUnrankedPlayers rankedPlayers allPlayerIds =
     let rankedPlayerIds = map PR.playerId rankedPlayers
         unrankedPlayerIds = filter (`notElem` rankedPlayerIds) allPlayerIds
@@ -275,16 +275,16 @@ writeJson filePath = BL.writeFile filePath . encode
 
 -- Reads and parses all ranking JSON files into data structures
 -- Verify if a player is in the official roster
-isPlayerInOfficialRoster :: Int -> [O.OfficialPlayer] -> Bool
+isPlayerInOfficialRoster :: O.PlayerID -> [O.OfficialPlayer] -> Bool
 isPlayerInOfficialRoster playerId
   = any (\ p -> O.playerId p == playerId)
 
-positionTextToRosterPosition :: T.Text -> R.Roster -> O.OfficialPlayer -> R.Roster
-positionTextToRosterPosition position roster player =
-  -- Implementation depends on how you're managing roster updates
-  undefined
+-- positionTextToRosterPosition :: T.Text -> R.Roster -> O.OfficialPlayer -> R.Roster
+-- positionTextToRosterPosition position roster player =
+--   -- Implementation depends on how you're managing roster updates
+--   undefined
 
-findPlayerRanking :: Int -> [PR.PlayerRanking] -> Maybe Int
+findPlayerRanking :: O.PlayerID -> [PR.PlayerRanking] -> Maybe Int
 findPlayerRanking playerId rankings =
   PR.rank <$> find ((== playerId) . PR.playerId) rankings
 

@@ -34,7 +34,7 @@ data DraftConst = DraftConst {
 }
 
 data DraftState = DraftState {
-    availableIds :: [Int], -- pool of eligible playerId's
+    availableIds :: [O.PlayerID], -- pool of eligible playerId's
     currentPick :: Int,
     currentRound :: Int, -- to facilitate serpentine draft
     draft_rosters :: [(R.LgManager, [Int])] -- teams with indices

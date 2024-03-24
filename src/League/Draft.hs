@@ -46,7 +46,7 @@ draftPlayers rankings1 rankings2 officialPlayers config = do
   
   return ((finalRoster1, finalLineup1), (finalRoster2, finalLineup2))
 
-draftCycle :: C.Configuration -> [O.OfficialPlayer] -> (R.Roster, R.CurrentLineup, R.Roster, R.CurrentLineup, [Int], Bool) -> ((Int, Int), Bool) -> IO (R.Roster, R.CurrentLineup, R.Roster, R.CurrentLineup, [Int], Bool)
+draftCycle :: C.Configuration -> [O.OfficialPlayer] -> (R.Roster, R.CurrentLineup, R.Roster, R.CurrentLineup, [O.PlayerID], Bool) -> ((O.PlayerID, O.PlayerID), Bool) -> IO (R.Roster, R.CurrentLineup, R.Roster, R.CurrentLineup, [O.PlayerID], Bool)
 draftCycle config officialPlayers (roster1, lineup1, roster2, lineup2, availablePlayers, isTeam1Turn) ((rankId1, rankId2), nextIsTeam1Turn) = do
     putStrLn $ "Drafting players with IDs: " ++ show (rankId1, rankId2)
     let player1 = findPlayer rankId1 officialPlayers availablePlayers

@@ -53,7 +53,7 @@ testLineup config (Right lgManager) = do
         then putStrLn "This Lineup is valid."
         else putStrLn "That lineup has discrepancies."
 
-findPlayer :: Int -> [O.OfficialPlayer] -> [Int] -> Maybe O.OfficialPlayer
+findPlayer :: O.PlayerID -> [O.OfficialPlayer] -> [O.PlayerID] -> Maybe O.OfficialPlayer
 findPlayer playerId players availableIds =
     find (\p -> O.playerId p == playerId && playerId `elem` availableIds) players
 

@@ -32,6 +32,9 @@ import Data.Text (Text)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
 import Data.Aeson.Types (toJSON)
+import qualified OfficialRoster as O
+import Data.Aeson (withScientific)
+import Data.Scientific (toBoundedInteger)
 
 -- | Represents the top-level ranking data structure.
 data RankingData = RankingData
@@ -43,7 +46,7 @@ data RankingData = RankingData
 
 -- Represents a player's ranking within the team.
 data PlayerRanking = PlayerRanking
-    { playerId :: Int
+    { playerId :: O.PlayerID
     , rank     :: Int
     } deriving (Show, Eq, Generic)
 
@@ -55,6 +58,12 @@ mkEmptyRankings :: PlayerRankings
 mkEmptyRankings = []
 
 instance FromJSON PlayerRanking
+
+instance FromJSON O.PlayerID where
+    parseJSON = withScientific "PlayerID" $ \n -> do
+        case toBoundedInteger n of
+            Just pid -> pure (O.PlayerID pid)
+            Nothing -> fail "PlayerID must be an integer"
 
 instance FromJSON RankingData where
     parseJSON = withObject "RankingData" $ \v -> do
@@ -79,3 +88,6 @@ instance ToJSON PlayerRanking where
         object [ "playerId" .= playerId
                , "rank"     .= rank
                ]
+
+instance ToJSON O.PlayerID where
+    toJSON (O.PlayerID pid) = toJSON pid
