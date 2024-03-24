@@ -57,7 +57,7 @@ findPlayer :: Int -> [O.OfficialPlayer] -> [Int] -> Maybe O.OfficialPlayer
 findPlayer playerId players availableIds =
     find (\p -> O.playerId p == playerId && playerId `elem` availableIds) players
 
-maxPossibleTeams :: C.Configuration -> OfficialRoster -> Int
+maxPossibleTeams :: C.Configuration -> O.OfficialRoster -> Int
 maxPossibleTeams config roster =
   let
     positions = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH"]
@@ -66,7 +66,7 @@ maxPossibleTeams config roster =
   in
     minimum maxTeamsForAllPositions
 
-maxPossibleTeamsForPosition :: T.Text -> C.Configuration -> OfficialRoster -> Int
+maxPossibleTeamsForPosition :: T.Text -> C.Configuration -> O.OfficialRoster -> Int
 maxPossibleTeamsForPosition position config roster =
   let
     -- Convert the position code to the draft limit field name
@@ -206,6 +206,15 @@ validateRoster roster config = do
         (Right duplicates, []) -> Left (map T.unpack duplicates ++ ["Duplicate player IDs found in roster."])
         (_, errors) -> Left $ map (\(pos, diff) -> pos ++ ": Too many players in Roster - " ++ show diff) errors
 
+validateLineup :: R.LgManager -> C.Configuration -> Either [String] ()
+validateLineup manager config = do
+    let discrepancies = getLineupDiscrepancies (R.current_lineup manager) (C.lineup_limits . C.point_parameters $ config)
+    let duplicateCheck = hasUniqueLineupPlayers (R.current_lineup manager)
+    case (duplicateCheck, discrepancies) of
+        (Left _, []) -> Right ()
+        (Right duplicates, []) -> Left (map T.unpack duplicates ++ ["Duplicate player IDs found in lineup."])
+        (_, errors) -> Left $ map (\(pos, diff) -> pos ++ ": Too many players in Lineup - " ++ show diff) errors
+
 validateAndPrintLineup :: R.LgManager -> C.Configuration -> IO Bool
 validateAndPrintLineup manager config = do
     let rosterConfig = C.lineup_limits . C.point_parameters $ config
@@ -228,15 +237,6 @@ validateAndPrintLineup manager config = do
             putStrLn "Duplicate player IDs found:"
             mapM_ (putStrLn . T.unpack) duplicates
             return False
-
-validateLineup :: R.LgManager -> C.Configuration -> Either [String] ()
-validateLineup manager config = do
-    let discrepancies = getLineupDiscrepancies (R.current_lineup manager) (C.lineup_limits . C.point_parameters $ config)
-    let duplicateCheck = hasUniqueLineupPlayers (R.current_lineup manager)
-    case (duplicateCheck, discrepancies) of
-        (Left _, []) -> Right ()
-        (Right duplicates, []) -> Left (map T.unpack duplicates ++ ["Duplicate player IDs found in lineup."])
-        (_, errors) -> Left $ map (\(pos, diff) -> pos ++ ": Too many players in Lineup - " ++ show diff) errors
 
 queryLimits :: T.Text -> T.Text -> C.Configuration -> Int
 queryLimits limtype position config =
