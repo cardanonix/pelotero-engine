@@ -284,6 +284,11 @@ isPlayerInOfficialRoster playerId
 --   -- Implementation depends on how you're managing roster updates
 --   undefined
 
+-- Filter function to retain only those rankings where the teamId matches any lgMember
+filterInvalidRankings :: [T.Text] -> [PR.RankingData] -> [PR.RankingData]
+filterInvalidRankings lgMembers rankings =
+  filter (\ranking -> PR.teamId ranking `elem` lgMembers) rankings
+
 findPlayerRanking :: O.PlayerID -> [PR.PlayerRanking] -> Maybe Int
 findPlayerRanking playerId rankings =
   PR.rank <$> find ((== playerId) . PR.playerId) rankings
