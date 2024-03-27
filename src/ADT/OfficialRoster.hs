@@ -55,13 +55,19 @@ instance FromJSON OfficialRoster where
         return OfficialRoster{people = people, dataPulled = dataPulled, checksum = checksum}
 
 instance FromJSON PlayerID where
-    parseJSON (Number n) = case toBoundedInteger n of
-        Just pid -> pure (PlayerID pid)
-        Nothing  -> fail "PlayerID must be an integer"
-    parseJSON (String s) = case textToPlayerID s of
-        Just pid -> pure pid
-        Nothing  -> fail "PlayerID string must represent an integer"
-    parseJSON _ = fail "PlayerID must be a number or string"
+    parseJSON = withScientific "PlayerID" $ \n -> do
+        case toBoundedInteger n of
+            Just pid -> pure (PlayerID pid)
+            Nothing -> fail "PlayerID must be an integer"
+
+-- instance FromJSON PlayerID where
+--     parseJSON (Number n) = case toBoundedInteger n of
+--         Just pid -> pure (PlayerID pid)
+--         Nothing  -> fail "PlayerID must be an integer"
+--     parseJSON (String s) = case textToPlayerID s of
+--         Just pid -> pure pid
+--         Nothing  -> fail "PlayerID string must represent an integer"
+--     parseJSON _ = fail "PlayerID must be a number or string"
 
 instance FromJSON OfficialPlayer where
     parseJSON = withObject "OfficialPlayer" $ \v -> do

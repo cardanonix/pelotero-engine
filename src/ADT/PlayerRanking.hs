@@ -63,12 +63,6 @@ instance FromJSON PlayerRanking where
         rank     <- v .: "rank"
         return PlayerRanking{..}
 
--- instance FromJSON O.PlayerID where
---     parseJSON = withScientific "PlayerID" $ \n -> do
---         case toBoundedInteger n of
---             Just pid -> pure (O.PlayerID pid)
---             Nothing -> fail "PlayerID must be an integer"
-
 instance FromJSON RankingData where
     parseJSON = withObject "RankingData" $ \v -> do
         teamId <- v .: "teamId"
