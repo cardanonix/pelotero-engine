@@ -21,6 +21,7 @@ import Data.Scientific (toBoundedInteger)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Vector as V
+import qualified OfficialRoster as O
 
 -- LgManager ADT
 data LgManager = LgManager
@@ -34,28 +35,28 @@ data LgManager = LgManager
     deriving (Show, Eq)
 
 data CurrentLineup = CurrentLineup
-    { cC  :: [Text] 
-    , b1C :: [Text]
-    , b2C :: [Text]
-    , b3C :: [Text]
-    , ssC :: [Text]
-    , ofC :: [Text]
-    , uC  :: [Text] 
-    , spC :: [Text]
-    , rpC :: [Text]
+    { cC  :: [O.PlayerID] 
+    , b1C :: [O.PlayerID]
+    , b2C :: [O.PlayerID]
+    , b3C :: [O.PlayerID]
+    , ssC :: [O.PlayerID]
+    , ofC :: [O.PlayerID]
+    , uC  :: [O.PlayerID] 
+    , spC :: [O.PlayerID]
+    , rpC :: [O.PlayerID]
     }
     deriving (Show, Eq)
 
 data Roster = Roster
-    { cR  :: [Text]
-    , b1R :: [Text]
-    , b2R :: [Text]
-    , b3R :: [Text]
-    , ssR :: [Text]
-    , ofR :: [Text]
-    , uR  :: [Text]
-    , spR :: [Text]
-    , rpR :: [Text]
+    { cR  :: [O.PlayerID]
+    , b1R :: [O.PlayerID]
+    , b2R :: [O.PlayerID]
+    , b3R :: [O.PlayerID]
+    , ssR :: [O.PlayerID]
+    , ofR :: [O.PlayerID]
+    , uR  :: [O.PlayerID]
+    , spR :: [O.PlayerID]
+    , rpR :: [O.PlayerID]
     }
     deriving (Show, Eq)
 

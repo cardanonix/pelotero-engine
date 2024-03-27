@@ -54,6 +54,10 @@ instance FromJSON OfficialRoster where
         people <- mapM parseJSON playersList
         return OfficialRoster{people = people, dataPulled = dataPulled, checksum = checksum}
 
+instance ToJSON PlayerID where
+    toJSON (PlayerID pid) = toJSON pid
+
+
 instance FromJSON PlayerID where
     parseJSON = withScientific "PlayerID" $ \n -> do
         case toBoundedInteger n of

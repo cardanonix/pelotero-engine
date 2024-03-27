@@ -17,8 +17,10 @@ import Data.Aeson
       (.!=),
       (.:?),
       object,
-      (.=) 
-    )
+      (.=),
+      withScientific )
+
+
 import Data.Time (
     Day,
     defaultTimeLocale,
@@ -33,7 +35,6 @@ import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
 import Data.Aeson.Types (toJSON)
 import qualified OfficialRoster as O
-import Data.Aeson (withScientific)
 import Data.Scientific (toBoundedInteger)
 
 -- | Represents the top-level ranking data structure.
@@ -87,5 +88,3 @@ instance ToJSON PlayerRanking where
                , "rank"     .= rank
                ]
 
-instance ToJSON O.PlayerID where
-    toJSON (O.PlayerID pid) = toJSON pid

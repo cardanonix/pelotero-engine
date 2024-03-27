@@ -82,7 +82,7 @@ addToRosterAndLineup config player roster lineup =
 
 addPlayerToLineup :: T.Text -> O.OfficialPlayer -> R.CurrentLineup -> C.LgLineupLmts -> R.CurrentLineup
 addPlayerToLineup position player lineup limits =
-    let playerIdText = T.pack . show $ O.playerId player
+    let playerIdText = O.playerId player
     in case position of
         "catcher" -> if length (R.cC lineup) < C.lg_catcher limits then lineup { R.cC = playerIdText : R.cC lineup } else lineup
         "first" -> if length (R.b1C lineup) < C.lg_first limits then lineup { R.b1C = playerIdText : R.b1C lineup } else lineup
@@ -97,7 +97,7 @@ addPlayerToLineup position player lineup limits =
 
 addPlayerToPosition :: T.Text -> O.OfficialPlayer -> R.Roster -> R.Roster
 addPlayerToPosition position player roster =
-  let playerIdText = T.pack $ show $ O.playerId player
+  let playerIdText = O.playerId player
   in case position of
        "s_pitcher" -> roster { R.spR = playerIdText : R.spR roster }
        "r_pitcher" -> roster { R.rpR = playerIdText : R.rpR roster }

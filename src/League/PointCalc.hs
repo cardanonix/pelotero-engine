@@ -44,6 +44,8 @@ import qualified Input as I
 import qualified Middle as M
 import qualified Points as P
 import qualified Roster as R
+import qualified OfficialRoster as O
+
 
 import Validators
 
@@ -54,18 +56,25 @@ mergeGmPoints (P.GmPoints id1 b1 p1) (P.GmPoints id2 b2 p2) =
   P.GmPoints (id1 <> ", " <> id2) (b1 ++ b2) (p1 ++ p2)
 
 calculatePointsForPlayer :: C.Configuration -> Text -> R.LgManager -> M.JsonPlayerData -> Either Text P.GmPoints
-calculatePointsForPlayer config playerId lgManager stats = do
-  playerType <- batterOrPitcher playerId lgManager
-  let maybeStatsData = MS.lookup playerId (M.stats stats)
-  let battingMults = C.lg_battingMults $ C.point_parameters config
-  let pitchingMults = C.lg_pitchingMults $ C.point_parameters config
-  case playerType of
-    P.Batting -> case maybeStatsData >>= M.batting of
-      Just battingStats -> Right $ calcBattingPoints playerId battingMults battingStats
-      Nothing -> Left "Batting stats not found"
-    P.Pitching -> case maybeStatsData >>= M.pitching of
-      Just pitchingStats -> Right $ calcPitchingPoints playerId pitchingMults pitchingStats
-      Nothing -> Left "Pitching stats not found"
+calculatePointsForPlayer config playerIdText lgManager stats = do
+  -- Convert playerId from Text to PlayerID
+  case O.textToPlayerID playerIdText of
+    Just playerId -> do
+      -- Now that playerId is successfully converted, proceed with the rest of the function
+      playerType <- batterOrPitcher playerId lgManager
+      let maybeStatsData = MS.lookup (O.playerIDToText playerId) (M.stats stats) -- Convert back if necessary for lookup
+      let battingMults = C.lg_battingMults $ C.point_parameters config
+      let pitchingMults = C.lg_pitchingMults $ C.point_parameters config
+      
+      case playerType of
+        P.Batting -> case maybeStatsData >>= M.batting of
+          Just battingStats -> Right $ calcBattingPoints (O.playerIDToText playerId) battingMults battingStats
+          Nothing -> Left "Batting stats not found"
+        P.Pitching -> case maybeStatsData >>= M.pitching of
+          Just pitchingStats -> Right $ calcPitchingPoints (O.playerIDToText playerId) pitchingMults pitchingStats
+          Nothing -> Left "Pitching stats not found"
+    Nothing -> Left "Invalid player ID format"
+
 
 calcBattingPoints :: Text -> C.BattingMults -> I.BattingStats -> P.GmPoints
 calcBattingPoints playerId mults stats@I.BattingStats{..} =
