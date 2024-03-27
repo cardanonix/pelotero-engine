@@ -21,10 +21,12 @@ import Data.Text as T ( unpack, take )
 import qualified Data.HashMap.Strict as HM
 import qualified Data.ByteString.Lazy as BL
 
+
 import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
 import qualified PlayerRanking as PR
+
 import Validators
 import Utility
 
@@ -60,10 +62,6 @@ updateDraftState f = get >>= put . f
 getDraftConst :: DraftM DraftConst
 getDraftConst = ask
 
--- -- take both DraftConst and DraftState, then run the action with both
--- runDraft :: DraftConst -> DraftState -> DraftM a -> IO (Either DraftError a, DraftState)
--- runDraft draftConst initialState action = runStateT (runReaderT (runExceptT action) draftConst) initialState
-
 initializeDraftEnv :: C.Configuration -> O.OfficialRoster -> [PR.RankingData] -> (DraftConst, DraftState)
 initializeDraftEnv config validPlayers rankings = 
     ( DraftConst
@@ -79,49 +77,54 @@ initializeDraftEnv config validPlayers rankings =
         }
     )
 
--- Draft cycle operation within DraftM
+-- Initiates the draft process
+startDraft :: C.Configuration -> O.OfficialRoster -> [PR.RankingData] -> IO (Either DraftError DraftState)
+startDraft config officialRoster rankings = do
+    let (draftConst, initialState) = initializeDraftEnv config officialRoster rankings
+    -- Run the draft within the defined monadic stack
+    runExceptT $ evalStateT (runReaderT runDraftCycles draftConst) initialState
+
+runDraftCycles :: DraftM ()
+runDraftCycles = do
+    draftState <- get
+    unless (draftComplete draftState) $ do
+        draftCycleM
+        runDraftCycles
+
 draftCycleM :: DraftM ()
 draftCycleM = do
-    DraftConst {..} <- getDraftConst
-    DraftState {..} <- get
-    -- Simulate a draft decision and update; this is a placeholder for actual logic
-    let nextAvailableIds = tail availableIds  -- Example operation: draft the first available player
-    let nextCurrentPick = currentPick + 1
-    updateDraftState $ \s -> s { availableIds = nextAvailableIds, currentPick = nextCurrentPick }
-    -- Add more operations as needed
+    DraftConst {config, officialRoster, rankings} <- ask
+    state@DraftState {availableIds, currentPick, currentRound, draft_rosters} <- get
 
-runDraft :: DraftConst -> DraftState -> DraftM a -> IO (Either DraftError a, DraftState)
-runDraft draftConst initialState action =
-    runStateT (runReaderT (runExceptT action) draftConst) initialState
+    let isTeam1Turn = determineTurn currentPick currentRound
+        teamRankings = if isTeam1Turn then filterTeamRankings rankings (fst $ head draft_rosters) else filterTeamRankings rankings (fst $ head $ tail draft_rosters)
+        nextPlayerId = getNextPlayerId teamRankings availableIds
 
--- Placeholder for a function that filters invalid rankings based on league configuration
-filterInvalidRankings :: [Int] -> [PR.RankingData] -> [PR.RankingData]
-filterInvalidRankings = undefined
+    case find (\p -> O.playerId p == nextPlayerId) (O.people officialRoster) of
+        Just player -> do
+            -- Determine the team and update its roster and lineup
+            let updatedDraftRosters = updateTeamRosterAndLineup draft_rosters player isTeam1Turn config
+            -- Remove drafted player from available pool
+            let remainingIds = delete nextPlayerId availableIds
+            -- Update the state with the changes
+            put state {availableIds = remainingIds, currentPick = currentPick + 1, draft_rosters = updatedDraftRosters}
+        Nothing -> throwError $ PlayerNotFound $ fromIntegral $ O.unwrapPlayerId nextPlayerId
 
--- Example draftPlayers function adapted to the monadic approach
-draftPlayersM :: C.Configuration -> O.OfficialRoster -> [PR.RankingData] -> IO ()
-draftPlayersM config officialRoster rankings = do
-    let (draftConst, draftState) = initializeDraftEnv config officialRoster rankings
-    (_, finalState) <- runDraft draftConst draftState (runDraft 10)  -- Assuming 10 picks for simplicity
-    print finalState  -- Or perform any final actions with the finalState
+-- Determines which team's turn it is to pick based on the current pick and round, accounting for serpentine order.
+determineTurn :: Int -> Int -> Bool
+determineTurn currentPick currentRound = (currentRound `mod` 2 == 1 && currentPick `mod` 2 == 1) || (currentRound `mod` 2 == 0 && currentPick `mod` 2 == 0)
 
+-- Filters rankings for a specific team based on the teamId.
+filterTeamRankings :: [PR.RankingData] -> R.LgManager -> [PR.PlayerRanking]
+filterTeamRankings rankings team = maybe [] PR.rankings $ find ((== R.teamId team) . PR.teamId) rankings
 
--- init
-  -- load constants: config, officialRoster, and rankings
-  -- populate DraftState with availableIds from officialRoster constant
-  -- find all team id's in config and count teams listed
-  -- create empty draft_rosters with config info
-  -- create empty league managers with appropriate function 
-    -- fill indices in draft_rosters with draft order using serpentine order
-  -- load rankings for each team
-    -- verify
-    -- if rankings are incomplete, auto-fill them, 
-    -- if ranking contains an unmatching playerid, remove that player 
--- draft one round of players
-  -- get next teamid
-      -- lookup top ranked player for that team
-      -- is player is available? yes continue, no move to next ranked player
-        -- if roster slots is full, skip to next player
-        -- if not, add to roster
-        
-      -- reverse order if round is even
+-- Finds the highest-ranked player that is still available for drafting.
+getNextPlayerId :: [PR.PlayerRanking] -> [O.PlayerID] -> O.PlayerID
+getNextPlayerId rankings availableIds = head [PR.playerId r | r <- rankings, PR.playerId r `elem` availableIds]
+
+-- Updates the roster and lineup for the team that is currently picking.
+updateTeamRosterAndLineup :: [(R.LgManager, [Int])] -> O.OfficialPlayer -> Bool -> C.Configuration -> [(R.LgManager, [Int])]
+updateTeamRosterAndLineup draft_rosters player isTeam1Turn config =
+    -- Placeholder logic to demonstrate updating the first team's roster and lineup.
+    -- You need to implement logic to correctly select the team and update its roster and lineup based on the player drafted and configuration settings.
+    draft_rosters  -- This should be replaced with actual logic to update rosters.
