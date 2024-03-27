@@ -8,6 +8,7 @@ module OfficialRoster where
 import Data.Aeson
 import Data.Aeson.Types (Parser)
 import Data.HashMap.Strict (HashMap)
+import Data.Scientific (toBoundedInteger)
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
 import GHC.Generics
@@ -29,18 +30,6 @@ data OfficialPlayer = OfficialPlayer
     , pitchHand :: T.Text
     , active :: Bool
     } deriving (Show, Eq, Generic)
-
--- data OfficialPlayer = OfficialPlayer
---     { playerId :: Int
---     , useName :: T.Text
---     , useLastName :: T.Text
---     , nameSlug :: T.Text
---     , currentTeam :: Int
---     , primaryPosition :: T.Text
---     , batSide :: T.Text
---     , pitchHand :: T.Text
---     , active :: Bool
---     } deriving (Show, Eq, Generic)
 
 newtype PlayerID = PlayerID Int deriving (Show, Eq)
 newtype PlayerIDstring = PlayerIDstring T.Text deriving (Show, Eq)
@@ -65,15 +54,18 @@ instance FromJSON OfficialRoster where
         people <- mapM parseJSON playersList
         return OfficialRoster{people = people, dataPulled = dataPulled, checksum = checksum}
 
+instance FromJSON PlayerID where
+    parseJSON (Number n) = case toBoundedInteger n of
+        Just pid -> pure (PlayerID pid)
+        Nothing  -> fail "PlayerID must be an integer"
+    parseJSON (String s) = case textToPlayerID s of
+        Just pid -> pure pid
+        Nothing  -> fail "PlayerID string must represent an integer"
+    parseJSON _ = fail "PlayerID must be a number or string"
+
 instance FromJSON OfficialPlayer where
     parseJSON = withObject "OfficialPlayer" $ \v -> do
-        -- Parse the player ID, accommodating both direct integer IDs and stringified IDs.
-        pidText <- v .: "id" :: Parser T.Text
-        let maybePlayerId = textToPlayerID pidText
-        playerId <- case maybePlayerId of
-                      Just pid -> return pid
-                      Nothing -> fail "Invalid player ID format"
-        
+        playerId <- v .: "playerId" -- Directly use FromJSON instance for PlayerID
         useName <- v .: "useName"
         useLastName <- v .: "useLastName"
         nameSlug <- v .: "nameSlug"
@@ -83,17 +75,3 @@ instance FromJSON OfficialPlayer where
         pitchHand <- v .: "pitchHand"
         active <- v .: "active"
         return OfficialPlayer{..}
-
--- instance FromJSON OfficialPlayer where
---     parseJSON :: Value -> Parser OfficialPlayer
---     parseJSON = withObject "OfficialPlayer" $ \v -> do
---         playerId <- v .: "id"
---         useName <- v .: "useName"
---         useLastName <- v .: "useLastName"
---         nameSlug <- v .: "nameSlug"
---         currentTeam <- v .: "currentTeam"
---         primaryPosition <- v .: "primaryPosition"
---         batSide <- v .: "batSide"
---         pitchHand <- v .: "pitchHand"
---         active <- v .: "active"
---         return OfficialPlayer{..}
