@@ -41,8 +41,9 @@ import qualified Config as C
 import qualified Input as I
 import qualified Middle as M
 import qualified Roster as R
+import qualified OfficialRoster as O
 
--- codify the dinstinction between batting and pitching with boolean logic
+-- codify dinstinction between batting/pitching with boolean logic
 data StatType = Batting | Pitching deriving (Show, Eq)
 
 data PlayerResults
@@ -53,21 +54,21 @@ data PlayerResults
 
 -- data type to hold final point totals for a single team, attributing them to each active playerId
 data Results = Results
-    { cC :: (Text, Double)
-    , b1C :: (Text, Double)
-    , b2C :: (Text, Double)
-    , b3C :: (Text, Double)
-    , ssC :: (Text, Double)
-    , ofC :: [(Text, Double)]
-    , uC :: (Text, Double)
-    , spC :: [(Text, Double)]
-    , rpC :: [(Text, Double)]
+    { cC  :: [(O.PlayerID, Double)]
+    , b1C :: [(O.PlayerID, Double)]
+    , b2C :: [(O.PlayerID, Double)]
+    , b3C :: [(O.PlayerID, Double)]
+    , ssC :: [(O.PlayerID, Double)]
+    , ofC :: [(O.PlayerID, Double)]
+    , uC  :: [(O.PlayerID, Double)]
+    , spC :: [(O.PlayerID, Double)]
+    , rpC :: [(O.PlayerID, Double)]
     }
     deriving (Show, Eq)
 
 -- data type for storing the top level unsummed points for that player for a given day which may contain many games as a batter or pitching or both
 data GmPoints = GmPoints
-    { gmpts_Id :: Text  -- newly added playerId
+    { gmpts_Id :: O.PlayerID  -- newly added playerId
     , gmpts_batting :: [Maybe BattingGmPoints]
     , gmpts_pitching :: [Maybe PitchingGmPoints]
     }
