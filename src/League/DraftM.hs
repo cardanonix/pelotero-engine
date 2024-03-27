@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts, DoAndIfThenElse #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Eta reduce" #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module DraftM (runDraft) where
 
@@ -42,25 +43,6 @@ data DraftState = DraftState {
     currentRound :: Int, -- to facilitate serpentine draft
     draft_rosters :: [(R.LgManager, [Int])] -- teams with indices
 }
--- init
-  -- load constants: config, officialRoster, and rankings
-  -- populate DraftState with availableIds from officialRoster constant
-  -- find all team id's in config and count teams listed
-  -- create empty draft_rosters with config info
-  -- create empty league managers with appropriate function 
-    -- fill indices in draft_rosters with draft order using serpentine order
-  -- load rankings for each team
-    -- verify
-    -- if rankings are incomplete, auto-fill them, 
-    -- if ranking contains an unmatching playerid, remove that player 
--- draft one round of players
-  -- get next teamid
-      -- lookup top ranked player for that team
-      -- is player is available? yes continue, no move to next ranked player
-        -- if roster slots is full, skip to next player
-        -- if not, add to roster
-        
-      -- reverse order if round is even
 
 data DraftError
   = PlayerNotFound Int
@@ -78,16 +60,16 @@ updateDraftState f = get >>= put . f
 getDraftConst :: DraftM DraftConst
 getDraftConst = ask
 
--- take both DraftConst and DraftState, then run the action with both
-runDraft :: DraftConst -> DraftState -> DraftM a -> IO (Either DraftError a, DraftState)
-runDraft draftConst initialState action = runStateT (runReaderT (runExceptT action) draftConst) initialState
+-- -- take both DraftConst and DraftState, then run the action with both
+-- runDraft :: DraftConst -> DraftState -> DraftM a -> IO (Either DraftError a, DraftState)
+-- runDraft draftConst initialState action = runStateT (runReaderT (runExceptT action) draftConst) initialState
 
 initializeDraftEnv :: C.Configuration -> O.OfficialRoster -> [PR.RankingData] -> (DraftConst, DraftState)
 initializeDraftEnv config validPlayers rankings = 
     ( DraftConst
         { config = config
         , officialRoster = validPlayers
-        , rankings = filterInvalidRankings (C.lgMembers config) rankings
+        , rankings = DraftM.filterInvalidRankings (C.lgMembers config) rankings
         }
     , DraftState
         { availableIds = map O.playerId $ O.people validPlayers
@@ -108,9 +90,9 @@ draftCycleM = do
     updateDraftState $ \s -> s { availableIds = nextAvailableIds, currentPick = nextCurrentPick }
     -- Add more operations as needed
 
--- Runs the entire draft based on the number of picks
-runDraftM :: Int -> DraftM ()
-runDraftM numPicks = replicateM_ numPicks draftCycleM
+runDraft :: DraftConst -> DraftState -> DraftM a -> IO (Either DraftError a, DraftState)
+runDraft draftConst initialState action =
+    runStateT (runReaderT (runExceptT action) draftConst) initialState
 
 -- Placeholder for a function that filters invalid rankings based on league configuration
 filterInvalidRankings :: [Int] -> [PR.RankingData] -> [PR.RankingData]
@@ -120,10 +102,26 @@ filterInvalidRankings = undefined
 draftPlayersM :: C.Configuration -> O.OfficialRoster -> [PR.RankingData] -> IO ()
 draftPlayersM config officialRoster rankings = do
     let (draftConst, draftState) = initializeDraftEnv config officialRoster rankings
-    (_, finalState) <- runDraft draftConst draftState (runDraftM 10)  -- Assuming 10 picks for simplicity
+    (_, finalState) <- runDraft draftConst draftState (runDraft 10)  -- Assuming 10 picks for simplicity
     print finalState  -- Or perform any final actions with the finalState
 
--- Implementing runDraft based on your outline
-runDraft :: DraftConst -> DraftState -> DraftM a -> IO (Either DraftError a, DraftState)
-runDraft draftConst initialState action =
-    runStateT (runReaderT (runExceptT action) draftConst) initialState
+
+-- init
+  -- load constants: config, officialRoster, and rankings
+  -- populate DraftState with availableIds from officialRoster constant
+  -- find all team id's in config and count teams listed
+  -- create empty draft_rosters with config info
+  -- create empty league managers with appropriate function 
+    -- fill indices in draft_rosters with draft order using serpentine order
+  -- load rankings for each team
+    -- verify
+    -- if rankings are incomplete, auto-fill them, 
+    -- if ranking contains an unmatching playerid, remove that player 
+-- draft one round of players
+  -- get next teamid
+      -- lookup top ranked player for that team
+      -- is player is available? yes continue, no move to next ranked player
+        -- if roster slots is full, skip to next player
+        -- if not, add to roster
+        
+      -- reverse order if round is even

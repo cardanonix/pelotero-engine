@@ -31,28 +31,28 @@ import qualified OfficialRoster as O
 import qualified Roster as R
 import qualified PlayerRanking as PR
 import Validators 
-    ( countPlayersOnRoster
-    , findPlayer
-    , queryDraftRosterLmts 
-    )
+    -- ( countPlayersOnRoster
+    -- , findPlayer
+    -- , queryDraftRosterLmts 
+    -- )
 import Utility
-    ( positionCodeToDraftText
-    ,  readJson
-    ,  writeJson
-    , positionCodeToDraftText
-    , createLgManager
-      )
+    -- ( positionCodeToDraftText
+    -- ,  readJson
+    -- ,  writeJson
+    -- , positionCodeToDraftText
+    -- , createLgManager
+    --   )
 
 import Draft
 
 
 main :: IO ()
 main = do
-    eitherR1 <- readJson "testFiles/appData/rankings/_4aeebfdcc387_.json"
+    eitherR1 <- readJson "testFiles/appData/rankings/_087cc1f8c262_.json"
     case eitherR1 of
         Left error -> putStrLn $ "Failed to load rankings 1: " ++ show error
         Right r1 -> do
-            eitherR2 <- readJson "testFiles/appData/rankings/_4d0f22bec934_.json"
+            eitherR2 <- readJson "testFiles/appData/rankings/_11817bfe52d3_.json"
             case eitherR2 of
                 Left error -> putStrLn $ "Failed to load rankings 2: " ++ show error
                 Right r2 -> do
@@ -78,8 +78,11 @@ main = do
                                     let lgManager1 = createLgManager config teamId1 finalLineup1 finalRoster1
                                         lgManager2 = createLgManager config teamId2 finalLineup2 finalRoster2
 
+                                    -- Analyze the draft results for both teams
+                                    putStrLn "\nAnalyzing draft results for validity..."
+                                    Validators.analyzeDraftResults config (lgManager1, lgManager2) (r1, r2) 20
                                     -- Write the LgManager instances to JSON files
                                     writeJson (T.unpack $ "testFiles/appData/draftResults/" <> teamId1Short <> "_draft_results_new.json") lgManager1
                                     writeJson (T.unpack $ "testFiles/appData/draftResults/" <> teamId2Short <> "_draft_results_new.json") lgManager2
 
-                                    putStrLn "Draft and LgManager serialization completed successfully."
+                                    putStrLn "Draft, analysis, and LgManager serialization completed successfully."

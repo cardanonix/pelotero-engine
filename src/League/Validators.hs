@@ -19,6 +19,8 @@ import Data.Maybe (catMaybes, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Debug.Trace (traceShow, traceShowM)
+import Data.List (sortOn)
+
 
 import qualified Config as C
 import qualified GHC.Generics as R
@@ -26,6 +28,7 @@ import qualified Input as I
 import qualified OfficialRoster as O
 import qualified Points as P
 import qualified Roster as R
+import qualified PlayerRanking as PR
 import Utility
 
 type FileName = String
@@ -393,3 +396,40 @@ batterOrPitcher playerName mgr
     batterPositions = [R.cC lineup, R.b1C lineup, R.b2C lineup, R.b3C lineup, R.ssC lineup, R.uC lineup] ++ [R.ofC lineup]
     pitcherPositions = [R.spC lineup] ++ [R.rpC lineup]
 
+
+-- Draft vs. Ranking Validation
+
+-- Adjusted to take an Int parameter for the number of lines
+analyzeDraftResults :: C.Configuration -> (R.LgManager, R.LgManager) -> (PR.RankingData, PR.RankingData) -> Int -> IO ()
+analyzeDraftResults config (team1, team2) (rankings1, rankings2) linesToPrint = do
+  let team1Analysis = analyzeTeamDraft config team1 rankings1
+      team2Analysis = analyzeTeamDraft config team2 rankings2
+
+  putStrLn "Team 1 Draft Analysis:"
+  printAnalysis team1Analysis linesToPrint
+
+  putStrLn "\nTeam 2 Draft Analysis:"
+  printAnalysis team2Analysis linesToPrint
+
+
+-- Analyze a single team's draft
+analyzeTeamDraft :: C.Configuration -> R.LgManager -> PR.RankingData -> [(Int, O.PlayerID, Bool)]
+analyzeTeamDraft config lgManager rankingsData =
+  let allDraftedPlayerIds = getAllPlayerIdsFromTeam lgManager
+      rankingMap = M.fromList [(rank, playerId) | PR.PlayerRanking playerId rank <- PR.rankings rankingsData]
+      analysis = map (\(rank, playerId) -> (rank, playerId, playerId `elem` allDraftedPlayerIds)) (M.toList rankingMap)
+  in sortOn (\(rank, _, _) -> rank) analysis
+
+-- Helper function to get all player IDs from a team's roster and lineup
+getAllPlayerIdsFromTeam :: R.LgManager -> [O.PlayerID]
+getAllPlayerIdsFromTeam lgManager =
+  let rosterIds = concatMap ($ R.roster lgManager) [R.cR, R.b1R, R.b2R, R.b3R, R.ssR, R.ofR, R.uR, R.spR, R.rpR]
+      lineupIds = concatMap ($ R.current_lineup lgManager) [R.cC, R.b1C, R.b2C, R.b3C, R.ssC, R.ofC, R.uC, R.spC, R.rpC]
+  in rosterIds ++ lineupIds
+
+-- Adjusted to take an Int parameter for the number of lines and limit the output
+printAnalysis :: [(Int, O.PlayerID, Bool)] -> Int -> IO ()
+printAnalysis analysis linesToPrint = mapM_ printEntry (take linesToPrint analysis)
+  where
+    printEntry (rank, playerId, drafted) =
+      putStrLn $ "Rank: " ++ show rank ++ ", Player ID: " ++ show playerId ++ ", Drafted: " ++ show drafted
