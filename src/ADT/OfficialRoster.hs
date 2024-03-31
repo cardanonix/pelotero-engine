@@ -44,6 +44,9 @@ textToPlayerID txt = case reads (T.unpack txt) :: [(Int, String)] of
     [(pid, "")] -> Just (PlayerID pid) -- Successful parse with no remainder
     _ -> Nothing -- Failed parse
 
+unwrapPlayerId :: PlayerID -> Int
+unwrapPlayerId (PlayerID pid) = pid
+
 instance FromJSON OfficialRoster where
     parseJSON :: Value -> Parser OfficialRoster
     parseJSON = withObject "OfficialRoster" $ \v -> do

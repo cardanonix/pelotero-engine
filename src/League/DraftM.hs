@@ -1,7 +1,7 @@
-{-# LANGUAGE FlexibleContexts, DoAndIfThenElse #-}
+{-# LANGUAGE FlexibleContexts, DoAndIfThenElse, NamedFieldPuns, RecordWildCards #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Eta reduce" #-}
-{-# LANGUAGE RecordWildCards #-}
+
 
 module DraftM (runDraft) where
 
@@ -41,6 +41,7 @@ data DraftConst = DraftConst {
 
 data DraftState = DraftState {
     availableIds :: [O.PlayerID], -- pool of eligible playerId's
+    draftComplete :: Bool,
     currentPick :: Int,
     currentRound :: Int, -- to facilitate serpentine draft
     draft_rosters :: [(R.LgManager, [Int])] -- teams with indices
@@ -67,11 +68,12 @@ initializeDraftEnv config validPlayers rankings =
     ( DraftConst
         { config = config
         , officialRoster = validPlayers
-        , rankings = DraftM.filterInvalidRankings (C.lgMembers config) rankings
+        , rankings = filterInvalidRankings (C.lgMembers config) rankings
         }
     , DraftState
         { availableIds = map O.playerId $ O.people validPlayers
         , currentPick = 0
+        , draftComplete = False
         , currentRound = 1
         , draft_rosters = zip (mkLgManagers config) (repeat [])
         }
