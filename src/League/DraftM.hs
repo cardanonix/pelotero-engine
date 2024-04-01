@@ -65,17 +65,24 @@ getDraftConst = ask
 
 initializeDraftEnv :: C.Configuration -> O.OfficialRoster -> [PR.RankingData] -> (DraftConst, DraftState)
 initializeDraftEnv config validPlayers rankings = 
-    ( DraftConst
+    let validTeamIds = filterValidTeams (C.lgMembers config) rankings
+        -- Ensure mkLgManagers respects the filtered list of valid teams
+        managers = mkLgManagersWithFilter config validTeamIds -- Adjusted to filter based on validTeamIds
+        rosterLimits = C.draft_limits (C.draft_parameters config)
+        totalRosterSlots = sumDraftRosterLmts rosterLimits
+        numTeams = length validTeamIds -- Use the length of validTeamIds
+        numRounds = if numTeams > 0 then totalRosterSlots `div` numTeams else 0
+    in ( DraftConst
         { config = config
         , officialRoster = validPlayers
-        , rankings = filterInvalidRankings (C.lgMembers config) rankings
-        }
-    , DraftState
+        , rankings = filterInvalidRankings validTeamIds rankings -- Use filtered list
+        },
+        DraftState
         { availableIds = map O.playerId $ O.people validPlayers
         , currentPick = 0
         , draftComplete = False
         , currentRound = 1
-        , draft_rosters = zip (mkLgManagers config) (repeat [])
+        , draft_rosters = zip managers (repeat [])
         }
     )
 
@@ -130,3 +137,16 @@ updateTeamRosterAndLineup draft_rosters player isTeam1Turn config =
     -- Placeholder logic to demonstrate updating the first team's roster and lineup.
     -- You need to implement logic to correctly select the team and update its roster and lineup based on the player drafted and configuration settings.
     draft_rosters  -- This should be replaced with actual logic to update rosters.
+
+
+sumDraftRosterLmts :: C.DraftRosterLmts -> Int
+sumDraftRosterLmts lmts = 
+    C.dr_catcher lmts +
+    C.dr_first lmts +
+    C.dr_second lmts +
+    C.dr_third lmts +
+    C.dr_shortstop lmts +
+    C.dr_outfield lmts +
+    C.dr_utility lmts +
+    C.dr_s_pitcher lmts +
+    C.dr_r_pitcher lmts

@@ -183,6 +183,12 @@ mkSingleLgManager config commissioner leagueID teamId = R.LgManager
   , R.roster = mkEmptyRoster
   }
 
+-- | Generates a list of LgManager for each team ID provided in the filtered list of lgMembers.
+mkLgManagersWithFilter :: C.Configuration -> [T.Text] -> [R.LgManager]
+mkLgManagersWithFilter config validTeamIds =
+    map (\teamId -> mkSingleLgManager config (C.commissioner config) (C.leagueID config) teamId) validTeamIds
+
+
 -- Creates an empty roster with no players
 mkEmptyRoster :: R.Roster
 mkEmptyRoster = R.Roster [] [] [] [] [] [] [] [] []
@@ -288,6 +294,12 @@ isPlayerInOfficialRoster playerId
 filterInvalidRankings :: [T.Text] -> [PR.RankingData] -> [PR.RankingData]
 filterInvalidRankings lgMembers rankings =
   filter (\ranking -> PR.teamId ranking `elem` lgMembers) rankings
+
+-- Utility function to filter out teams without rankings
+filterValidTeams :: [T.Text] -> [PR.RankingData] -> [T.Text]
+filterValidTeams lgMembers rankings =
+  let validTeamIds = map PR.teamId rankings
+  in filter (`elem` validTeamIds) lgMembers
 
 findPlayerRanking :: O.PlayerID -> [PR.PlayerRanking] -> Maybe Int
 findPlayerRanking playerId rankings =
