@@ -204,6 +204,7 @@ instance FromJSON DraftParameters where
     parseJSON = withObject "DraftParameters" $ \v ->
         DraftParameters
             <$> v .: "autoDraft"
+            <*> v .: "order"
             <*> v .: "autoDraft_UTC"
             <*> v .: "draft_limits"
 

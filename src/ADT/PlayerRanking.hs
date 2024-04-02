@@ -89,7 +89,7 @@ instance ToJSON PlayerRanking where
                ]
 
 --Draft Ordering Strategies
-type DraftOrderStrategy = Int -> [T.Text] -> [T.Text]
+type DraftOrderStrategy = Int -> [Text] -> [Text]
 
 serpentineOrderStrategy :: DraftOrderStrategy
 serpentineOrderStrategy totalPicks teams =
@@ -107,8 +107,8 @@ experimentalSnakeStrategy totalPicks teams =
             | otherwise = reverse $ take (length teams) . drop (length teams `div` 2) $ cycle teams
     in concatMap generateRound [1..rounds]
 
-selectDraftOrderStrategy :: T.Text -> DraftOrderStrategy
+selectDraftOrderStrategy :: Text -> DraftOrderStrategy
 selectDraftOrderStrategy orderType = case orderType of
     "serpentine" -> serpentineOrderStrategy
-    "experimental_snake" -> experimentalSnakeOrder
+    "experimental_snake" -> experimentalSnakeStrategy
     _ -> serpentineOrderStrategy -- Default

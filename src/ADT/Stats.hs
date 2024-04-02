@@ -35,7 +35,7 @@ import qualified Middle as M
 
 -- new types to prevent conflation of gameids and playerids
 newtype GameID = GameID Int deriving (Show, Eq)
-newtype GameIDstring = GameIDstring T.Text deriving (Show, Eq)
+newtype GameIDstring = GameIDstring Text deriving (Show, Eq)
 
 -- we have these related types defined elsewhere
 -- newtype PlayerID = PlayerID Int deriving (Show, Eq)

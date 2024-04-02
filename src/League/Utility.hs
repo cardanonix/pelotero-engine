@@ -7,8 +7,10 @@
 
 module Utility where
 
-import System.Random.Shuffle (shuffleM)
+
 import Control.Monad.IO.Class (MonadIO, liftIO)
+import System.Random (newStdGen, StdGen, randomR)
+import System.Random.Shuffle (shuffleM)
 import Crypto.Hash ( SHA256(SHA256), hashWith )
 import Crypto.Random (getRandomBytes)
 import qualified Crypto.Hash.SHA256 as SHA256
@@ -91,7 +93,6 @@ import Control.Exception (catch, IOException)
 
 import GHC.Generics (Generic )
 
-import System.Random ( randomR, newStdGen, StdGen )
 import qualified Data.HashMap.Strict as HM
 import qualified Config as C
 import qualified Input as I
