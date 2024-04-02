@@ -104,6 +104,7 @@ data LgLineupLmts = LgLineupLmts
 
 data DraftParameters = DraftParameters
     { autoDraft :: Bool
+    , order :: T.Text -- "serpentine" should probably be the default
     , autoDraft_UTC :: T.Text
     , draft_limits :: DraftRosterLmts
     }

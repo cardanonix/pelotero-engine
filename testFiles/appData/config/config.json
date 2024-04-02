@@ -47,6 +47,7 @@
   },
   "draft_parameters": {
     "autoDraft": true,
+    "order": "serpentine",
     "autoDraft_UTC": "2024-03-21T03:15",
     "draft_limits": {
       "catcher": 6,
