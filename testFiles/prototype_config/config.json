@@ -47,6 +47,7 @@
   },
   "draft_parameters": {
     "autoDraft": true,
+    "order": "serpentine",
     "autoDraft_UTC": "2023_08_16__06_00_01",
     "draft_limits": {
       "catcher": 6,
@@ -61,7 +62,7 @@
     }
   },
   "commissioner": "436f6d6d697373696f6e6572205363726f74756d_de65ccbedd4c080939eca365a07f06f77d5a3f5854cef00d13db7f3b7be8fc08",
-  "lgMembers": [
+  "teamId": [
     "572e20452e20422e20467563626f6973_12161847fa35995db307c5e28c723589794e58a9024c9de050f79ed817a3fa46",
     "57697a61726420536c65657665205661676d6f6e67657273_ab8265770bcd5be8f878bd08e3e0c412fbbf0fe2dfbead89b7af87b9b1f80678",
     "57697a67696e6173_cda45223adff02e6519fba4d850ed6ff68a2f8c993fa42224a18fafd266b5963",

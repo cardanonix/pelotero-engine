@@ -1,5 +1,5 @@
 digraph ConfigurationGraph {
-    Configuration [label="Configuration\nstatus, leagueID, commissioner, lgMembers"];
+    Configuration [label="Configuration\nstatus, leagueID, commissioner, teamId"];
     PointParameters [label="PointParameters\nlg_style, start_UTC, end_UTC"];
     BattingMults [label="BattingMults\nlgb_single, lgb_double, ..."];
     PitchingMults [label="PitchingMults\nlgp_win, lgp_save, ..."];

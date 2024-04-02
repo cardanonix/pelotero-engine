@@ -20,7 +20,7 @@ main = do
 -- writeConfigurationGraph = do
 --     let dotGraph = digraph (Str "ConfigurationGraph") $ do
 --           -- Nodes with Labels
---           node (pack "Configuration") [Label $ StrLabel "Configuration\nstatus, leagueID, commissioner, lgMembers"]
+--           node (pack "Configuration") [Label $ StrLabel "Configuration\nstatus, leagueID, commissioner, teamId"]
 --           node (pack "PointParameters") [Label $ StrLabel "PointParameters\nlg_style, start_UTC, end_UTC"]
 --           node (pack "BattingMults") [Label $ StrLabel "BattingMults\nlgb_single, lgb_double, ..."]
 --           node (pack "PitchingMults") [Label $ StrLabel "PitchingMults\nlgp_win, lgp_save, ..."]
@@ -41,7 +41,7 @@ main = do
 writeConfigurationGraph :: IO ()
 writeConfigurationGraph = do
     let dotGraph = digraph (Str "ConfigurationGraph") $ do
-          node (pack "Configuration") [Label $ StrLabel "Configuration\nstatus, leagueID, commissioner, lgMembers"]
+          node (pack "Configuration") [Label $ StrLabel "Configuration\nstatus, leagueID, commissioner, teamId"]
           node (pack "PointParameters") [Label $ StrLabel "PointParameters\nlg_style, start_UTC, end_UTC, lg_battingMults, lg_pitchingMults, lineup_limits"]
           node (pack "DraftParameters") [Label $ StrLabel "DraftParameters\nautoDraft, autoDraft_UTC, draft_limits"]
           node (pack "BattingMults") [Label $ StrLabel "BattingMults\nlgb_single, lgb_double, lgb_triple, lgb_homerun, lgb_rbi, lgb_run, lgb_base_on_balls, lgb_stolen_base, lgb_hit_by_pitch, lgb_strikeout, lgb_caught_stealing"]

@@ -43,7 +43,7 @@ data Configuration = Configuration
     , point_parameters :: PointParameters
     , draft_parameters :: DraftParameters
     , commissioner :: T.Text
-    , lgMembers :: [T.Text]
+    , teamId :: [T.Text]
     }
     deriving (Show, Eq)
 
@@ -102,11 +102,11 @@ data LgLineupLmts = LgLineupLmts
     }
     deriving (Show, Eq)
 
-type DraftOrder = [(T.Text, Int)] -- (lgMembers, order in draft)
+type DraftOrder = [(T.Text, Int)] -- (teamId, order in draft)
 
 data DraftParameters = DraftParameters
     { autoDraft :: Bool
-    , order :: T.Text -- "serpentine" should probably be the default
+    , order :: T.Text -- "serpentine" should be the default
     , autoDraft_UTC :: T.Text
     , draft_limits :: DraftRosterLmts
     }
@@ -134,7 +134,7 @@ instance FromJSON Configuration where
             <*> v .: "point_parameters"
             <*> v .: "draft_parameters"
             <*> v .: "commissioner"
-            <*> v .: "lgMembers"
+            <*> v .: "teamId"
 
 instance FromJSON PointParameters where
     parseJSON = withObject "PointParameters" $ \v ->
@@ -231,7 +231,7 @@ instance ToJSON Configuration where
         , "point_parameters" .= point_parameters
         , "draft_parameters" .= draft_parameters
         , "commissioner" .= commissioner
-        , "lgMembers" .= lgMembers
+        , "teamId" .= teamId
         ]
 
 instance ToJSON PointParameters where

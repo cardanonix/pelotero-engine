@@ -171,9 +171,9 @@ positionCodeToDraftText code =
         "DH" -> "utility"
         _    -> "Unknown"
 
--- generates a list of LgManager for each team ID provided in lgMembers.
+-- generates a list of LgManager for each team ID provided in teamId.
 mkLgManagers :: C.Configuration -> [R.LgManager]
-mkLgManagers config = map (\teamId -> mkSingleLgManager config (C.commissioner config) (C.leagueID config) teamId) (C.lgMembers config)
+mkLgManagers config = map (\teamId -> mkSingleLgManager config (C.commissioner config) (C.leagueID config) teamId) (C.teamId config)
 
 -- helper function creates a single LgManager, given the teamId and other details.
 mkSingleLgManager :: C.Configuration -> Text -> Text -> Text -> R.LgManager
@@ -186,7 +186,7 @@ mkSingleLgManager config commissioner leagueID teamId = R.LgManager
   , R.roster = mkEmptyRoster
   }
 
--- | Generates a list of LgManager for each team ID provided in the filtered list of lgMembers.
+-- | Generates a list of LgManager for each team ID provided in the filtered list of teamId.
 mkLgManagersWithFilter :: C.Configuration -> [T.Text] -> [R.LgManager]
 mkLgManagersWithFilter config validTeamIds =
     map (\teamId -> mkSingleLgManager config (C.commissioner config) (C.leagueID config) teamId) validTeamIds
@@ -295,14 +295,14 @@ isPlayerInOfficialRoster playerId
 
 -- Filter function to retain only those rankings where the teamId matches any lgMember
 filterInvalidRankings :: [T.Text] -> [PR.RankingData] -> [PR.RankingData]
-filterInvalidRankings lgMembers rankings =
-  filter (\ranking -> PR.teamId ranking `elem` lgMembers) rankings
+filterInvalidRankings teamId rankings =
+  filter (\ranking -> PR.teamId ranking `elem` teamId) rankings
 
 -- Utility function to filter out teams without rankings
 filterValidTeams :: [T.Text] -> [PR.RankingData] -> [T.Text]
-filterValidTeams lgMembers rankings =
+filterValidTeams teamId rankings =
   let validTeamIds = map PR.teamId rankings
-  in filter (`elem` validTeamIds) lgMembers
+  in filter (`elem` validTeamIds) teamId
 
 findPlayerRanking :: O.PlayerID -> [PR.PlayerRanking] -> Maybe Int
 findPlayerRanking playerId rankings =
@@ -345,7 +345,7 @@ randomizeOrder members = liftIO $ shuffleM members
 
 generateDraftOrder :: MonadIO m => C.Configuration -> [PR.RankingData] -> m C.DraftOrder
 generateDraftOrder config rankings = do
-    let validTeamIds = filterValidTeams (C.lgMembers config) rankings
+    let validTeamIds = filterValidTeams (C.teamId config) rankings
     randomizedTeams <- randomizeOrder validTeamIds
     let draftParams = C.draft_parameters config
         draftLimits = C.draft_limits draftParams

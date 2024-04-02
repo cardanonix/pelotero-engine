@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, DoAndIfThenElse, NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE FlexibleContexts, DoAndIfThenElse, NamedFieldPuns #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Eta reduce" #-}
 
@@ -21,7 +21,6 @@ import Data.Text as T ( unpack, take )
 import qualified Data.HashMap.Strict as HM
 import qualified Data.ByteString.Lazy as BL
 
-
 import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
@@ -29,7 +28,6 @@ import qualified PlayerRanking as PR
 
 import Validators
 import Utility
-
 
 type DraftM a = ExceptT DraftError (ReaderT DraftConst (StateT DraftState IO)) a
 
@@ -40,11 +38,9 @@ data DraftConst = DraftConst {
 }
 
 data DraftState = DraftState {
-    availableIds :: [O.PlayerID], -- pool of eligible playerId's
-    draftComplete :: Bool,
-    currentPick :: Int,
-    currentRound :: Int, -- to facilitate serpentine draft
-    draft_rosters :: [(R.LgManager, [Int])] -- teams with indices
+    availableIds :: [O.PlayerID], -- pool of eligible playerIds
+    draft_order :: C.DraftOrder,  -- Enhanced understanding of draft order
+    draft_rosters :: [R.LgManager] -- Mapping of team to its drafted players
 }
 
 data DraftError
@@ -63,33 +59,36 @@ updateDraftState f = get >>= put . f
 getDraftConst :: DraftM DraftConst
 getDraftConst = ask
 
-initializeDraftEnv :: C.Configuration -> O.OfficialRoster -> [PR.RankingData] -> (DraftConst, DraftState)
-initializeDraftEnv config validPlayers rankings = 
-    let validTeamIds = filterValidTeams (C.lgMembers config) rankings
-        -- Ensure mkLgManagers respects the filtered list of valid teams
-        managers = mkLgManagersWithFilter config validTeamIds -- Adjusted to filter based on validTeamIds
-        rosterLimits = C.draft_limits (C.draft_parameters config)
-        totalRosterSlots = sumDraftRosterLmts rosterLimits
-        numTeams = length validTeamIds -- Use the length of validTeamIds
-        numRounds = if numTeams > 0 then totalRosterSlots `div` numTeams else 0
-    in ( DraftConst
-        { config = config
-        , officialRoster = validPlayers
-        , rankings = filterInvalidRankings validTeamIds rankings -- Use filtered list
-        },
-        DraftState
-        { availableIds = map O.playerId $ O.people validPlayers
-        , currentPick = 0
-        , draftComplete = False
-        , currentRound = 1
-        , draft_rosters = zip managers (repeat [])
-        }
-    )
+instantiateDraft :: C.Configuration -> O.OfficialRoster -> [PR.RankingData] -> IO (DraftConst, DraftState)
+instantiateDraft config validPlayers rankings = do
+    -- Prevalidate rankings against team IDs in the configuration.
+    let validTeamIds = C.teamId config
+    let validatedRankings = filter (\r -> PR.teamId r `elem` validTeamIds) rankings
+
+    -- Generate the draft order using only teams with validated rankings.
+    draftOrder <- generateDraftOrder config validatedRankings  -- generateDraftOrder already validates rankings against config
+                                                               -- I recognize the redundancy and have decided to leave it in for
+                                                               --  what it gains us in extensibility/correctness
+    let managers = mkLgManagers config
+    let validManagers = filter (\m -> R.teamId m `elem` map PR.teamId validatedRankings) managers
+    
+    return ( DraftConst
+             { config = config
+             , officialRoster = validPlayers
+             , rankings = validatedRankings  -- Use prevalidated rankings
+             },
+             DraftState
+             { availableIds = map O.playerId $ O.people validPlayers
+             , draft_order = draftOrder
+             , draft_rosters = validManagers
+             }
+           )
+
 
 -- Initiates the draft process
 startDraft :: C.Configuration -> O.OfficialRoster -> [PR.RankingData] -> IO (Either DraftError DraftState)
 startDraft config officialRoster rankings = do
-    let (draftConst, initialState) = initializeDraftEnv config officialRoster rankings
+    let (draftConst, initialState) = instantiateDraft config officialRoster rankings
     -- Run the draft within the defined monadic stack
     runExceptT $ evalStateT (runReaderT runDraftCycles draftConst) initialState
 
@@ -118,10 +117,6 @@ draftCycleM = do
             -- Update the state with the changes
             put state {availableIds = remainingIds, currentPick = currentPick + 1, draft_rosters = updatedDraftRosters}
         Nothing -> throwError $ PlayerNotFound $ fromIntegral $ O.unwrapPlayerId nextPlayerId
-
--- Determines which team's turn it is to pick based on the current pick and round, accounting for serpentine order.
-determineTurn :: Int -> Int -> Bool
-determineTurn currentPick currentRound = (currentRound `mod` 2 == 1 && currentPick `mod` 2 == 1) || (currentRound `mod` 2 == 0 && currentPick `mod` 2 == 0)
 
 -- Filters rankings for a specific team based on the teamId.
 filterTeamRankings :: [PR.RankingData] -> R.LgManager -> [PR.PlayerRanking]

@@ -61,7 +61,7 @@ league parameters json
       }
     },
     "comissioner": "playerx_1234568",
-    "lgMembers": [
+    "teamId": [
       "playerq_1234568",
       "playerz_1234568",
       "playery_1234568",
