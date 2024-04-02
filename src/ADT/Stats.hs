@@ -34,11 +34,12 @@ import qualified Data.Vector as V
 import qualified Middle as M
 
 -- new types to prevent conflation of gameids and playerids
-newtype GameCode = GameCode {game_code :: Text}
-    deriving (Show, Eq)
+newtype GameID = GameID Int deriving (Show, Eq)
+newtype GameIDstring = GameIDstring T.Text deriving (Show, Eq)
 
-newtype PlayerCode = PlayerCode {player_code :: Text}
-    deriving (Show, Eq)
+-- we have these related types defined elsewhere
+-- newtype PlayerID = PlayerID Int deriving (Show, Eq)
+-- newtype PlayerIDstring = PlayerIDstring T.Text deriving (Show, Eq)
 
 data BattingStats where
     BattingStats ::
