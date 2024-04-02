@@ -88,3 +88,27 @@ instance ToJSON PlayerRanking where
                , "rank"     .= rank
                ]
 
+--Draft Ordering Strategies
+type DraftOrderStrategy = Int -> [T.Text] -> [T.Text]
+
+serpentineOrderStrategy :: DraftOrderStrategy
+serpentineOrderStrategy totalPicks teams =
+    let rounds = totalPicks `div` length teams
+    in concat $ take rounds $ cycle [teams, reverse teams]
+
+experimentalSnakeStrategy :: DraftOrderStrategy
+experimentalSnakeStrategy totalPicks teams = 
+    let rounds = totalPicks `div` length teams
+        patternLength = 4 -- The pattern repeats every 4 rounds
+        generateRound n
+            | n `mod` patternLength == 1 = teams
+            | n `mod` patternLength == 2 = take (length teams) . drop (length teams `div` 2) $ cycle teams
+            | n `mod` patternLength == 3 = reverse teams
+            | otherwise = reverse $ take (length teams) . drop (length teams `div` 2) $ cycle teams
+    in concatMap generateRound [1..rounds]
+
+selectDraftOrderStrategy :: T.Text -> DraftOrderStrategy
+selectDraftOrderStrategy orderType = case orderType of
+    "serpentine" -> serpentineOrderStrategy
+    "experimental_snake" -> experimentalSnakeOrder
+    _ -> serpentineOrderStrategy -- Default

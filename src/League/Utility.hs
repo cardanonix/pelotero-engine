@@ -333,32 +333,7 @@ getCurrentFormattedTime = do
     let formattedTime = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M" currentTime
     return formattedTime
 
-
 -- Draft Ordering
-type DraftOrderStrategy = Int -> [T.Text] -> [T.Text]
-
-serpentineOrderStrategy :: DraftOrderStrategy
-serpentineOrderStrategy totalPicks teams =
-    let rounds = totalPicks `div` length teams
-    in concat $ take rounds $ cycle [teams, reverse teams]
-
-experimentalSnakeStrategy :: DraftOrderStrategy
-experimentalSnakeStrategy totalPicks teams = 
-    let rounds = totalPicks `div` length teams
-        patternLength = 4 -- The pattern repeats every 4 rounds
-        generateRound n
-            | n `mod` patternLength == 1 = teams
-            | n `mod` patternLength == 2 = take (length teams) . drop (length teams `div` 2) $ cycle teams
-            | n `mod` patternLength == 3 = reverse teams
-            | otherwise = reverse $ take (length teams) . drop (length teams `div` 2) $ cycle teams
-    in concatMap generateRound [1..rounds]
-
-selectDraftOrderStrategy :: T.Text -> DraftOrderStrategy
-selectDraftOrderStrategy orderType = case orderType of
-    "serpentine" -> serpentineOrderStrategy
-    "experimental_snake" -> experimentalSnakeOrder
-    _ -> serpentineOrderStrategy -- Default
-
 totalPicksPerTeam :: C.DraftRosterLmts -> Int
 totalPicksPerTeam limits = C.dr_catcher limits + C.dr_first limits + C.dr_second limits + C.dr_third limits
                          + C.dr_shortstop limits + C.dr_outfield limits + C.dr_utility limits
@@ -367,14 +342,13 @@ totalPicksPerTeam limits = C.dr_catcher limits + C.dr_first limits + C.dr_second
 randomizeOrder :: MonadIO m => [T.Text] -> m [T.Text]
 randomizeOrder members = liftIO $ shuffleM members
 
-generateDraftOrder :: MonadIO m => C.Configuration -> m C.DraftOrder
-generateDraftOrder config = do
-    let teams = C.lgMembers config
-        draftParams = C.draft_parameters config
+generateDraftOrder :: MonadIO m => C.Configuration -> [PR.RankingData] -> m C.DraftOrder
+generateDraftOrder config rankings = do
+    let validTeamIds = filterValidTeams (C.lgMembers config) rankings
+    randomizedTeams <- randomizeOrder validTeamIds
+    let draftParams = C.draft_parameters config
         draftLimits = C.draft_limits draftParams
-        totalPicks = totalPicksPerTeam draftLimits * length teams
-        orderStrategy = selectDraftOrderStrategy (C.order draftParams)
-
-    randomizedTeams <- randomizeOrder teams
-    let draftOrderTeams = orderStrategy totalPicks randomizedTeams
+        totalPicks = totalPicksPerTeam draftLimits * length randomizedTeams
+        orderStrategy = PR.selectDraftOrderStrategy (C.order draftParams)
+        draftOrderTeams = orderStrategy totalPicks randomizedTeams
     return $ zip draftOrderTeams [1..]

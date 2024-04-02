@@ -102,6 +102,8 @@ data LgLineupLmts = LgLineupLmts
     }
     deriving (Show, Eq)
 
+type DraftOrder = [(T.Text, Int)] -- (lgMembers, order in draft)
+
 data DraftParameters = DraftParameters
     { autoDraft :: Bool
     , order :: T.Text -- "serpentine" should probably be the default
