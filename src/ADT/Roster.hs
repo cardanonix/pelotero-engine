@@ -7,7 +7,7 @@
 
 module Roster where
 
-import Config (Configuration, parseDouble)
+-- import Config (Configuration, parseDouble)
 import Control.Applicative ((<|>))
 import Control.Monad (filterM)
 import Data.Aeson (FromJSON (..), ToJSON (..), Result (Success), Value, (.=), object, decode, eitherDecodeStrict, fromJSON, toJSON, withObject, (.!=), (.:), (.:?))
@@ -22,12 +22,14 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified OfficialRoster as O
+import qualified Config as C
 
 -- LgManager ADT
+
 data LgManager = LgManager
     { status :: Text
     , commissioner :: Text
-    , teamId :: Text
+    , teamId :: C.TeamID
     , leagueID :: Text
     , current_lineup :: CurrentLineup
     , roster :: Roster
@@ -71,6 +73,13 @@ instance FromJSON LgManager where
             <*> v .: "leagueID"
             <*> v .: "current_lineup"
             <*> v .: "roster"
+
+-- instance FromJSON C.TeamID where
+--     parseJSON :: Value -> Parser C.TeamID
+--     parseJSON = withText "TeamID" $ \t -> pure (C.TeamID t)
+
+-- instance ToJSON C.TeamID where
+--     toJSON (C.TeamID t) = toJSON t
 
 instance FromJSON CurrentLineup where
     parseJSON :: Value -> Parser CurrentLineup

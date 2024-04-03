@@ -35,11 +35,12 @@ import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
 import Data.Aeson.Types (toJSON)
 import qualified OfficialRoster as O
+import qualified Config as C
 import Data.Scientific (toBoundedInteger)
 
 -- | Represents the top-level ranking data structure.
 data RankingData = RankingData
-    { teamId        :: Text
+    { teamId        :: C.TeamID
     , dataChecksum  :: Text
     , lastUpdated   :: UTCTime
     , rankings      :: [PlayerRanking]
@@ -89,7 +90,7 @@ instance ToJSON PlayerRanking where
                ]
 
 --Draft Ordering Strategies
-type DraftOrderStrategy = Int -> [Text] -> [Text]
+type DraftOrderStrategy = Int -> [C.TeamID] -> [C.TeamID]
 
 serpentineOrderStrategy :: DraftOrderStrategy
 serpentineOrderStrategy totalPicks teams =

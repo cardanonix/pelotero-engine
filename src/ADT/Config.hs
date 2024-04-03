@@ -34,16 +34,20 @@ import Data.Maybe (catMaybes, fromMaybe)
 import Data.Scientific (toBoundedInteger)
 import qualified Data.Text as T
 import qualified Data.Vector as V
+-- import qualified Roster as R
 
 
 -- ## League Configuration ADT ## --
+
+newtype TeamID = TeamID T.Text deriving (Show, Eq)
+
 data Configuration = Configuration
     { status :: T.Text
     , leagueID :: T.Text
     , point_parameters :: PointParameters
     , draft_parameters :: DraftParameters
     , commissioner :: T.Text
-    , teamId :: [T.Text]
+    , teamId :: [TeamID]
     }
     deriving (Show, Eq)
 
@@ -135,6 +139,9 @@ instance FromJSON Configuration where
             <*> v .: "draft_parameters"
             <*> v .: "commissioner"
             <*> v .: "teamId"
+
+instance FromJSON TeamID where
+    parseJSON = withText "TeamID" $ pure . TeamID
 
 instance FromJSON PointParameters where
     parseJSON = withObject "PointParameters" $ \v ->
@@ -233,6 +240,9 @@ instance ToJSON Configuration where
         , "commissioner" .= commissioner
         , "teamId" .= teamId
         ]
+
+instance ToJSON TeamID where
+    toJSON (TeamID t) = toJSON t
 
 instance ToJSON PointParameters where
     toJSON :: PointParameters -> Value

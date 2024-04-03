@@ -39,6 +39,7 @@ data DraftConst = DraftConst {
 
 data DraftState = DraftState {
     availableIds :: [O.PlayerID], -- pool of eligible playerIds
+    draft_log :: [T.Text, O.PlayerID], -- a running log draft picks is filled while availableIds shrinks (teamId, O.PlayerID)
     draft_order :: C.DraftOrder,  -- Enhanced understanding of draft order
     draft_rosters :: [R.LgManager] -- Mapping of team to its drafted players
 }
@@ -60,25 +61,22 @@ getDraftConst :: DraftM DraftConst
 getDraftConst = ask
 
 instantiateDraft :: C.Configuration -> O.OfficialRoster -> [PR.RankingData] -> IO (DraftConst, DraftState)
-instantiateDraft config validPlayers rankings = do
-    -- Prevalidate rankings against team IDs in the configuration.
-    let validTeamIds = C.teamId config
-    let validatedRankings = filter (\r -> PR.teamId r `elem` validTeamIds) rankings
-
-    -- Generate the draft order using only teams with validated rankings.
-    draftOrder <- generateDraftOrder config validatedRankings  -- generateDraftOrder already validates rankings against config
-                                                               -- I recognize the redundancy and have decided to leave it in for
-                                                               --  what it gains us in extensibility/correctness
+instantiateDraft config players rankings = do
+    let teamIds = C.teamId config
+    let validRankings = filter (\r -> PR.teamId r `elem` teamIds) rankings
+    draftOrder <- generateDraftOrder config validRankings  -- generateDraftOrder already validates rankings against config
+                                                           -- I recognize the redundancy and have decided to leave it in for
+                                                           --  what it gains us in extensibility/correctness
     let managers = mkLgManagers config
-    let validManagers = filter (\m -> R.teamId m `elem` map PR.teamId validatedRankings) managers
+    let validManagers = filter (\m -> R.teamId m `elem` map PR.teamId validRankings) managers
     
     return ( DraftConst
              { config = config
-             , officialRoster = validPlayers
-             , rankings = validatedRankings  -- Use prevalidated rankings
+             , officialRoster = players
+             , rankings = validRankings
              },
              DraftState
-             { availableIds = map O.playerId $ O.people validPlayers
+             { availableIds = map O.playerId $ O.people players
              , draft_order = draftOrder
              , draft_rosters = validManagers
              }

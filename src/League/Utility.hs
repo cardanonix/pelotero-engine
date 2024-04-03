@@ -173,24 +173,26 @@ positionCodeToDraftText code =
 
 -- generates a list of LgManager for each team ID provided in teamId.
 mkLgManagers :: C.Configuration -> [R.LgManager]
-mkLgManagers config = map (\teamId -> mkSingleLgManager config (C.commissioner config) (C.leagueID config) teamId) (C.teamId config)
+mkLgManagers config = 
+    map (\tid -> mkSingleLgManager config (C.commissioner config) (C.leagueID config) tid) (C.teamId config)
 
 -- helper function creates a single LgManager, given the teamId and other details.
-mkSingleLgManager :: C.Configuration -> Text -> Text -> Text -> R.LgManager
-mkSingleLgManager config commissioner leagueID teamId = R.LgManager
-  { R.status = "active"
-  , R.commissioner = commissioner
-  , R.teamId = teamId
-  , R.leagueID = leagueID
-  , R.current_lineup = mkEmptyLineup
-  , R.roster = mkEmptyRoster
-  }
+-- Adjusted mkSingleLgManager to accept TeamID directly without changes
+mkSingleLgManager :: C.Configuration -> Text -> Text -> C.TeamID -> R.LgManager
+mkSingleLgManager config commissioner leagueID teamId = 
+    R.LgManager
+        { R.status = "active"
+        , R.commissioner = commissioner
+        , R.teamId = teamId 
+        , R.leagueID = leagueID
+        , R.current_lineup = mkEmptyLineup
+        , R.roster = mkEmptyRoster
+        }
 
 -- | Generates a list of LgManager for each team ID provided in the filtered list of teamId.
-mkLgManagersWithFilter :: C.Configuration -> [T.Text] -> [R.LgManager]
+mkLgManagersWithFilter :: C.Configuration -> [C.TeamID] -> [R.LgManager]
 mkLgManagersWithFilter config validTeamIds =
     map (\teamId -> mkSingleLgManager config (C.commissioner config) (C.leagueID config) teamId) validTeamIds
-
 
 -- Creates an empty roster with no players
 mkEmptyRoster :: R.Roster
@@ -201,11 +203,16 @@ mkEmptyLineup :: R.CurrentLineup
 mkEmptyLineup = R.CurrentLineup [] [] [] [] [] [] [] [] []
 
 
-createLgManager :: C.Configuration -> T.Text -> R.CurrentLineup -> R.Roster -> R.LgManager
-createLgManager config teamId
-  = R.LgManager
-      (C.status config) (C.commissioner config) teamId
-      (C.leagueID config)
+createLgManager :: C.Configuration -> C.TeamID -> R.CurrentLineup -> R.Roster -> R.LgManager
+createLgManager config teamId currentLineup roster =
+    R.LgManager
+        { R.status = C.status config
+        , R.commissioner = C.commissioner config
+        , R.teamId = teamId  -- Correctly used as TeamID
+        , R.leagueID = C.leagueID config
+        , R.current_lineup = currentLineup
+        , R.roster = roster
+        }
 
 extendRankingsWithUnrankedPlayers :: [PR.PlayerRanking] -> [O.PlayerID] -> [O.PlayerID]
 extendRankingsWithUnrankedPlayers rankedPlayers allPlayerIds =
@@ -294,15 +301,15 @@ isPlayerInOfficialRoster playerId
 --   undefined
 
 -- Filter function to retain only those rankings where the teamId matches any lgMember
-filterInvalidRankings :: [T.Text] -> [PR.RankingData] -> [PR.RankingData]
+filterInvalidRankings :: [C.TeamID] -> [PR.RankingData] -> [PR.RankingData]
 filterInvalidRankings teamId rankings =
   filter (\ranking -> PR.teamId ranking `elem` teamId) rankings
 
 -- Utility function to filter out teams without rankings
-filterValidTeams :: [T.Text] -> [PR.RankingData] -> [T.Text]
-filterValidTeams teamId rankings =
+filterValidTeams :: [C.TeamID] -> [PR.RankingData] -> [C.TeamID]
+filterValidTeams teamIds rankings =
   let validTeamIds = map PR.teamId rankings
-  in filter (`elem` validTeamIds) teamId
+  in filter (`elem` validTeamIds) teamIds
 
 findPlayerRanking :: O.PlayerID -> [PR.PlayerRanking] -> Maybe Int
 findPlayerRanking playerId rankings =
@@ -340,7 +347,7 @@ totalPicksPerTeam limits = C.dr_catcher limits + C.dr_first limits + C.dr_second
                          + C.dr_shortstop limits + C.dr_outfield limits + C.dr_utility limits
                          + C.dr_s_pitcher limits + C.dr_r_pitcher limits
 
-randomizeOrder :: MonadIO m => [T.Text] -> m [T.Text]
+randomizeOrder :: MonadIO m => [C.TeamID] -> m [C.TeamID]
 randomizeOrder members = liftIO $ shuffleM members
 
 generateDraftOrder :: MonadIO m => C.Configuration -> [PR.RankingData] -> m C.DraftOrder
