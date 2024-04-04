@@ -1,50 +1,47 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+
 {-# HLINT ignore "Use tuple-section" #-}
 
 module Main where
 
-import Control.Monad (forM, foldM)
+import Control.Monad (foldM, forM)
 import Data.Aeson (FromJSON, ToJSON, decode, encode, withObject, (.:))
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
-import GHC.Generics (Generic)
 import Data.Time.Clock (UTCTime, getCurrentTime)
-import Data.Time.Format (formatTime, defaultTimeLocale)
+import Data.Time.Format (defaultTimeLocale, formatTime)
+import GHC.Generics (Generic)
 
-import Data.Maybe (mapMaybe, fromMaybe)
-import Data.List
-    ( find,
-      delete,
-      sortOn,
-      sortBy,
-      findIndex,
-      sortOn,
-      findIndex,
-      sortOn,
-      findIndex,
-      sortOn,
-      findIndex )
+import Data.List (
+    delete,
+    find,
+    findIndex,
+    sortBy,
+    sortOn,
+ )
+import Data.Maybe (fromMaybe, mapMaybe)
 
 import qualified Config as C
 import qualified OfficialRoster as O
-import qualified Roster as R
 import qualified PlayerRanking as PR
-import Validators 
-    -- ( countPlayersOnRoster
-    -- , findPlayer
-    -- , queryDraftRosterLmts 
-    -- )
+import qualified Roster as R
+import Validators
+
+-- ( countPlayersOnRoster
+-- , findPlayer
+-- , queryDraftRosterLmts
+-- )
 import Utility
-    -- ( positionCodeToDraftText
-    -- ,  readJson
-    -- ,  writeJson
-    -- , positionCodeToDraftText
-    -- , createLgManager
-    --   )
+
+-- ( positionCodeToDraftText
+-- ,  readJson
+-- ,  writeJson
+-- , positionCodeToDraftText
+-- , createLgManager
+--   )
 
 import Draft
-
 
 main :: IO ()
 main = do
@@ -69,8 +66,8 @@ main = do
                                         op = O.people roster
                                         teamId1 = PR.teamId r1
                                         teamId2 = PR.teamId r2
-                                        teamId1Short = T.take 12 teamId1
-                                        teamId2Short = T.take 12 teamId2
+                                        teamId1Short = T.take 12 $ C.unwrapTeamID teamId1
+                                        teamId2Short = T.take 12 $ C.unwrapTeamID teamId2
 
                                     -- Draft players for both teams and obtain rosters and lineups
                                     ((finalRoster1, finalLineup1), (finalRoster2, finalLineup2)) <- draftPlayers rankings1 rankings2 op config

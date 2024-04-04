@@ -10,20 +10,21 @@ module Config where
 
 import Control.Applicative ((<|>))
 import Control.Monad (filterM)
-import Data.Aeson
-    ( FromJSON(..),
-      Result(Success),
-      Value,
-      decode,
-      eitherDecodeStrict,
-      fromJSON,
-      withObject,
-      ToJSON(..),
-      object,
-      (.=),
-      (.!=),
-      (.:),
-      (.:?) )
+import Data.Aeson (
+    FromJSON (..),
+    Result (Success),
+    ToJSON (..),
+    Value,
+    decode,
+    eitherDecodeStrict,
+    fromJSON,
+    object,
+    withObject,
+    (.!=),
+    (.:),
+    (.:?),
+    (.=),
+ )
 
 import Data.Aeson.Types (Parser, Result (..), withScientific, withText)
 import Data.ByteString (ByteString)
@@ -34,12 +35,15 @@ import Data.Maybe (catMaybes, fromMaybe)
 import Data.Scientific (toBoundedInteger)
 import qualified Data.Text as T
 import qualified Data.Vector as V
--- import qualified Roster as R
 
+-- import qualified Roster as R
 
 -- ## League Configuration ADT ## --
 
 newtype TeamID = TeamID T.Text deriving (Show, Eq)
+
+unwrapTeamID :: TeamID -> T.Text
+unwrapTeamID (TeamID text) = text
 
 data Configuration = Configuration
     { status :: T.Text
@@ -106,7 +110,7 @@ data LgLineupLmts = LgLineupLmts
     }
     deriving (Show, Eq)
 
-type DraftOrder = [(T.Text, Int)] -- (teamId, order in draft)
+type DraftOrder = [(TeamID, Int)] -- (teamId, order in draft)
 
 data DraftParameters = DraftParameters
     { autoDraft :: Bool
@@ -133,12 +137,18 @@ data DraftRosterLmts = DraftRosterLmts
 instance FromJSON Configuration where
     parseJSON = withObject "Configuration" $ \v ->
         Configuration
-            <$> v .: "status"
-            <*> v .: "leagueID"
-            <*> v .: "point_parameters"
-            <*> v .: "draft_parameters"
-            <*> v .: "commissioner"
-            <*> v .: "teamId"
+            <$> v
+            .: "status"
+            <*> v
+            .: "leagueID"
+            <*> v
+            .: "point_parameters"
+            <*> v
+            .: "draft_parameters"
+            <*> v
+            .: "commissioner"
+            <*> v
+            .: "teamId"
 
 instance FromJSON TeamID where
     parseJSON = withText "TeamID" $ pure . TeamID
@@ -146,12 +156,18 @@ instance FromJSON TeamID where
 instance FromJSON PointParameters where
     parseJSON = withObject "PointParameters" $ \v ->
         PointParameters
-            <$> v .: "style"
-            <*> v .: "start_UTC"
-            <*> v .: "end_UTC"
-            <*> v .: "batting"
-            <*> v .: "pitching"
-            <*> v .: "lineup_limits"
+            <$> v
+            .: "style"
+            <*> v
+            .: "start_UTC"
+            <*> v
+            .: "end_UTC"
+            <*> v
+            .: "batting"
+            <*> v
+            .: "pitching"
+            <*> v
+            .: "lineup_limits"
 
 parseDouble :: Value -> Parser Double
 parseDouble = withText "double" $ \t ->
@@ -195,132 +211,162 @@ instance FromJSON PitchingMults where
 instance FromJSON LgLineupLmts where
     parseJSON = withObject "LgLineupLmts" $ \v ->
         LgLineupLmts
-            <$> v .: "catcher"
-            <*> v .: "first"
-            <*> v .: "second"
-            <*> v .: "third"
-            <*> v .: "shortstop"
-            <*> v .: "outfield"
-            <*> v .: "utility"
-            <*> v .: "s_pitcher"
-            <*> v .: "r_pitcher"
-            <*> v .: "max_size"
+            <$> v
+            .: "catcher"
+            <*> v
+            .: "first"
+            <*> v
+            .: "second"
+            <*> v
+            .: "third"
+            <*> v
+            .: "shortstop"
+            <*> v
+            .: "outfield"
+            <*> v
+            .: "utility"
+            <*> v
+            .: "s_pitcher"
+            <*> v
+            .: "r_pitcher"
+            <*> v
+            .: "max_size"
 
 instance FromJSON DraftParameters where
     parseJSON :: Value -> Parser DraftParameters
     parseJSON = withObject "DraftParameters" $ \v ->
         DraftParameters
-            <$> v .: "autoDraft"
-            <*> v .: "order"
-            <*> v .: "autoDraft_UTC"
-            <*> v .: "draft_limits"
+            <$> v
+            .: "autoDraft"
+            <*> v
+            .: "order"
+            <*> v
+            .: "autoDraft_UTC"
+            <*> v
+            .: "draft_limits"
 
 instance FromJSON DraftRosterLmts where
     parseJSON :: Value -> Parser DraftRosterLmts
     parseJSON = withObject "DraftRosterLmts" $ \v ->
         DraftRosterLmts
-            <$> v .: "catcher"
-            <*> v .: "first"
-            <*> v .: "second"
-            <*> v .: "third"
-            <*> v .: "shortstop"
-            <*> v .: "outfield"
-            <*> v .: "utility"
-            <*> v .: "s_pitcher"
-            <*> v .: "r_pitcher"
+            <$> v
+            .: "catcher"
+            <*> v
+            .: "first"
+            <*> v
+            .: "second"
+            <*> v
+            .: "third"
+            <*> v
+            .: "shortstop"
+            <*> v
+            .: "outfield"
+            <*> v
+            .: "utility"
+            <*> v
+            .: "s_pitcher"
+            <*> v
+            .: "r_pitcher"
 
 -- ToJSON Instances
 instance ToJSON Configuration where
     toJSON :: Configuration -> Value
-    toJSON Configuration{..} = object
-        [ "status" .= status
-        , "leagueID" .= leagueID
-        , "point_parameters" .= point_parameters
-        , "draft_parameters" .= draft_parameters
-        , "commissioner" .= commissioner
-        , "teamId" .= teamId
-        ]
+    toJSON Configuration{..} =
+        object
+            [ "status" .= status
+            , "leagueID" .= leagueID
+            , "point_parameters" .= point_parameters
+            , "draft_parameters" .= draft_parameters
+            , "commissioner" .= commissioner
+            , "teamId" .= teamId
+            ]
 
 instance ToJSON TeamID where
     toJSON (TeamID t) = toJSON t
 
 instance ToJSON PointParameters where
     toJSON :: PointParameters -> Value
-    toJSON PointParameters{..} = object
-        [ "style" .= lg_style
-        , "start_UTC" .= start_UTC
-        , "end_UTC" .= end_UTC
-        , "batting" .= lg_battingMults
-        , "pitching" .= lg_pitchingMults
-        , "lineup_limits" .= lineup_limits
-        ]
+    toJSON PointParameters{..} =
+        object
+            [ "style" .= lg_style
+            , "start_UTC" .= start_UTC
+            , "end_UTC" .= end_UTC
+            , "batting" .= lg_battingMults
+            , "pitching" .= lg_pitchingMults
+            , "lineup_limits" .= lineup_limits
+            ]
 
 instance ToJSON BattingMults where
     toJSON :: BattingMults -> Value
-    toJSON BattingMults{..} = object
-        [ "single" .= lgb_single
-        , "double" .= lgb_double
-        , "triple" .= lgb_triple
-        , "homerun" .= lgb_homerun
-        , "rbi" .= lgb_rbi
-        , "run" .= lgb_run
-        , "base_on_balls" .= lgb_base_on_balls
-        , "stolen_base" .= lgb_stolen_base
-        , "hit_by_pitch" .= lgb_hit_by_pitch
-        , "strikeout" .= lgb_strikeout
-        , "caught_stealing" .= lgb_caught_stealing
-        ]
+    toJSON BattingMults{..} =
+        object
+            [ "single" .= lgb_single
+            , "double" .= lgb_double
+            , "triple" .= lgb_triple
+            , "homerun" .= lgb_homerun
+            , "rbi" .= lgb_rbi
+            , "run" .= lgb_run
+            , "base_on_balls" .= lgb_base_on_balls
+            , "stolen_base" .= lgb_stolen_base
+            , "hit_by_pitch" .= lgb_hit_by_pitch
+            , "strikeout" .= lgb_strikeout
+            , "caught_stealing" .= lgb_caught_stealing
+            ]
 
 instance ToJSON PitchingMults where
     toJSON :: PitchingMults -> Value
-    toJSON PitchingMults{..} = object
-        [ "win" .= lgp_win
-        , "save" .= lgp_save
-        , "quality_start" .= lgp_quality_start
-        , "inning_pitched" .= lgp_inning_pitched
-        , "strikeout" .= lgp_strikeout
-        , "complete_game" .= lgp_complete_game
-        , "shutout" .= lgp_shutout
-        , "base_on_balls" .= lgp_base_on_balls
-        , "hits_allowed" .= lgp_hits_allowed
-        , "earned_runs" .= lgp_earned_runs
-        , "hit_batsman" .= lgp_hit_batsman
-        , "loss" .= lgp_loss
-        ]
+    toJSON PitchingMults{..} =
+        object
+            [ "win" .= lgp_win
+            , "save" .= lgp_save
+            , "quality_start" .= lgp_quality_start
+            , "inning_pitched" .= lgp_inning_pitched
+            , "strikeout" .= lgp_strikeout
+            , "complete_game" .= lgp_complete_game
+            , "shutout" .= lgp_shutout
+            , "base_on_balls" .= lgp_base_on_balls
+            , "hits_allowed" .= lgp_hits_allowed
+            , "earned_runs" .= lgp_earned_runs
+            , "hit_batsman" .= lgp_hit_batsman
+            , "loss" .= lgp_loss
+            ]
 
 instance ToJSON LgLineupLmts where
     toJSON :: LgLineupLmts -> Value
-    toJSON LgLineupLmts{..} = object
-        [ "catcher" .= lg_catcher
-        , "first" .= lg_first
-        , "second" .= lg_second
-        , "third" .= lg_third
-        , "shortstop" .= lg_shortstop
-        , "outfield" .= lg_outfield
-        , "utility" .= lg_utility
-        , "s_pitcher" .= lg_s_pitcher
-        , "r_pitcher" .= lg_r_pitcher
-        , "max_size" .= lg_max_size
-        ]
+    toJSON LgLineupLmts{..} =
+        object
+            [ "catcher" .= lg_catcher
+            , "first" .= lg_first
+            , "second" .= lg_second
+            , "third" .= lg_third
+            , "shortstop" .= lg_shortstop
+            , "outfield" .= lg_outfield
+            , "utility" .= lg_utility
+            , "s_pitcher" .= lg_s_pitcher
+            , "r_pitcher" .= lg_r_pitcher
+            , "max_size" .= lg_max_size
+            ]
 
 instance ToJSON DraftParameters where
     toJSON :: DraftParameters -> Value
-    toJSON DraftParameters{..} = object
-        [ "autoDraft" .= autoDraft
-        , "autoDraft_UTC" .= autoDraft_UTC
-        , "draft_limits" .= draft_limits
-        ]
+    toJSON DraftParameters{..} =
+        object
+            [ "autoDraft" .= autoDraft
+            , "autoDraft_UTC" .= autoDraft_UTC
+            , "draft_limits" .= draft_limits
+            ]
 
 instance ToJSON DraftRosterLmts where
     toJSON :: DraftRosterLmts -> Value
-    toJSON DraftRosterLmts{..} = object
-        [ "catcher" .= dr_catcher
-        , "first" .= dr_first
-        , "second" .= dr_second
-        , "third" .= dr_third
-        , "shortstop" .= dr_shortstop
-        , "outfield" .= dr_outfield
-        , "utility" .= dr_utility
-        , "s_pitcher" .= dr_s_pitcher
-        , "r_pitcher" .= dr_r_pitcher
-        ]
+    toJSON DraftRosterLmts{..} =
+        object
+            [ "catcher" .= dr_catcher
+            , "first" .= dr_first
+            , "second" .= dr_second
+            , "third" .= dr_third
+            , "shortstop" .= dr_shortstop
+            , "outfield" .= dr_outfield
+            , "utility" .= dr_utility
+            , "s_pitcher" .= dr_s_pitcher
+            , "r_pitcher" .= dr_r_pitcher
+            ]
