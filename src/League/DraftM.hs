@@ -39,7 +39,7 @@ data DraftConst = DraftConst {
 
 data DraftState = DraftState {
     availableIds :: [O.PlayerID], -- pool of eligible playerIds
-    draft_log :: [T.Text, O.PlayerID], -- a running log draft picks is filled while availableIds shrinks (teamId, O.PlayerID)
+    draft_log :: [(C.TeamID, O.PlayerID)], -- a running log draft picks is filled while availableIds shrinks (teamId, O.PlayerID)
     draft_order :: C.DraftOrder,  -- Enhanced understanding of draft order
     draft_rosters :: [R.LgManager] -- Mapping of team to its drafted players
 }
@@ -100,21 +100,22 @@ runDraftCycles = do
 draftCycleM :: DraftM ()
 draftCycleM = do
     DraftConst {config, officialRoster, rankings} <- ask
-    state@DraftState {availableIds, currentPick, currentRound, draft_rosters} <- get
+    state <- get
 
-    let isTeam1Turn = determineTurn currentPick currentRound
-        teamRankings = if isTeam1Turn then filterTeamRankings rankings (fst $ head draft_rosters) else filterTeamRankings rankings (fst $ head $ tail draft_rosters)
-        nextPlayerId = getNextPlayerId teamRankings availableIds
+    let draftOrder = draft_order state
+        currentRound = length (draft_log state) `div` length draftOrder + 1
+        currentPickIndex = length (draft_log state) `mod` length draftOrder
+        currentTeamId = fst (draftOrder !! currentPickIndex)
+        teamRankings = fromMaybe [] (lookup currentTeamId rankings)
+        nextPlayerId = getNextPlayerId teamRankings (availableIds state)
 
     case find (\p -> O.playerId p == nextPlayerId) (O.people officialRoster) of
         Just player -> do
-            -- Determine the team and update its roster and lineup
-            let updatedDraftRosters = updateTeamRosterAndLineup draft_rosters player isTeam1Turn config
-            -- Remove drafted player from available pool
-            let remainingIds = delete nextPlayerId availableIds
-            -- Update the state with the changes
-            put state {availableIds = remainingIds, currentPick = currentPick + 1, draft_rosters = updatedDraftRosters}
-        Nothing -> throwError $ PlayerNotFound $ fromIntegral $ O.unwrapPlayerId nextPlayerId
+            let updatedDraftRosters = updateTeamRosterAndLineup (draft_rosters state) player currentTeamId config
+            let remainingIds = delete (O.playerId player) (availableIds state)
+            let newDraftLog = draft_log state ++ [(currentTeamId, O.playerId player)]
+            put state {availableIds = remainingIds, draft_log = newDraftLog, draft_rosters = updatedDraftRosters}
+        Nothing -> throwError $ PlayerNotFound $ O.unwrapPlayerId nextPlayerId
 
 -- Filters rankings for a specific team based on the teamId.
 filterTeamRankings :: [PR.RankingData] -> R.LgManager -> [PR.PlayerRanking]
@@ -124,13 +125,27 @@ filterTeamRankings rankings team = maybe [] PR.rankings $ find ((== R.teamId tea
 getNextPlayerId :: [PR.PlayerRanking] -> [O.PlayerID] -> O.PlayerID
 getNextPlayerId rankings availableIds = head [PR.playerId r | r <- rankings, PR.playerId r `elem` availableIds]
 
--- Updates the roster and lineup for the team that is currently picking.
-updateTeamRosterAndLineup :: [(R.LgManager, [Int])] -> O.OfficialPlayer -> Bool -> C.Configuration -> [(R.LgManager, [Int])]
-updateTeamRosterAndLineup draft_rosters player isTeam1Turn config =
-    -- Placeholder logic to demonstrate updating the first team's roster and lineup.
-    -- You need to implement logic to correctly select the team and update its roster and lineup based on the player drafted and configuration settings.
-    draft_rosters  -- This should be replaced with actual logic to update rosters.
+updateTeamRosterAndLineup :: [R.LgManager] -> O.OfficialPlayer -> C.TeamID -> C.Configuration -> [R.LgManager]
+updateTeamRosterAndLineup managers player teamId config =
+    map updateManager managers
+  where
+    -- Check if this is the manager to update and update accordingly
+    updateManager manager@(LgManager { teamId = managerTeamId, roster, current_lineup })
+        | managerTeamId == teamId = 
+            let (newRoster, newLineup) = addToRosterAndLineup config player roster current_lineup
+            in manager { roster = newRoster, current_lineup = newLineup }
+        | otherwise = manager
 
+-- Utilizes the given configuration and player to update the roster and lineup
+addToRosterAndLineup :: C.Configuration -> O.OfficialPlayer -> R.Roster -> R.CurrentLineup -> (R.Roster, R.CurrentLineup)
+addToRosterAndLineup config player roster lineup =
+    -- Assuming the player's primaryPosition corresponds to your roster's positions
+    let position = primaryPosition player
+        -- Modify this function to work with your Configuration and Roster types
+        (updatedRoster, updatedLineup) = case position of
+            "Pitcher" -> addPitcherToRosterAndLineup config player roster lineup
+            _ -> addPlayerToRosterAndLineup config position player roster lineup
+    in (updatedRoster, updatedLineup)
 
 sumDraftRosterLmts :: C.DraftRosterLmts -> Int
 sumDraftRosterLmts lmts = 

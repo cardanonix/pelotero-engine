@@ -1963,11 +1963,11 @@
     "hackage": {
       "flake": false,
       "locked": {
-        "lastModified": 1711066960,
-        "narHash": "sha256-KJtft6ryg++1PfwbbBkFZedOv4xeuge6IV5FBRa0f7s=",
+        "lastModified": 1712449532,
+        "narHash": "sha256-scbBPqo1x6/jNMdm5qAsXhLykziRRyP8NX6/iY21dos=",
         "owner": "input-output-hk",
         "repo": "hackage.nix",
-        "rev": "dca16b7a7eb69d9c0fdf5a4f205b347c19eb80bb",
+        "rev": "307472a2ac8b8cc7258a415b1c15b251b5f0d88d",
         "type": "github"
       },
       "original": {
@@ -3250,11 +3250,11 @@
         "sphinxcontrib-haddock": "sphinxcontrib-haddock_3"
       },
       "locked": {
-        "lastModified": 1710240999,
-        "narHash": "sha256-1xHOr098jXPBssdYvNPE0ExzdnGh2NRUMZ/gVc0xbrc=",
+        "lastModified": 1712150419,
+        "narHash": "sha256-0d/8HEzrSdipb+LhgyPF+MJXLdBTfsP9Hr+TP/FmZSs=",
         "owner": "input-output-hk",
         "repo": "iogx",
-        "rev": "4af1fc259f53b835ba62a5640d098f8a88b2c8d7",
+        "rev": "ec6a07a3bc2b23768d038557865635e14a902287",
         "type": "github"
       },
       "original": {
@@ -3443,11 +3443,11 @@
         "sphinxcontrib-haddock": "sphinxcontrib-haddock_6"
       },
       "locked": {
-        "lastModified": 1709222966,
-        "narHash": "sha256-XS6qdSm3nIZue+gniKV4r29PNg5EWZ6oQURMwhlc/8Y=",
+        "lastModified": 1711386892,
+        "narHash": "sha256-Au/7A2sh0NwqARvv+N3/Wxr14XODD+CCvZGJva1tvPg=",
         "owner": "input-output-hk",
         "repo": "iogx",
-        "rev": "fee2fb63921d14dedfe33390ded3ac2db7b35cfd",
+        "rev": "b8d2456daf9d85a55a62cc59744105d5bfcbf82e",
         "type": "github"
       },
       "original": {
@@ -3687,11 +3687,11 @@
         "sodium": "sodium_4"
       },
       "locked": {
-        "lastModified": 1709083850,
-        "narHash": "sha256-6DQ89ktt8rRVV1pXEyX2JwPjaqS0mQkelkmJmka04rg=",
+        "lastModified": 1712333583,
+        "narHash": "sha256-jVIJWfPvsdpS9hsyWoI7BjkxpXVACiPfqmMu35kZz58=",
         "owner": "input-output-hk",
         "repo": "iohk-nix",
-        "rev": "1c793a53ac0bd99b795c2180eb23d37e8389a74b",
+        "rev": "839040612c0d13687059b5cfaaa3f58c354989c6",
         "type": "github"
       },
       "original": {
@@ -5657,11 +5657,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1711023773,
-        "narHash": "sha256-nHiLI6krsxi5L7s/gTI6QwSyd/Ig+ou21oJTSvDa0Jg=",
+        "lastModified": 1712310049,
+        "narHash": "sha256-/wOPNcRKkL9kBdZ/RnV/mRI2uldCU5ApTz58sFyDeXQ=",
         "owner": "IntersectMBO",
         "repo": "plutus",
-        "rev": "902cfa3ac5f4a97fc9ef45b405f74d659c671ed2",
+        "rev": "9ec15b09238cb139b105a1c79f0f346a3a3350a9",
         "type": "github"
       },
       "original": {

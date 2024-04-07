@@ -104,6 +104,7 @@ outputs = { self, nixpkgs, flake-utils, haskellNix, iohkNix, CHaP, plutus, style
             zlib
             nix-tree
             hackage-mirror
+            cabal
           ];
           shellHook = ''
             # Your existing shellHook here...
