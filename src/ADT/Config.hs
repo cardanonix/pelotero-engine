@@ -133,6 +133,18 @@ data DraftRosterLmts = DraftRosterLmts
     }
     deriving (Show, Eq)
 
+sumDraftRosterLmts :: DraftRosterLmts -> Int
+sumDraftRosterLmts lmts = 
+    dr_catcher lmts +
+    dr_first lmts +
+    dr_second lmts +
+    dr_third lmts +
+    dr_shortstop lmts +
+    dr_outfield lmts +
+    dr_utility lmts +
+    dr_s_pitcher lmts +
+    dr_r_pitcher lmts
+
 -- FromJSON Instances
 instance FromJSON Configuration where
     parseJSON = withObject "Configuration" $ \v ->
