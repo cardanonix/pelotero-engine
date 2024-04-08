@@ -135,36 +135,62 @@ filterTeamRankings rankings team = maybe [] PR.rankings $ find ((== R.teamId tea
 getNextPlayerId :: [PR.PlayerRanking] -> [O.PlayerID] -> O.PlayerID
 getNextPlayerId rankings availableIds = head [PR.playerId r | r <- rankings, PR.playerId r `elem` availableIds]
 
-updateTeamRosterAndLineup :: [R.LgManager] -> O.OfficialPlayer -> C.TeamID -> C.Configuration -> [R.LgManager]
-updateTeamRosterAndLineup managers player teamId config =
-    map updateManager managers
-  where
-    -- Check if this is the manager to update and update accordingly
-    updateManager manager@(R.LgManager { R.teamId = managerTeamId, R.roster, R.current_lineup })
-        | managerTeamId == teamId = 
-            let (newRoster, newLineup) = addToRosterAndLineup config player roster current_lineup
-            in manager { R.roster = newRoster, R.current_lineup = newLineup }
-        | otherwise = manager
+updateTeamRosterAndLineup :: O.OfficialPlayer -> C.TeamID -> DraftM ()
+updateTeamRosterAndLineup player teamId = do
+    draftState <- get
+    let managers = draft_rosters draftState
+        updatedManagers = map (updateManager teamId player) managers
+    put $ draftState { draft_rosters = updatedManagers }
+
+-- Helper function to update a single manager's roster and lineup
+updateManager :: C.TeamID -> O.OfficialPlayer -> R.LgManager -> R.LgManager
+updateManager teamId player manager@(R.LgManager { R.teamId = managerTeamId, R.roster, R.current_lineup })
+    | managerTeamId == teamId =
+        let position = O.primaryPosition player
+        in if position == "Pitcher" then
+               addPitcherToRosterAndLineup player manager
+           else
+               addPlayerToRosterAndLineup position player manager
+    | otherwise = manager
 
 -- Utilizes the given configuration and player to update the roster and lineup
-addToRosterAndLineup :: C.Configuration -> O.OfficialPlayer -> R.Roster -> R.CurrentLineup -> (R.Roster, R.CurrentLineup)
-addToRosterAndLineup config player roster lineup =
-    -- Assuming the player's primaryPosition corresponds to your roster's positions
+addToRosterAndLineup :: O.OfficialPlayer -> DraftM ()
+addToRosterAndLineup player = do
+    draftConst <- getDraftConst
     let position = O.primaryPosition player
-        -- Modify this function to work with your Configuration and Roster types
-        (updatedRoster, updatedLineup) = case position of
-            "Pitcher" -> addPitcherToRosterAndLineup config player roster lineup
-            _ -> addPlayerToRosterAndLineup config position player roster lineup
-    in (updatedRoster, updatedLineup)
+    if position == "Pitcher" then
+        addPitcherToRosterAndLineup draftConst.config player -- need to adjust how we pass and manage rosters/lineups.
+    else
+        addPlayerToRosterAndLineup draftConst.config position player
 
-sumDraftRosterLmts :: C.DraftRosterLmts -> Int
-sumDraftRosterLmts lmts = 
-    C.dr_catcher lmts +
-    C.dr_first lmts +
-    C.dr_second lmts +
-    C.dr_third lmts +
-    C.dr_shortstop lmts +
-    C.dr_outfield lmts +
-    C.dr_utility lmts +
-    C.dr_s_pitcher lmts +
-    C.dr_r_pitcher lmts
+addPlayerToRoster :: T.Text -> O.OfficialPlayer -> DraftM ()
+addPlayerToRoster position player = updateDraftState $ \ds ->
+    let rosterUpdate = addPlayerToPosition position player (draft_rosters ds)
+    in ds { draft_rosters = rosterUpdate }
+
+-- addPitcherToRosterAndLineup :: O.OfficialPlayer -> R.LgManager -> R.LgManager
+-- addPitcherToRosterAndLineup player manager = 
+--     -- Implementation details depend on your roster/lineup logic
+--     -- This is a placeholder to illustrate the expected structure
+--     manager
+
+-- addPlayerToRosterAndLineup :: T.Text -> O.OfficialPlayer -> R.LgManager -> R.LgManager
+-- addPlayerToRosterAndLineup position player manager =
+--     -- Similarly, this function needs to be implemented based on your logic
+--     manager
+
+addPitcherToRosterAndLineup :: C.Configuration -> O.OfficialPlayer -> R.Roster -> R.CurrentLineup -> DraftM (R.Roster, R.CurrentLineup)
+addPitcherToRosterAndLineup config player roster lineup = do
+    draftConst <- getDraftConst
+    let spLimit = queryDraftRosterLmts "s_pitcher" $ C.draft_limits $ C.draft_parameters draftConst.config
+        rpLimit = queryDraftRosterLmts "r_pitcher" $ C.draft_limits $ C.draft_parameters draftConst.config
+        spCount = length $ R.spR roster
+        rpCount = length $ R.rpR roster
+    if spCount < spLimit then do
+        addPlayerToRoster "s_pitcher" player
+        return (roster, lineup) -- You will need to properly update this return value based on the actual roster and lineup changes.
+    else if rpCount < rpLimit then do
+        addPlayerToRoster "r_pitcher" player
+        return (roster, lineup) -- Adjust return value as needed.
+    else
+        return (roster, lineup) -- Return unchanged if limits are reached.
