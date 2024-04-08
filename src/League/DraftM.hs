@@ -41,7 +41,8 @@ data DraftState = DraftState {
     availableIds :: [O.PlayerID], -- pool of eligible playerIds
     draft_log :: [(C.TeamID, O.PlayerID)], -- a running log draft picks is filled while availableIds shrinks (teamId, O.PlayerID)
     draft_order :: C.DraftOrder,  -- Enhanced understanding of draft order
-    draft_rosters :: [R.LgManager] -- Mapping of team to its drafted players
+    draft_rosters :: [R.LgManager], -- Mapping of team to its drafted players
+    draftComplete :: Bool
 }
 
 data DraftError
@@ -79,16 +80,17 @@ instantiateDraft config players rankings = do
              { availableIds = map O.playerId $ O.people players
              , draft_order = draftOrder
              , draft_rosters = validManagers
+             , draftComplete = False
              }
            )
 
 
 -- Initiates the draft process
+-- This snippet assumes correct monad stack alignment and focuses on the structure.
 startDraft :: C.Configuration -> O.OfficialRoster -> [PR.RankingData] -> IO (Either DraftError DraftState)
 startDraft config officialRoster rankings = do
-    let (draftConst, initialState) = instantiateDraft config officialRoster rankings
-    -- Run the draft within the defined monadic stack
-    runExceptT $ evalStateT (runReaderT runDraftCycles draftConst) initialState
+    (draftConst, initialState) <- instantiateDraft config officialRoster rankings
+    runExceptT (evalStateT (runReaderT runDraftCycles draftConst) initialState)
 
 runDraftCycles :: DraftM ()
 runDraftCycles = do
@@ -106,7 +108,7 @@ draftCycleM = do
         currentRound = length (draft_log state) `div` length draftOrder + 1
         currentPickIndex = length (draft_log state) `mod` length draftOrder
         currentTeamId = fst (draftOrder !! currentPickIndex)
-        teamRankings = fromMaybe [] (lookup currentTeamId rankings)
+        teamRankings = fromMaybe [] $ lookup currentTeamId (map (\r -> (PR.teamId r, PR.rankings r)) rankings)
         nextPlayerId = getNextPlayerId teamRankings (availableIds state)
 
     case find (\p -> O.playerId p == nextPlayerId) (O.people officialRoster) of
@@ -130,17 +132,17 @@ updateTeamRosterAndLineup managers player teamId config =
     map updateManager managers
   where
     -- Check if this is the manager to update and update accordingly
-    updateManager manager@(LgManager { teamId = managerTeamId, roster, current_lineup })
+    updateManager manager@(R.LgManager { R.teamId = managerTeamId, R.roster, R.current_lineup })
         | managerTeamId == teamId = 
             let (newRoster, newLineup) = addToRosterAndLineup config player roster current_lineup
-            in manager { roster = newRoster, current_lineup = newLineup }
+            in manager { R.roster = newRoster, R.current_lineup = newLineup }
         | otherwise = manager
 
 -- Utilizes the given configuration and player to update the roster and lineup
 addToRosterAndLineup :: C.Configuration -> O.OfficialPlayer -> R.Roster -> R.CurrentLineup -> (R.Roster, R.CurrentLineup)
 addToRosterAndLineup config player roster lineup =
     -- Assuming the player's primaryPosition corresponds to your roster's positions
-    let position = primaryPosition player
+    let position = O.primaryPosition player
         -- Modify this function to work with your Configuration and Roster types
         (updatedRoster, updatedLineup) = case position of
             "Pitcher" -> addPitcherToRosterAndLineup config player roster lineup
