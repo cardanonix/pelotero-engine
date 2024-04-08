@@ -29,7 +29,8 @@ import qualified PlayerRanking as PR
 import Validators
 import Utility
 
-type DraftM a = ExceptT DraftError (ReaderT DraftConst (StateT DraftState IO)) a
+-- type DraftM a = ExceptT DraftError (ReaderT DraftConst (StateT DraftState IO)) a
+type DraftM a = ReaderT DraftConst (StateT DraftState (ExceptT DraftError IO)) a
 
 data DraftConst = DraftConst {
     config :: C.Configuration,
@@ -90,7 +91,14 @@ instantiateDraft config players rankings = do
 startDraft :: C.Configuration -> O.OfficialRoster -> [PR.RankingData] -> IO (Either DraftError DraftState)
 startDraft config officialRoster rankings = do
     (draftConst, initialState) <- instantiateDraft config officialRoster rankings
-    runExceptT (evalStateT (runReaderT runDraftCycles draftConst) initialState)
+    let runDraft :: ReaderT DraftConst (StateT DraftState (ExceptT DraftError IO)) ()
+        runDraft = runDraftCycles
+    let stateAction :: StateT DraftState (ExceptT DraftError IO) ()
+        stateAction = runReaderT runDraft draftConst
+    let exceptAction :: ExceptT DraftError IO DraftState
+        exceptAction = execStateT stateAction initialState
+    runExceptT exceptAction
+
 
 runDraftCycles :: DraftM ()
 runDraftCycles = do
