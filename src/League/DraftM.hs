@@ -43,7 +43,7 @@ data DraftState = DraftState {
     draft_log :: [(C.TeamID, O.PlayerID)], -- a running log draft picks is filled while availableIds shrinks (teamId, O.PlayerID)
     draft_order :: C.DraftOrder,  -- Enhanced understanding of draft order
     draft_rosters :: [R.LgManager], -- Mapping of team to its drafted players
-    draftComplete :: Bool
+    draftComplete :: Bool -- only true when draft is complete
 }
 
 data DraftError
