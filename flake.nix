@@ -92,10 +92,10 @@ outputs = { self, nixpkgs, flake-utils, haskellNix, iohkNix, CHaP, plutus, style
           buildInputs = [
             (pkgs.haskellPackages.ghcWithPackages (hsPkgs: with hsPkgs; [
               # Assuming pelotero-engine is a package within your project
-              generators
-              haskell-language-server
-              hoogle
-              fourmolu
+              # generators
+              # haskell-language-server
+              # hoogle
+              # fourmolu
             ]))
             pkgs.zlib
           ];
@@ -103,8 +103,8 @@ outputs = { self, nixpkgs, flake-utils, haskellNix, iohkNix, CHaP, plutus, style
             haskellPackages.fourmolu
             zlib
             nix-tree
-            hackage-mirror
-            cabal
+            # hackage-mirror
+            cabal-install
           ];
           shellHook = ''
             # Your existing shellHook here...

@@ -22,57 +22,73 @@ import qualified PlayerRanking as PR
 import Validators ( countPlayersOnRoster, findPlayer, queryDraftRosterLmts, queryLgLineupLmts )
 import Utility
 
+-- Configuration and state data structures confined to draft
+data DraftConfig = DraftConfig {
+    cfg :: C.Configuration,
+    officialPlayers :: [O.OfficialPlayer],
+    draftOrder :: C.DraftOrder
+}
 
-draftPlayers :: [PR.PlayerRanking] -> [PR.PlayerRanking] -> [O.OfficialPlayer] -> C.Configuration -> IO ((R.Roster, R.CurrentLineup), (R.Roster, R.CurrentLineup))
-draftPlayers rankings1 rankings2 officialPlayers config = do
-  let officialPlayerIds = map O.playerId officialPlayers
-      rankingsPairs = zip rankings1 rankings2
-      initialTurn = True
-      initialState = (mkEmptyRoster, mkEmptyLineup, mkEmptyRoster, mkEmptyLineup, officialPlayerIds, initialTurn)
+data TeamState = TeamState {
+    teamId :: C.TeamID,
+    roster :: R.Roster,
+    lineup :: R.CurrentLineup
+} deriving (Show, Eq)
 
-  -- Correct the structure of rankingsPairs to match the expected input for foldM
-  let rankingsPairsWithTurn = map (\pair -> (pair, initialTurn)) rankingsPairs
+data DraftState = DraftState {
+    teams :: [TeamState],
+    availablePlayerIds :: [O.PlayerID],
+    draftHistory :: [(C.TeamID, O.PlayerID)],
+    currentTeamIndex :: Int,
+    draftOrder :: C.DraftOrder,
+    draftComplete :: Bool
+} deriving (Show, Eq)
 
-  (finalRoster1, finalLineup1, finalRoster2, finalLineup2, _, _) <- foldM (draftCycle config officialPlayers) initialState rankingsPairsWithTurn
+-- Initialize the draft state
+instantiateDraft :: C.Configuration -> O.OfficialRoster -> [PR.RankingData] -> IO DraftState
+instantiateDraft config players rankings = do
+    let teamIds = C.teamId config
+        validRankings = filter (\r -> PR.teamId r `elem` teamIds) rankings
+        draftOrder = generateDraftOrder config validRankings
+        teams = map (\tid -> TeamState tid R.mkEmptyRoster R.mkEmptyLineup) teamIds
+    return DraftState {
+        teams = teams,
+        availablePlayerIds = map O.playerId $ O.people players,
+        draftHistory = [],
+        currentTeamIndex = 0,
+        draftOrder = draftOrder,
+        draftComplete = False
+    }
 
-  return ((finalRoster1, finalLineup1), (finalRoster2, finalLineup2))
+draftPlayers :: DraftConfig -> DraftState -> IO DraftState
+draftPlayers config state
+    | draftComplete state = return state
+    | otherwise = do
+        let teamId = draftOrder config !! currentTeamIndex state `mod` length (draftOrder config)
+        let (newState, maybeError) = draftCycle config state teamId
+        case maybeError of
+            Just err -> putStrLn ("Error: " ++ err) >> return state
+            Nothing -> draftPlayers config newState
 
+updateState :: DraftState -> O.OfficialPlayer -> C.TeamID -> DraftState
+updateState state player teamId = 
+    let (newRosters, isNewPlayer) = addToRosterAndLineup (cfg $ config state) player (fst $ rosters state) (snd $ rosters state)
+        newDraftHistory = (teamId, O.playerId player) : draftHistory state
+        newAvailablePlayerIds = delete (O.playerId player) (availablePlayerIds state)
+        newCurrentTeamIndex = (currentTeamIndex state + 1) `mod` length (draftOrder $ config state)
+    in if isNewPlayer then state {rosters = newRosters, draftHistory = newDraftHistory, availablePlayerIds = newAvailablePlayerIds, currentTeamIndex = newCurrentTeamIndex}
+       else state
 
-findAndRemovePlayer :: O.PlayerID -> [O.OfficialPlayer] -> [O.PlayerID] -> (Maybe O.OfficialPlayer, [O.PlayerID])
-findAndRemovePlayer playerId officialPlayers availablePlayers =
-  let playerFound = find (\player -> O.playerId player == playerId) officialPlayers
-      newAvailablePlayers = filter (/= playerId) availablePlayers
-  in (playerFound, newAvailablePlayers)
+draftCycle :: DraftConfig -> DraftState -> C.TeamID -> (DraftState, Maybe String)
+draftCycle config state teamId = 
+    case lookup teamId [(teamId t, t) | t <- teams state] of
+        Just teamState -> runDraftCycle config state teamState
+        Nothing -> (state, Just "Team not found")
 
+runDraftCycle :: DraftConfig -> DraftState -> TeamState -> (DraftState, Maybe String)
+runDraftCycle config state teamState = undefined
 
-draftCycle :: C.Configuration -> [O.OfficialPlayer] -> (R.Roster, R.CurrentLineup, R.Roster, R.CurrentLineup, [O.PlayerID], Bool)
-           -> ((PR.PlayerRanking, PR.PlayerRanking), Bool) -> IO (R.Roster, R.CurrentLineup, R.Roster, R.CurrentLineup, [O.PlayerID], Bool)
-draftCycle config officialPlayers (roster1, lineup1, roster2, lineup2, availablePlayers, isTeam1Turn) ((ranking1, ranking2), _) = do
-  let selectedRanking = if isTeam1Turn then ranking1 else ranking2
-      playerIdToDraft = PR.playerId selectedRanking
-      maybePlayerToDraft = find (\player -> O.playerId player == playerIdToDraft) officialPlayers
-
-  case maybePlayerToDraft of
-    Just player -> 
-      if playerIdToDraft `elem` availablePlayers then do
-        let updateFn = addToRosterAndLineup config player
-            updatedAvailablePlayers = delete playerIdToDraft availablePlayers
-            (newRoster1, newLineup1) = if isTeam1Turn then updateFn roster1 lineup1 else (roster1, lineup1)
-            (newRoster2, newLineup2) = if not isTeam1Turn then updateFn roster2 lineup2 else (roster2, lineup2)
-
-        putStrLn $ "Drafting player with ID: " ++ show playerIdToDraft
-        return (newRoster1, newLineup1, newRoster2, newLineup2, updatedAvailablePlayers, not isTeam1Turn)
-      else
-        -- It's not this player's turn or they've been drafted; don't change the state.
-        return (roster1, lineup1, roster2, lineup2, availablePlayers, not isTeam1Turn)
-
-    Nothing -> do
-      -- The player was not found in the officialPlayers list; this should not happen if data is consistent.
-      putStrLn $ "Player with ID: " ++ show playerIdToDraft ++ " not found in official players list."
-      return (roster1, lineup1, roster2, lineup2, availablePlayers, isTeam1Turn)
-
-
-addToRosterAndLineup :: C.Configuration -> O.OfficialPlayer -> R.Roster -> R.CurrentLineup -> (R.Roster, R.CurrentLineup)
+addToRosterAndLineup :: C.Configuration -> O.OfficialPlayer -> R.Roster -> R.CurrentLineup -> ((R.Roster, R.CurrentLineup), Bool)
 addToRosterAndLineup config player roster lineup =
     let positionText = O.primaryPosition player
         draftPositionText = positionCodeToDraftText positionText

@@ -1,0 +1,13 @@
+Draftin in Plain English:
+
+Define Types and Dependencies: Imports necessary Haskell libraries and modules, sets up some compiler pragmas and language extensions, and defines the module named Draft.
+
+Drafting Process: Implements a function draftPlayers to draft players into two teams. It starts with empty rosters and lineups, pairs rankings of players, and iterates over these pairs to draft players turn-by-turn for each team using a fold operation.
+
+Player Selection: Defines findAndRemovePlayer to search for a player in a list of available players and remove them from the list of available IDs once found.
+
+Drafting Cycle Logic: The function draftCycle is executed for each pair of player rankings, handling the drafting of a player to a team's roster and lineup based on whose turn it is, updating the state accordingly.
+
+Roster and Lineup Updating: addToRosterAndLineup is responsible for adding a drafted player to the correct position in both the roster and lineup based on configuration settings.
+
+Lineup Modification: Multiple functions (addPlayerToLineup, addPlayerToPosition, addPitcherToRoster, addBatterToRoster) handle the specific addition of players to positions in the lineup or roster, adhering to limits defined in the configuration.
