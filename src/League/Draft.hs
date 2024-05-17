@@ -88,7 +88,20 @@ draftCycle config state teamId =
         Nothing -> (state, Just "Team not found")
 
 runDraftCycle :: DraftConfig -> DraftState -> TeamState -> (DraftState, Maybe String)
-runDraftCycle config state teamState = undefined
+runDraftCycle config state teamState =
+    case selectNextPlayer (cfg config) (availablePlayerIds state) of
+        Nothing -> (state { draftComplete = True }, Nothing)
+        Just player -> 
+            let newState = updateState config state player (teamId teamState)
+            in if teamState == newState
+               then (state, Just "Failed to add player to roster or lineup.")
+               else (newState, Nothing)
+
+-- Helper function to select the next best available player based on some ranking or strategy
+selectNextPlayer :: C.Configuration -> [O.PlayerID] -> Maybe O.OfficialPlayer
+selectNextPlayer config availablePlayerIds =
+    let rankedPlayers = PR.rankings $ C.playerRankings config
+    in find (\p -> O.playerId p `elem` availablePlayerIds) rankedPlayers
 
 addToRosterAndLineup :: C.Configuration -> O.OfficialPlayer -> R.Roster -> R.CurrentLineup -> ((R.Roster, R.CurrentLineup), Bool)
 addToRosterAndLineup config player roster lineup =
