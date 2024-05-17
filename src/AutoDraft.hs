@@ -58,7 +58,7 @@ main = do
                                     finalDraftState <- draftPlayers draftConfig initialDraftState
 
                                     -- Extract final rosters and lineups
-                                    let finalRostersAndLineups = map (\team -> (R.roster team, R.lineup team)) (teams finalDraftState)
+                                    let finalRostersAndLineups = map (\team -> (R.roster team, lineup team)) (teams finalDraftState)
                                         (finalRoster1, finalLineup1) = finalRostersAndLineups !! 0
                                         (finalRoster2, finalLineup2) = finalRostersAndLineups !! 1
 
