@@ -21,26 +21,12 @@ import Data.List (
     sortOn,
  )
 import Data.Maybe (fromMaybe, mapMaybe)
-
 import qualified Config as C
 import qualified OfficialRoster as O
 import qualified PlayerRanking as PR
 import qualified Roster as R
 import Validators
-
--- ( countPlayersOnRoster
--- , findPlayer
--- , queryDraftRosterLmts
--- )
 import Utility
-
--- ( positionCodeToDraftText
--- ,  readJson
--- ,  writeJson
--- , positionCodeToDraftText
--- , createLgManager
---   )
-
 import Draft
 
 main :: IO ()
@@ -61,16 +47,25 @@ main = do
                             case eitherConfig of
                                 Left error -> putStrLn $ "Failed to load config: " ++ show error
                                 Right config -> do
-                                    let rankings1 = PR.rankings r1
-                                        rankings2 = PR.rankings r2
+                                    let rankingsData = [r1, r2]
                                         op = O.people roster
-                                        teamId1 = PR.teamId r1
-                                        teamId2 = PR.teamId r2
+                                        draftConfig = DraftConfig { cfg = config, officialPlayers = op }
+
+                                    -- Initialize the draft state
+                                    initialDraftState <- instantiateDraft config roster rankingsData
+                                    
+                                    -- Run the draft process
+                                    finalDraftState <- draftPlayers draftConfig initialDraftState
+
+                                    -- Extract final rosters and lineups
+                                    let finalRostersAndLineups = map (\team -> (R.roster team, R.lineup team)) (teams finalDraftState)
+                                        (finalRoster1, finalLineup1) = finalRostersAndLineups !! 0
+                                        (finalRoster2, finalLineup2) = finalRostersAndLineups !! 1
+
+                                    let teamId1 = C.teamId config !! 0
+                                        teamId2 = C.teamId config !! 1
                                         teamId1Short = T.take 12 $ C.unwrapTeamID teamId1
                                         teamId2Short = T.take 12 $ C.unwrapTeamID teamId2
-
-                                    -- Draft players for both teams and obtain rosters and lineups
-                                    ((finalRoster1, finalLineup1), (finalRoster2, finalLineup2)) <- draftPlayers rankings1 rankings2 op config
 
                                     let lgManager1 = createLgManager config teamId1 finalLineup1 finalRoster1
                                         lgManager2 = createLgManager config teamId2 finalLineup2 finalRoster2
