@@ -3,11 +3,38 @@
 # Turn off command echo
 set +x
 
+# Function to load project name and executables from .cabal file
+load_project_info_from_cabal() {
+  # Find the .cabal file in the current directory
+  local cabal_file=$(find . -maxdepth 1 -name "*.cabal")
+  if [[ -z "$cabal_file" ]]; then
+    echo "No .cabal file found in the current directory."
+    exit 1
+  fi
+
+  # Parse the .cabal file for the project name
+  local project_name=$(grep "^name:" "$cabal_file" | awk '{print $2}')
+  if [[ -z "$project_name" ]]; then
+    echo "No project name found in the .cabal file."
+    exit 1
+  fi
+  export PROJECT_NAME="$project_name"
+
+  # Initialize the executables array
+  declare -gA executables
+
+  # Parse the .cabal file for executable names
+  while IFS= read -r line; do
+    local exe_name=$(echo "$line" | awk '{print $2}')
+    executables["$exe_name"]=""
+  done < <(grep "^executable" "$cabal_file")
+}
+
 # Function to build a specific executable
 build_exe() {
   local exeName=$1
   echo "Building $exeName..."
-  nix build .#pelotero-engine:exe:$exeName --show-trace
+  nix build .#$PROJECT_NAME:exe:$exeName --show-trace
 }
 
 # Function to build all executables
@@ -41,18 +68,8 @@ update_flake() {
   echo "Flake update complete."
 }
 
-# Array of executables
-declare -A executables=(
-  ["playground"]=""
-  ["head2head"]=""
-  ["fetchStats"]="Enter two dates (YYYY-MM-DD YYYY-MM-DD): "
-  ["roster"]="Enter a 4 digit year: "
-  ["league"]=""
-  ["test_adt"]=""
-  ["official"]=""
-  ["autodraft"]=""
-  ["generators"]=""
-)
+# Load project info from the .cabal file
+load_project_info_from_cabal
 
 # Main menu
 PS3='Please enter your choice: '
