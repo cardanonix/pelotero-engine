@@ -44,13 +44,11 @@ data DraftState = DraftState {
     teamRankings :: HM.HashMap C.TeamID PR.PlayerRankings -- Changed to use PlayerRankings directly
 } deriving (Show, Eq)
 
--- Initialize the draft state
-instantiateDraft :: C.Configuration -> O.OfficialRoster -> [PR.RankingData] -> IO DraftState
+instantiateDraft :: C.Configuration -> O.OfficialRoster -> [RankingData] -> IO DraftState
 instantiateDraft config players rankings = do
     let teamIds = C.teamId config
-        validRankings = filter (\r -> PR.teamId r `elem` teamIds) rankings
-        teamRankings = HM.fromList [(tid, filter (\r -> PR.teamId r == tid) validRankings) | tid <- teamIds]
-    draftOrder <- generateDraftOrder config validRankings
+        teamRankings = HM.fromList [(r.teamId, r.rankings) | r <- rankings, r.teamId `elem` teamIds]
+    draftOrder <- generateDraftOrder config rankings
     let teams = map (\tid -> TeamState tid mkEmptyRoster mkEmptyLineup) teamIds
     return DraftState {
         teams = teams,
