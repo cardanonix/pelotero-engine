@@ -40,7 +40,8 @@ data DraftState = DraftState {
     draftHistory :: [(C.TeamID, O.PlayerID)],
     currentTeamIndex :: Int,
     draftOrder :: [(C.TeamID, Int)],
-    draftComplete :: Bool
+    draftComplete :: Bool,
+    teamRankings :: HM.HashMap C.TeamID [PR.RankingData] -- New field
 } deriving (Show, Eq)
 
 -- Initialize the draft state
