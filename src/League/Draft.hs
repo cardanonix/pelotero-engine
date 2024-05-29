@@ -83,20 +83,24 @@ updateState config state player teamId =
        else state
 
 draftCycle :: DraftConfig -> DraftState -> C.TeamID -> (DraftState, Maybe String)
-draftCycle config state teamId = 
+draftCycle config state teamId =
     case lookup teamId [(Draft.teamId t, t) | t <- teams state] of
-        Just teamState -> runDraftCycle config state teamState
+        Just teamState ->
+            let availableIds = availablePlayerIds state
+                teamSpecificRankings = teamRankings state
+                maybePlayer = selectNextPlayer teamId teamSpecificRankings availableIds
+            in case maybePlayer of
+                Nothing -> (state { draftComplete = True }, Nothing)
+                Just player -> 
+                    let newState = updateState config state player teamId
+                    in if teamState == newState
+                       then (state, Just "Failed to add player to roster or lineup.")
+                       else (newState, Nothing)
         Nothing -> (state, Just "Team not found")
 
 runDraftCycle :: DraftConfig -> DraftState -> TeamState -> (DraftState, Maybe String)
-runDraftCycle config state teamState =
-    case selectNextPlayer (cfg config) (availablePlayerIds state) of
-        Nothing -> (state { draftComplete = True }, Nothing)
-        Just player -> 
-            let newState = updateState config state player (teamId teamState)
-            in if teamState == newState
-               then (state, Just "Failed to add player to roster or lineup.")
-               else (newState, Nothing)
+runDraftCycle config state teamState = 
+    draftCycle config state (teamId teamState)
 
 -- Helper function to select the next best available player based on the team's rankings
 selectNextPlayer :: C.TeamID -> HM.HashMap C.TeamID PlayerRankings -> [O.PlayerID] -> Maybe O.OfficialPlayer
