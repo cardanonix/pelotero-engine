@@ -41,7 +41,7 @@ data DraftState = DraftState {
     currentTeamIndex :: Int,
     draftOrder :: [(C.TeamID, Int)],
     draftComplete :: Bool,
-    teamRankings :: HM.HashMap C.TeamID [PR.RankingData] -- New field
+    teamRankings :: HM.HashMap C.TeamID PlayerRankings -- Changed to use PlayerRankings directly
 } deriving (Show, Eq)
 
 -- Initialize the draft state
