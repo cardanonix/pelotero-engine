@@ -98,11 +98,11 @@ runDraftCycle config state teamState =
                then (state, Just "Failed to add player to roster or lineup.")
                else (newState, Nothing)
 
--- Helper function to select the next best available player based on some ranking or strategy
-selectNextPlayer :: C.Configuration -> [O.PlayerID] -> Maybe O.OfficialPlayer
-selectNextPlayer config availablePlayerIds =
-    let rankedPlayers = PR.rankings $ C.playerRankings config
-    in find (\p -> O.playerId p `elem` availablePlayerIds) rankedPlayers
+-- Helper function to select the next best available player based on the team's rankings
+selectNextPlayer :: C.TeamID -> HM.HashMap C.TeamID PlayerRankings -> [O.PlayerID] -> Maybe O.OfficialPlayer
+selectNextPlayer teamId rankings availablePlayerIds =
+    let rankedPlayers = fromMaybe [] (HM.lookup teamId rankings)
+    in find (\r -> r.playerId `elem` availablePlayerIds) rankedPlayers >>= \pr -> find (\p -> O.playerId p == pr.playerId) availablePlayerIds
 
 addToRosterAndLineup :: C.Configuration -> O.OfficialPlayer -> R.Roster -> R.CurrentLineup -> ((R.Roster, R.CurrentLineup), Bool)
 addToRosterAndLineup config player roster lineup =
