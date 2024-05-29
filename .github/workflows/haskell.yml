@@ -30,10 +30,10 @@ jobs:
         # Run the TUI script in non-interactive mode to build all executables
         ./tui --build-all
         
-    - name: Run specific tests
-      run: |
+   # - name: Run specific tests
+     # run: |
         # Example of running a specific executable with arguments
-        ./result/bin/your-executable your-arguments
+        # ./result/bin/your-executable your-arguments
 
     # Optional: Cache Nix store to speed up builds
     - uses: actions/cache@v2
