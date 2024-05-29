@@ -19,29 +19,21 @@ jobs:
     - name: Setup Nix with Flakes support
       uses: cachix/install-nix-action@v15
       with:
-        # Removed install_url to rely on the action's default installation method
         extra_nix_config: |
           experimental-features = nix-command flakes
 
-    - name: Build and run with Nix Flake
+    - name: Run TUI build script
       run: |
-        nix build .#pelotero-engine:exe:generators --accept-flake-config
-        ./result/bin/generators
-        nix build .#pelotero-engine:exe:playground --accept-flake-config
-        nix build .#pelotero-engine:exe:head2head --accept-flake-config
-        nix build .#pelotero-engine:exe:league --accept-flake-config
-        nix build .#pelotero-engine:exe:test_adt --accept-flake-config
-        nix build .#pelotero-engine:exe:official --accept-flake-config
-        nix build .#pelotero-engine:exe:autodraft --accept-flake-config
-        nix build .#pelotero-engine:exe:fetchStats --accept-flake-config
-        nix build .#pelotero-engine:exe:roster --accept-flake-config
-
-    # - name: Run Generator
-    #   run: ./result/bin/generators
-
-    # - name: Run Roster
-    #   run: |
-    #     ./result/bin/roster 2024        
+        # Make the TUI script executable
+        chmod +x ./tui
+        
+        # Run the TUI script in non-interactive mode to build all executables
+        ./tui --build-all
+        
+    - name: Run specific tests
+      run: |
+        # Example of running a specific executable with arguments
+        ./result/bin/your-executable your-arguments
 
     # Optional: Cache Nix store to speed up builds
     - uses: actions/cache@v2

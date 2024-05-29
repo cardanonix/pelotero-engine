@@ -78,7 +78,7 @@ To do anything in this library using nix, I made simple TUI:
 
 ```
 nix develop github:cardanonix/scraperProto
-./tui
+./tui --build-all
 ```
 
 # Note
