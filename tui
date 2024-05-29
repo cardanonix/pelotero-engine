@@ -34,7 +34,7 @@ load_project_info_from_cabal() {
 build_exe() {
   local exeName=$1
   echo "Building $exeName..."
-  nix build .#$PROJECT_NAME:exe:$exeName --show-trace
+  nix build .#$PROJECT_NAME:exe:$exeName --show-trace --accept-flake-config
 }
 
 # Function to build all executables
@@ -70,6 +70,12 @@ update_flake() {
 
 # Load project info from the .cabal file
 load_project_info_from_cabal
+
+# Check for command-line arguments
+if [[ "$1" == "--build-all" ]]; then
+  build_all_exes
+  exit 0
+fi
 
 # Main menu
 PS3='Please enter your choice: '
