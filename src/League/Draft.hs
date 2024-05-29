@@ -7,19 +7,19 @@ module Draft where
 
 import Control.Monad (forM, foldM)
 import Data.Aeson (FromJSON, ToJSON, decode, encode, withObject, (.:))
-import qualified Data.HashMap.Strict as HM
+import qualified Data.Map.Strict as M
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
 import GHC.Generics (Generic)
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
 import Data.Maybe (mapMaybe, fromMaybe, fromJust)
-import Data.List (find, delete, sortOn, sortBy, findIndex, sortOn, findIndex, sortOn, findIndex, sortOn, findIndex)
+import Data.List (find, delete)
 import qualified Config as C
 import qualified OfficialRoster as O
 import qualified Roster as R
 import qualified PlayerRanking as PR
-import Validators ( countPlayersOnRoster, findPlayer, queryDraftRosterLmts, queryLgLineupLmts )
+import Validators (countPlayersOnRoster, findPlayer, queryDraftRosterLmts, queryLgLineupLmts)
 import Utility
 
 -- Configuration and state data structures confined to draft
@@ -28,28 +28,22 @@ data DraftConfig = DraftConfig {
     officialPlayers :: [O.OfficialPlayer]
 }
 
-data TeamState = TeamState {
-    teamId :: C.TeamID,
-    roster :: R.Roster,
-    lineup :: R.CurrentLineup
-} deriving (Show, Eq)
-
 data DraftState = DraftState {
-    teams :: [TeamState],
+    teams :: [R.LgManager],
     availablePlayerIds :: [O.PlayerID],
     draftHistory :: [(C.TeamID, O.PlayerID)],
     currentTeamIndex :: Int,
     draftOrder :: [(C.TeamID, Int)],
     draftComplete :: Bool,
-    teamRankings :: HM.HashMap C.TeamID PR.PlayerRankings -- Changed to use PlayerRankings directly
+    teamRankings :: M.Map C.TeamID PR.PlayerRankings
 } deriving (Show, Eq)
 
 instantiateDraft :: C.Configuration -> O.OfficialRoster -> [PR.RankingData] -> IO DraftState
 instantiateDraft config players rankings = do
     let teamIds = C.teamId config
-        teamRankings = HM.fromList [(PR.teamId r, PR.rankings r) | r <- rankings, PR.teamId r `elem` teamIds]
+        teamRankings = M.fromList [(PR.teamId r, PR.rankings r) | r <- rankings, PR.teamId r `elem` teamIds]
     draftOrder <- generateDraftOrder config rankings
-    let teams = map (\tid -> TeamState tid mkEmptyRoster mkEmptyLineup) teamIds
+    let teams = map (\tid -> R.LgManager "active" (C.commissioner config) tid (C.leagueID config) mkEmptyLineup mkEmptyRoster) teamIds
     return DraftState {
         teams = teams,
         availablePlayerIds = map O.playerId $ O.people players,
@@ -73,19 +67,20 @@ draftPlayers config state
 
 updateState :: DraftConfig -> DraftState -> O.OfficialPlayer -> C.TeamID -> DraftState
 updateState config state player teamId = 
-    let team = fromJust $ find (\t -> C.unwrapTeamID (Draft.teamId t) == C.unwrapTeamID teamId) (teams state)
-        (newRosters, isNewPlayer) = addToRosterAndLineup (cfg config) player (roster team) (lineup team)
+    let team = fromJust $ find (\t -> C.unwrapTeamID (R.teamId t) == C.unwrapTeamID teamId) (teams state)
+        (newRosters, isNewPlayer) = addToRosterAndLineup (cfg config) player (R.roster team) (R.current_lineup team)
         newDraftHistory = (teamId, O.playerId player) : draftHistory state
         newAvailablePlayerIds = delete (O.playerId player) (availablePlayerIds state)
         newCurrentTeamIndex = (currentTeamIndex state + 1) `mod` length (draftOrder state)
-        newTeams = map (\t -> if C.unwrapTeamID (Draft.teamId t) == C.unwrapTeamID teamId then t { roster = fst newRosters, lineup = snd newRosters } else t) (teams state)
+        newTeams = map (\t -> if C.unwrapTeamID (R.teamId t) == C.unwrapTeamID teamId 
+                              then t { R.roster = fst newRosters, R.current_lineup = snd newRosters } 
+                              else t) (teams state)
     in if isNewPlayer then state { teams = newTeams, draftHistory = newDraftHistory, availablePlayerIds = newAvailablePlayerIds, currentTeamIndex = newCurrentTeamIndex }
        else state
 
--- Update draftCycle to use team-specific rankings
 draftCycle :: DraftConfig -> DraftState -> C.TeamID -> (DraftState, Maybe String)
 draftCycle config state teamId =
-    case lookup teamId [(tid, t) | t@(TeamState tid _ _) <- teams state] of
+    case lookup teamId [(tid, t) | t@(R.LgManager _ _ tid _ _ _) <- teams state] of
         Just teamState ->
             let availablePlayers = filter (\p -> O.playerId p `elem` availablePlayerIds state) (officialPlayers config)
                 teamSpecificRankings = teamRankings state
@@ -99,15 +94,13 @@ draftCycle config state teamId =
                        else (newState, Nothing)
         Nothing -> (state, Just "Team not found")
 
-
-runDraftCycle :: DraftConfig -> DraftState -> TeamState -> (DraftState, Maybe String)
+runDraftCycle :: DraftConfig -> DraftState -> R.LgManager -> (DraftState, Maybe String)
 runDraftCycle config state teamState = 
-    draftCycle config state (teamId teamState)
+    draftCycle config state (R.teamId teamState)
 
--- Helper function to select the next best available player based on the team's rankings
-selectNextPlayer :: C.TeamID -> HM.HashMap C.TeamID PR.PlayerRankings -> [O.OfficialPlayer] -> Maybe O.OfficialPlayer
+selectNextPlayer :: C.TeamID -> M.Map C.TeamID PR.PlayerRankings -> [O.OfficialPlayer] -> Maybe O.OfficialPlayer
 selectNextPlayer teamId rankings availablePlayers =
-    let rankedPlayers = fromMaybe [] (HM.lookup teamId rankings)
+    let rankedPlayers = fromMaybe [] (M.lookup teamId rankings)
         rankedPlayerIds = map PR.playerId rankedPlayers
     in find (\p -> O.playerId p `elem` rankedPlayerIds) availablePlayers
 
@@ -148,30 +141,30 @@ addPlayerToLineup position player lineup limits =
 
 addPlayerToPosition :: T.Text -> O.OfficialPlayer -> R.Roster -> R.Roster
 addPlayerToPosition position player roster =
-  let playerIdText = O.playerId player
-  in case position of
-       "s_pitcher" -> roster { R.spR = playerIdText : R.spR roster }
-       "r_pitcher" -> roster { R.rpR = playerIdText : R.rpR roster }
-       "catcher" -> roster { R.cR = playerIdText : R.cR roster }
-       "first" -> roster { R.b1R = playerIdText : R.b1R roster }
-       "second" -> roster { R.b2R = playerIdText : R.b2R roster }
-       "third" -> roster { R.b3R = playerIdText : R.b3R roster }
-       "shortstop" -> roster { R.ssR = playerIdText : R.ssR roster }
-       "outfield" -> roster { R.ofR = playerIdText : R.ofR roster }
-       "utility" -> roster { R.uR = playerIdText : R.uR roster }
-       _ -> roster -- Default case if position does not match
+    let playerIdText = O.playerId player
+    in case position of
+        "s_pitcher" -> roster { R.spR = playerIdText : R.spR roster }
+        "r_pitcher" -> roster { R.rpR = playerIdText : R.rpR roster }
+        "catcher" -> roster { R.cR = playerIdText : R.cR roster }
+        "first" -> roster { R.b1R = playerIdText : R.b1R roster }
+        "second" -> roster { R.b2R = playerIdText : R.b2R roster }
+        "third" -> roster { R.b3R = playerIdText : R.b3R roster }
+        "shortstop" -> roster { R.ssR = playerIdText : R.ssR roster }
+        "outfield" -> roster { R.ofR = playerIdText : R.ofR roster }
+        "utility" -> roster { R.uR = playerIdText : R.uR roster }
+        _ -> roster
 
 addPitcherToRoster :: C.Configuration -> O.OfficialPlayer -> R.Roster -> (R.Roster, T.Text)
 addPitcherToRoster config player roster =
-  let spLimit = queryDraftRosterLmts "s_pitcher" $ C.draft_limits $ C.draft_parameters config
-      rpLimit = queryDraftRosterLmts "r_pitcher" $ C.draft_limits $ C.draft_parameters config
-      spCount = length $ R.spR roster
-      rpCount = length $ R.rpR roster
-  in if spCount < spLimit
-     then (addPlayerToPosition "s_pitcher" player roster, "s_pitcher")
-     else if rpCount < rpLimit
-          then (addPlayerToPosition "r_pitcher" player roster, "r_pitcher")
-          else (roster, "")
+    let spLimit = queryDraftRosterLmts "s_pitcher" $ C.draft_limits $ C.draft_parameters config
+        rpLimit = queryDraftRosterLmts "r_pitcher" $ C.draft_limits $ C.draft_parameters config
+        spCount = length $ R.spR roster
+        rpCount = length $ R.rpR roster
+    in if spCount < spLimit
+       then (addPlayerToPosition "s_pitcher" player roster, "s_pitcher")
+       else if rpCount < rpLimit
+            then (addPlayerToPosition "r_pitcher" player roster, "r_pitcher")
+            else (roster, "")
 
 addBatterToRoster :: C.Configuration -> T.Text -> O.OfficialPlayer -> R.Roster -> C.DraftRosterLmts -> (R.Roster, Bool)
 addBatterToRoster config position player roster limits =
@@ -180,4 +173,4 @@ addBatterToRoster config position player roster limits =
         limit = queryDraftRosterLmts position limits
     in if currentCount < limit
        then (addPlayerToPosition position player roster, True)
-       else (roster, False) 
+       else (roster, False)

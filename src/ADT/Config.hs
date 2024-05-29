@@ -40,7 +40,7 @@ import qualified Data.Vector as V
 
 -- ## League Configuration ADT ## --
 
-newtype TeamID = TeamID T.Text deriving (Show, Eq)
+newtype TeamID = TeamID T.Text deriving (Show, Eq, Ord)
 
 unwrapTeamID :: TeamID -> T.Text
 unwrapTeamID (TeamID text) = text

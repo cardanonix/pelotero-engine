@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-
 {-# HLINT ignore "Use tuple-section" #-}
 
 module Main where
@@ -13,13 +12,7 @@ import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
 import GHC.Generics (Generic)
 
-import Data.List (
-    delete,
-    find,
-    findIndex,
-    sortBy,
-    sortOn,
- )
+import Data.List (delete, find, findIndex, sortBy, sortOn)
 import Data.Maybe (fromMaybe, mapMaybe)
 import qualified Config as C
 import qualified OfficialRoster as O
@@ -58,7 +51,7 @@ main = do
                                     finalDraftState <- draftPlayers draftConfig initialDraftState
 
                                     -- Extract final rosters and lineups
-                                    let finalRostersAndLineups = map (\team -> (R.roster team, lineup team)) (teams finalDraftState)
+                                    let finalRostersAndLineups = map (\team -> (R.roster team, R.current_lineup team)) (teams finalDraftState)
                                         (finalRoster1, finalLineup1) = finalRostersAndLineups !! 0
                                         (finalRoster2, finalLineup2) = finalRostersAndLineups !! 1
 
