@@ -49,6 +49,7 @@ instantiateDraft :: C.Configuration -> O.OfficialRoster -> [PR.RankingData] -> I
 instantiateDraft config players rankings = do
     let teamIds = C.teamId config
         validRankings = filter (\r -> PR.teamId r `elem` teamIds) rankings
+        teamRankings = HM.fromList [(tid, filter (\r -> PR.teamId r == tid) validRankings) | tid <- teamIds]
     draftOrder <- generateDraftOrder config validRankings
     let teams = map (\tid -> TeamState tid mkEmptyRoster mkEmptyLineup) teamIds
     return DraftState {
@@ -57,7 +58,8 @@ instantiateDraft config players rankings = do
         draftHistory = [],
         currentTeamIndex = 0,
         draftOrder = draftOrder,
-        draftComplete = False
+        draftComplete = False,
+        teamRankings = teamRankings
     }
 
 draftPlayers :: DraftConfig -> DraftState -> IO DraftState
