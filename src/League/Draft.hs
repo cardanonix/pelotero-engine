@@ -35,13 +35,13 @@ data DraftState = DraftState {
     currentTeamIndex :: Int,
     draftOrder :: [(C.TeamID, Int)],
     draftComplete :: Bool,
-    teamRankings :: M.Map C.TeamID PR.PlayerRankings
+    teamRankings :: [PR.RankingData]
 } deriving (Show, Eq)
 
 instantiateDraft :: C.Configuration -> O.OfficialRoster -> [PR.RankingData] -> IO DraftState
 instantiateDraft config players rankings = do
     let teamIds = C.teamId config
-        teamRankings = M.fromList [(PR.teamId r, PR.rankings r) | r <- rankings, PR.teamId r `elem` teamIds]
+        teamRankings = filter (\r -> PR.teamId r `elem` teamIds) rankings
     draftOrder <- generateDraftOrder config rankings
     let teams = map (\tid -> R.LgManager "active" (C.commissioner config) tid (C.leagueID config) mkEmptyLineup mkEmptyRoster) teamIds
     return DraftState {
@@ -83,8 +83,7 @@ draftCycle config state teamId =
     case lookup teamId [(tid, t) | t@(R.LgManager _ _ tid _ _ _) <- teams state] of
         Just teamState ->
             let availablePlayers = filter (\p -> O.playerId p `elem` availablePlayerIds state) (officialPlayers config)
-                teamSpecificRankings = teamRankings state
-                maybePlayer = selectNextPlayer teamId teamSpecificRankings availablePlayers
+                maybePlayer = selectNextPlayer teamId (teamRankings state) availablePlayers
             in case maybePlayer of
                 Nothing -> (state { draftComplete = True }, Nothing)
                 Just player -> 
@@ -98,10 +97,10 @@ runDraftCycle :: DraftConfig -> DraftState -> R.LgManager -> (DraftState, Maybe 
 runDraftCycle config state teamState = 
     draftCycle config state (R.teamId teamState)
 
-selectNextPlayer :: C.TeamID -> M.Map C.TeamID PR.PlayerRankings -> [O.OfficialPlayer] -> Maybe O.OfficialPlayer
+selectNextPlayer :: C.TeamID -> [PR.RankingData] -> [O.OfficialPlayer] -> Maybe O.OfficialPlayer
 selectNextPlayer teamId rankings availablePlayers =
-    let rankedPlayers = fromMaybe [] (M.lookup teamId rankings)
-        rankedPlayerIds = map PR.playerId rankedPlayers
+    let teamRanking = find (\r -> PR.teamId r == teamId) rankings
+        rankedPlayerIds = maybe [] (map PR.playerId . PR.rankings) teamRanking
     in find (\p -> O.playerId p `elem` rankedPlayerIds) availablePlayers
 
 addToRosterAndLineup :: C.Configuration -> O.OfficialPlayer -> R.Roster -> R.CurrentLineup -> ((R.Roster, R.CurrentLineup), Bool)
