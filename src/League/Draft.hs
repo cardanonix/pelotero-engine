@@ -1,11 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE BangPatterns #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use tuple-section" #-}
 {-# HLINT ignore "Eta reduce" #-}
 
 module Draft where
 
-import Control.Monad (forM, foldM)
+import Control.Monad (foldM)
+import Control.Monad.ST
 import Data.Aeson (FromJSON, ToJSON, decode, encode, withObject, (.:))
 import qualified Data.Map.Strict as M
 import qualified Data.ByteString.Lazy as BL
@@ -24,18 +26,18 @@ import Utility
 
 -- Configuration and state data structures confined to draft
 data DraftConfig = DraftConfig {
-    cfg :: C.Configuration,
-    officialPlayers :: [O.OfficialPlayer]
+    cfg :: !C.Configuration,
+    officialPlayers :: ![O.OfficialPlayer]
 }
 
 data DraftState = DraftState {
-    teams :: [R.LgManager],
-    availablePlayerIds :: [O.PlayerID],
-    draftHistory :: [(C.TeamID, O.PlayerID)],
-    currentTeamIndex :: Int,
-    draftOrder :: [(C.TeamID, Int)],
-    draftComplete :: Bool,
-    teamRankings :: M.Map C.TeamID PR.PlayerRankings
+    teams :: ![R.LgManager],
+    availablePlayerIds :: ![O.PlayerID],
+    draftHistory :: ![(C.TeamID, O.PlayerID)],
+    currentTeamIndex :: !Int,
+    draftOrder :: ![(C.TeamID, Int)],
+    draftComplete :: !Bool,
+    teamRankings :: !(M.Map C.TeamID PR.PlayerRankings)
 } deriving (Show, Eq)
 
 instantiateDraft :: C.Configuration -> O.OfficialRoster -> [PR.RankingData] -> IO DraftState
@@ -66,13 +68,13 @@ draftPlayers config state
             Nothing -> draftPlayers config newState
 
 updateState :: DraftConfig -> DraftState -> O.OfficialPlayer -> C.TeamID -> DraftState
-updateState config state player teamId = 
+updateState config state player teamId =
     let team = fromJust $ find (\t -> C.unwrapTeamID (R.teamId t) == C.unwrapTeamID teamId) (teams state)
         (newRosters, isNewPlayer) = addToRosterAndLineup (cfg config) player (R.roster team) (R.current_lineup team)
-        newDraftHistory = (teamId, O.playerId player) : draftHistory state
-        newAvailablePlayerIds = delete (O.playerId player) (availablePlayerIds state)
-        newCurrentTeamIndex = (currentTeamIndex state + 1) `mod` length (draftOrder state)
-        newTeams = map (\t -> if C.unwrapTeamID (R.teamId t) == C.unwrapTeamID teamId 
+        !newDraftHistory = (teamId, O.playerId player) : draftHistory state
+        !newAvailablePlayerIds = delete (O.playerId player) (availablePlayerIds state)
+        !newCurrentTeamIndex = (currentTeamIndex state + 1) `mod` length (draftOrder state)
+        !newTeams = map (\t -> if C.unwrapTeamID (R.teamId t) == C.unwrapTeamID teamId 
                               then t { R.roster = fst newRosters, R.current_lineup = snd newRosters } 
                               else t) (teams state)
     in if isNewPlayer then state { teams = newTeams, draftHistory = newDraftHistory, availablePlayerIds = newAvailablePlayerIds, currentTeamIndex = newCurrentTeamIndex }
@@ -87,7 +89,7 @@ draftCycle config state teamId =
                 maybePlayer = selectNextPlayer teamId teamSpecificRankings availablePlayers
             in case maybePlayer of
                 Nothing -> (state { draftComplete = True }, Nothing)
-                Just player -> 
+                Just player ->
                     let newState = updateState config state player teamId
                     in if newState == state
                        then (state, Just "Failed to add player to roster or lineup.")
@@ -95,7 +97,7 @@ draftCycle config state teamId =
         Nothing -> (state, Just "Team not found")
 
 runDraftCycle :: DraftConfig -> DraftState -> R.LgManager -> (DraftState, Maybe String)
-runDraftCycle config state teamState = 
+runDraftCycle config state teamState =
     draftCycle config state (R.teamId teamState)
 
 selectNextPlayer :: C.TeamID -> M.Map C.TeamID PR.PlayerRankings -> [O.OfficialPlayer] -> Maybe O.OfficialPlayer
@@ -111,13 +113,13 @@ addToRosterAndLineup config player roster lineup =
         draftLimits = C.draft_limits $ C.draft_parameters config
         lgLineupLimits = C.lineup_limits $ C.point_parameters config
     in if draftPositionText == "pitcher"
-       then 
+       then
            let (updatedRoster, pitcherPosition) = addPitcherToRoster config player roster
                updatedLineup = if pitcherPosition /= ""
                                then addPlayerToLineup pitcherPosition player lineup lgLineupLimits
                                else lineup
            in ((updatedRoster, updatedLineup), True)
-       else 
+       else
            let (updatedRoster, isAddedToRoster) = addBatterToRoster config draftPositionText player roster draftLimits
                updatedLineup = if isAddedToRoster
                                then addPlayerToLineup draftPositionText player lineup lgLineupLimits
@@ -137,7 +139,7 @@ addPlayerToLineup position player lineup limits =
         "utility" -> if length (R.uC lineup) < C.lg_utility limits then lineup { R.uC = playerIdText : R.uC lineup } else lineup
         "s_pitcher" -> if length (R.spC lineup) < C.lg_s_pitcher limits then lineup { R.spC = playerIdText : R.spC lineup } else lineup
         "r_pitcher" -> if length (R.rpC lineup) < C.lg_r_pitcher limits then lineup { R.rpC = playerIdText : R.rpC lineup } else lineup
-        _ -> lineup  
+        _ -> lineup
 
 addPlayerToPosition :: T.Text -> O.OfficialPlayer -> R.Roster -> R.Roster
 addPlayerToPosition position player roster =
