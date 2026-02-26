@@ -1,7 +1,7 @@
 cabal-version: 3.6
 
 name: pelotero-engine
-version: 0.0.8.6
+version: 0.0.9.0
 
 common shared-libs
   build-depends:  base >=4.11 && <4.18
@@ -23,6 +23,44 @@ common shared-libs
                 , directory
   ghc-options: -O2
 
+-- NEW: shared library for the refactored code
+common new-libs
+  build-depends:  base >=4.11 && <4.18
+                , aeson
+                , bytestring
+                , containers
+                , crypton
+                , http-conduit
+                , memory
+                , postgresql-simple
+                , resource-pool
+                , text
+                , time
+                , unix
+  ghc-options: -O2 -Wall
+
+library
+  import:         new-libs
+  hs-source-dirs: src-new
+  exposed-modules:
+    Types.Player
+    DB.Connection
+    DB.Migration
+    DB.Player
+    MLB.Client
+    MLB.Parse
+
+-- NEW: fetch rosters from MLB API into database
+executable fetch-rosters
+  import:         new-libs
+  hs-source-dirs: app
+  main-is:        FetchRosters.hs
+  build-depends:  pelotero-engine
+
+-- ============================================================
+-- OLD executables
+-- ============================================================
+
 executable fetchStats
   import: shared-libs
   hs-source-dirs: src, src/ADT, src/League
@@ -36,7 +74,7 @@ executable roster
   main-is: FetchActiveRoster.hs
   other-modules:  Input, Middle, Scraper, Points, Roster, Config, Leaderboard, OfficialRoster, PlayerRanking, Validators, PointCalc, Conversion, Utility
   build-depends:  cassava
-                , async  
+                , async
 
 executable playground
   import: shared-libs
