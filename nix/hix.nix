@@ -1,20 +1,6 @@
 {pkgs, ...}: {
   name = "pelotero_engine";
-
-  # We use the latest supported and cached version
-  # from github:input-output-hk/haskell.nix
-
-  compiler-nix-name = "ghc928";
-
-  # Enable for cross-platform build
-  # crossPlatforms = p: pkgs.lib.optionals pkgs.stdenv.hostPlatform.isx86_64 ([
-  #   p.mingwW64
-  #   p.ghcjs
-  # ] ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [
-  #   p.musl64
-  # ]);
-
-  # Tools to include in the development shell
+  compiler-nix-name = "ghc966";
   shell.tools = {
     cabal = "latest";
     hlint = "latest";

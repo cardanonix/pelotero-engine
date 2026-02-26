@@ -4,7 +4,7 @@ name: pelotero-engine
 version: 0.0.9.0
 
 common shared-libs
-  build-depends:  base >=4.11 && <4.18
+  build-depends:  base >= 4.11 && < 4.22
                 , random
                 , random-shuffle
                 , memory
@@ -25,7 +25,7 @@ common shared-libs
 
 -- NEW: shared library for the refactored code
 common new-libs
-  build-depends:  base >=4.11 && <4.18
+  build-depends:  base >= 4.11 && < 4.22
                 , aeson
                 , bytestring
                 , containers
@@ -119,7 +119,7 @@ executable test_adt
   hs-source-dirs: src, src/ADT, src/League
   main-is: Test.hs
   other-modules:  Input_trace
-  build-depends:  base >=4.11 && <4.18
+  build-depends:  base >= 4.11 && < 4.22
                 , debug-trace-var
                 , bytestring
                 , aeson
@@ -132,7 +132,7 @@ executable graphviz
   hs-source-dirs: src, src/ADT, src/League
   main-is: TypeGraph.hs
   other-modules:  Roster, Config, Input, OfficialRoster, Points, Middle, PointCalc, PlayerRanking, Validators, Utility
-  build-depends:  base >=4.11 && <4.18
+  build-depends:  base >= 4.11 && < 4.22
                 , debug-trace-var
                 , bytestring
                 , aeson

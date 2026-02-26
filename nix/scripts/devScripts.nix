@@ -1,6 +1,7 @@
-{ pkgs, name, lib, hsDirs, hsConfig }:
+{ pkgs, name, lib, hsDirs, hsConfig ? { } }:
 
 let
+  jq = "${pkgs.jq}/bin/jq";
 
   compile-manifest = pkgs.writeShellScriptBin "compile-manifest" ''
     set -euo pipefail
@@ -92,12 +93,50 @@ let
         sed 's/\([ ]*\)#.*$/\1/' | \
         perl -0777 -pe 's!/\*[^*]*\*+(?:[^/*][^*]*\*+)*/!!gs' | \
         cat -s | \
-        sed 's/[[:space:]]*$//'
+        sed 's/[[:space:]]*$//' | \
+        sed 's/\([ ]*\){[[:space:]]*}/\1{ }/'
     }
 
     get_relative_path() {
         local full_path=$1
         echo "''${full_path#$PROJECT_ROOT/}"
+    }
+
+    extract_error_files() {
+        local compile_output="$1"
+        local file_type="$2"
+        local error_files=""
+        local temp_file=$(mktemp)
+
+        echo "$compile_output" > "$temp_file"
+
+        if [ "$file_type" = "hs" ]; then
+            # Extract Haskell error file paths from GHC output
+            while IFS= read -r line; do
+                if [[ $line =~ ^([a-zA-Z0-9_/.-]+\.hs):[0-9]+:[0-9]+: ]]; then
+                    local file="''${BASH_REMATCH[1]}"
+                    if [ -f "$PROJECT_ROOT/$file" ]; then
+                        error_files="$error_files $PROJECT_ROOT/$file"
+                    fi
+                fi
+            done < "$temp_file"
+        fi
+
+        rm "$temp_file"
+        echo "$error_files" | tr ' ' '\n' | sort -u | tr '\n' ' '
+    }
+
+    get_status_for_filename() {
+        local content="$1"
+        if echo "$content" | grep -q "COMPILE_STATUS: true"; then
+            echo "_OK_"
+        elif echo "$content" | grep -q "COMPILE_STATUS: false"; then
+            echo "_FAIL_"
+        elif echo "$content" | grep -q "COMPILE_STATUS: error"; then
+            echo "_ERROR_"
+        else
+            echo "_"
+        fi
     }
 
     safe_archive() {
@@ -116,17 +155,6 @@ let
         done
     }
 
-    get_status_for_filename() {
-        local content="$1"
-        if echo "$content" | grep -q "COMPILE_STATUS: true"; then
-            echo "OK"
-        elif echo "$content" | grep -q "COMPILE_STATUS: false"; then
-            echo "FAIL"
-        else
-            echo "UNKNOWN"
-        fi
-    }
-
     concatenate_files() {
         local file_type=$1
         local output_base=$2
@@ -139,8 +167,16 @@ let
             return 1
         fi
 
+        # Read files from manifest
+        local manifest_key
+        case "$file_type" in
+            hs) manifest_key="haskell" ;;
+            nix) manifest_key="nix" ;;
+            *) manifest_key="$file_type" ;;
+        esac
+
         local file_list
-        file_list=$(${pkgs.jq}/bin/jq -r ".''${file_type} // .haskell | .include[]?" "$MANIFEST_FILE" 2>/dev/null | while read -r f; do
+        file_list=$(${jq} -r ".''${manifest_key}.include[]?" "$MANIFEST_FILE" 2>/dev/null | while read -r f; do
             echo "$PROJECT_ROOT/$f"
         done)
 
@@ -157,20 +193,57 @@ let
         local file_count
         file_count=$(echo "$file_list" | wc -l)
 
+        # Run compilation if function provided
         local compile_output=""
         if [ -n "$compile_function" ]; then
             compile_output=$($compile_function "$PROJECT_ROOT")
+        fi
+
+        # Check for error files to prioritize
+        local error_files=""
+        if [ -n "$compile_output" ]; then
+            error_files=$(extract_error_files "$compile_output" "$file_type")
+        fi
+
+        # Build final file list: error files first, then the rest
+        local final_file_list
+        if [ -n "$error_files" ]; then
+            local error_file_set="$error_files"
+            local remaining=""
+            for file in $file_list; do
+                local is_error=false
+                for ef in $error_file_set; do
+                    if [ "$file" = "$ef" ]; then
+                        is_error=true
+                        break
+                    fi
+                done
+                if [ "$is_error" = false ]; then
+                    remaining="$remaining $file"
+                fi
+            done
+            final_file_list="$error_files $remaining"
+        else
+            final_file_list="$file_list"
         fi
 
         local temp_file
         temp_file=$(mktemp)
 
         {
-            echo "''${comment_char}-"
+            if [ "$file_type" = "hs" ]; then
+                echo "{-"
+            else
+                echo "/*"
+            fi
             echo "Generated: $(date '+%Y-%m-%d %H:%M:%S')"
             echo "Hash: $current_hash"
             echo "Files from manifest: $file_count"
-            echo "''${comment_char}-"
+            if [ "$file_type" = "hs" ]; then
+                echo "-}"
+            else
+                echo "*/"
+            fi
             echo ""
 
             if [ -n "$compile_output" ]; then
@@ -178,7 +251,7 @@ let
                 echo ""
             fi
 
-            echo "$file_list" | while read -r file; do
+            for file in $final_file_list; do
                 if [ -f "$file" ]; then
                     echo "$comment_char FILE: $(get_relative_path "$file")"
                     cat "$file" | eval "$clean_function"
@@ -191,15 +264,15 @@ let
             done
         } > "$temp_file"
 
-        local status
-        status=$(get_status_for_filename "$(cat "$temp_file")")
+        local status=$(get_status_for_filename "$(cat "$temp_file")")
         local output_file="''${output_base}''${status}.$file_type"
         mv "$temp_file" "$output_file"
 
         save_current_hash "$file_type" "$current_hash"
-        echo "Generated new $file_type file: $output_file"
+        echo "Generated new $file_type file with status $status: $output_file"
     }
 
+    # ── Main ────────────────────────────────────────────────────
     if [ ! -f "$MANIFEST_FILE" ]; then
         echo "Manifest file not found at $MANIFEST_FILE"
         echo "Run 'generate-manifest' to create it first."
@@ -209,12 +282,12 @@ let
     safe_archive "hs"
     safe_archive "nix"
 
-    hs_base="''${OUTPUT_DIR}/Haskell_''${TIMESTAMP}_"
-    nix_base="''${OUTPUT_DIR}/Nix_''${TIMESTAMP}_"
+    hs_base="''${OUTPUT_DIR}/Haskell_''${TIMESTAMP}"
+    nix_base="''${OUTPUT_DIR}/Nix_''${TIMESTAMP}"
 
     echo -e "\nProcessing files according to manifest..."
 
-    concatenate_files "haskell" "$hs_base" "clean_haskell" "--" "compile_haskell"
+    concatenate_files "hs" "$hs_base" "clean_haskell" "--" "compile_haskell"
     concatenate_files "nix" "$nix_base" "clean_nix" "#" ""
 
     echo "Concatenation complete. Output files are in $OUTPUT_DIR"
@@ -256,7 +329,9 @@ let
     clean_nix() {
         sed 's/\([ ]*\)#.*$/\1/' | \
         perl -0777 -pe 's!/\*[^*]*\*+(?:[^/*][^*]*\*+)*/!!gs' | \
-        cat -s | sed 's/[[:space:]]*$//'
+        cat -s | \
+        sed 's/[[:space:]]*$//' | \
+        sed 's/\([ ]*\){[[:space:]]*}/\1{ }/'
     }
 
     get_relative_path() {
@@ -264,7 +339,7 @@ let
         echo "''${full_path#$PROJECT_ROOT/}"
     }
 
-    # Scan ALL Haskell files
+    # ── Scan ALL Haskell files ──────────────────────────────────
     echo "Scanning ALL Haskell files..."
     hs_files=""
     for dir in $HS_DIRS; do
@@ -276,7 +351,7 @@ let
       fi
     done
 
-    # Scan ALL Nix files
+    # ── Scan ALL Nix files ──────────────────────────────────────
     echo "Scanning ALL Nix files..."
     nix_files=""
     while IFS= read -r -d "" f; do
@@ -288,7 +363,7 @@ let
       done < <(find "$PROJECT_ROOT/nix" -name "*.nix" -type f -print0 | sort -z)
     fi
 
-    # Haskell archive
+    # ── Haskell archive ─────────────────────────────────────────
     hs_output="$OUTPUT_DIR/Haskell_ARCHIVE_$TIMESTAMP.hs"
     {
         echo "{-"
@@ -306,15 +381,14 @@ let
         if [ $build_status -eq 0 ]; then
             echo "COMPILE_STATUS: true"
             echo "BUILD_OUTPUT:"
-            cat "$temp_build"
         else
             echo "COMPILE_STATUS: false"
             echo "BUILD_OUTPUT:"
-            cat "$temp_build"
         fi
+        cat "$temp_build"
         echo "-}"
         echo ""
-        rm "$temp_build"
+        rm -f "$temp_build"
 
         for file in $hs_files; do
             if [ -f "$file" ]; then
@@ -327,12 +401,14 @@ let
     } > "$hs_output"
     echo "Created: $hs_output"
 
-    # Nix archive
+    # ── Nix archive ─────────────────────────────────────────────
     nix_output="$OUTPUT_DIR/Nix_ARCHIVE_$TIMESTAMP.nix"
     {
-        echo "# FULL PROJECT ARCHIVE - Generated: $(date '+%Y-%m-%d %H:%M:%S')"
-        echo "# Contains ALL Nix files (manifest IGNORED)"
-        echo "# Files: $(echo $nix_files | wc -w)"
+        echo "/*"
+        echo "FULL PROJECT ARCHIVE - Generated: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "Contains ALL Nix files (manifest IGNORED)"
+        echo "Files: $(echo $nix_files | wc -w)"
+        echo "*/"
         echo ""
         for file in $nix_files; do
             if [ -f "$file" ]; then

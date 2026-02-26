@@ -2,14 +2,13 @@
   description = "Pelotero Hix/Pix/Plutus dApp DevEnv";
 
   inputs = {
-    
-    iogx = {
-      url = "github:input-output-hk/iogx";
-      inputs.hackage.follows = "hackage";
-      inputs.CHaP.follows = "CHaP";
-      inputs.haskell-nix.follows = "haskellNix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    # iogx = {
+    #   url = "github:input-output-hk/iogx";
+    #   inputs.hackage.follows = "hackage";
+    #   inputs.CHaP.follows = "CHaP";
+    #   inputs.haskell-nix.follows = "haskellNix";
+    #   inputs.nixpkgs.follows = "nixpkgs";
+    # };
 
     nixpkgs.follows = "haskellNix/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
@@ -25,7 +24,7 @@
     };
 
     haskellNix = {
-      url = "github:input-output-hk/haskell.nix/1c329acdaac3d5a600bcaa86b1806414ccd48db6";
+      url = "github:input-output-hk/haskell.nix";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.hackage.follows = "hackage";
     };
@@ -50,18 +49,6 @@
     
       overlays = [
         haskellNix.overlay
-        iohkNix.overlays.crypto
-        (final: prev: {
-          pelotero-engine = final.haskell-nix.project' {
-            src = ./src;
-            compiler-nix-name = "ghc928";
-            shell.tools = {
-              cabal = "latest";
-              hlint = "latest";
-              haskell-language-server = "latest";
-            };
-          };
-        })
       ];
 
       back_EndResults = flake-utils.lib.eachSystem ["x86_64-linux" "x86_64-darwin"] (
@@ -71,20 +58,25 @@
             inherit (haskellNix) config;
           };
           inherit styleguide;
-          hixProject = pkgs.haskell-nix.hix.project {
-            src = ./.;
-            evalSystem = system;
-            inputMap = {"https://input-output-hk.github.io/cardano-haskell-packages" = CHaP;};
-            modules = [
-              (_: {
-                packages.cardano-crypto-praos.components.library.pkgconfig = pkgs.lib.mkForce [pkgs.libsodium-vrf];
-                packages.cardano-crypto-class.components.library.pkgconfig = pkgs.lib.mkForce [pkgs.libsodium-vrf pkgs.secp256k1];
-              })
-            ];
-          };
-          hixFlake = hixProject.flake {};
+          # hixProject = pkgs.haskell-nix.hix.project {
+          #   src = ./.;
+          #   evalSystem = system;
+          #   inputMap = {"https://input-output-hk.github.io/cardano-haskell-packages" = CHaP;};
+          #   # NOTE: cardano-crypto overrides commented out until those deps
+          #   # are back in the plan. Uncomment when adding plutus/cardano deps.
+          #   # modules = [
+          #   #   (_: {
+          #   #     packages.cardano-crypto-praos.components.library.pkgconfig = pkgs.lib.mkForce [pkgs.libsodium-vrf];
+          #   #     packages.cardano-crypto-class.components.library.pkgconfig = pkgs.lib.mkForce [pkgs.libsodium-vrf pkgs.secp256k1];
+          #   #   })
+          #   # ];
+          #   modules = [];
+          # };
+          # hixFlake = hixProject.flake {};
 
-          # ── New: config + postgres + deploy + dev scripts ───────
+
+
+          # ── Config + Postgres + Deploy + Dev Scripts ────────────
           appConfig = import ./nix/config.nix { name = "pelotero-engine"; };
           dbConfig = appConfig.database;
 
@@ -105,20 +97,20 @@
             name = "pelotero-engine";
             hsDirs = [ "src" "src-new" "app" ];
           };
-          # ── End new imports ─────────────────────────────────────
+          # ── End imports ─────────────────────────────────────────
 
         in {
-          apps = hixFlake.apps;
-          checks = hixFlake.checks;
+          # apps = hixFlake.apps;
+          # checks = hixFlake.checks;
           # checks.format = styleguide.lib.${system}.mkCheck self;
           # formatter = styleguide.lib.${system}.mkFormatter self;
-          packages = hixFlake.packages;
+          # packages = hixFlake.packages;
 
           legacyPackages = pkgs;
 
           devShell = pkgs.mkShell {
             name = "pelotero-engine";
-            inputsFrom = [hixFlake.devShell];
+            # inputsFrom = [hixFlake.devShells.default];
             buildInputs = [
               (pkgs.haskellPackages.ghcWithPackages (hsPkgs: with hsPkgs; [
               ]))
@@ -146,7 +138,7 @@
               devScripts.generate-manifest
               devScripts.compile-manifest
               devScripts.compile-archive
-              # ── End new build inputs ────────────────────────────
+              # ── End build inputs ────────────────────────────────
             ];
             packages = with pkgs; [
               haskellPackages.fourmolu
@@ -154,7 +146,7 @@
               nix-tree
               cabal-install
 
-              # ── New packages for database + scripts ─────────────
+              # ── Packages for database + scripts ─────────────────
               postgresql
               postgresql.lib
               pgcli
@@ -169,7 +161,7 @@
               coreutils
               gnused
               gnugrep
-              # ── End new packages ────────────────────────────────
+              # ── End packages ────────────────────────────────────
             ];
             shellHook = ''
               # ── Database environment variables ──────────────────
@@ -185,7 +177,6 @@
               mkdir -p "$(pwd)/script/concat_archive/output" \
                        "$(pwd)/script/concat_archive/archive" \
                        "$(pwd)/script/concat_archive/.hashes"
-              # ── End new setup ───────────────────────────────────
 
               echo ""
               echo "  Pelotero Engine Dev Environment"
@@ -209,7 +200,7 @@
               echo ""
               echo "  File Processing:"
               echo "    generate-manifest      Scan and generate manifest.json"
-              echo "    compile-manifest       Compile files per manifest"
+              echo "    compile-manifest       Compile Haskell + Nix per manifest"
               echo "    compile-archive        Archive ALL files (ignores manifest)"
               echo ""
               echo "  Build:"
@@ -223,7 +214,7 @@
     in
       back_EndResults
       // {
-        packages = back_EndResults.packages;
+        # packages = back_EndResults.packages;
         devShell = back_EndResults.devShell;
       };
 

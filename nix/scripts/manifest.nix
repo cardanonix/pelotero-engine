@@ -1,6 +1,7 @@
 { lib, pkgs, config ? { } }:
 
 let
+  # Default configuration for pelotero-engine (no frontend)
   defaultConfig = {
     projectRoot = ".";
     hsDirs = [ "src" "src-new" "app" ];
@@ -15,11 +16,11 @@ let
     };
 
     excludePatterns = [
-      ".spago"
-      "node_modules"
-      "dist"
       "dist-newstyle"
+      "dist"
       "output"
+      "node_modules"
+      ".stack-work"
     ];
   };
 
@@ -37,13 +38,13 @@ let
 
     echo "Generating manifest..."
 
-    # Find Haskell files
+    # ── Find Haskell files ──────────────────────────────────────
     echo "Finding Haskell files..."
     HS_FILES=()
     for dir in ${lib.concatStringsSep " " cfg.hsDirs}; do
       full_dir="$PROJECT_ROOT/$dir"
       if [ -d "$full_dir" ]; then
-        echo "Scanning $full_dir for Haskell files"
+        echo "  Scanning $full_dir for Haskell files"
         while IFS= read -r file; do
           if [ -n "$file" ]; then
             rel_path="''${file#$PROJECT_ROOT/}"
@@ -53,10 +54,11 @@ let
       fi
     done
 
-    # Find Nix files
+    # ── Find Nix files ──────────────────────────────────────────
     echo "Finding Nix files..."
     NIX_FILES=()
 
+    # Root-level .nix files
     if [ -d "$PROJECT_ROOT" ]; then
       while IFS= read -r file; do
         rel_path="''${file#$PROJECT_ROOT/}"
@@ -66,6 +68,7 @@ let
       done < <(find "$PROJECT_ROOT" -maxdepth 1 -type f -name "*.nix" 2>/dev/null | sort)
     fi
 
+    # nix/ directory
     if [ -d "$PROJECT_ROOT/nix" ]; then
       while IFS= read -r file; do
         rel_path="''${file#$PROJECT_ROOT/}"
@@ -73,7 +76,7 @@ let
       done < <(find "$PROJECT_ROOT/nix" -type f -name "*.nix" 2>/dev/null | sort)
     fi
 
-    # Write manifest JSON
+    # ── Write manifest JSON ─────────────────────────────────────
     echo "{" > $MANIFEST_FILE
     echo "  \"meta\": {" >> $MANIFEST_FILE
     echo "    \"generated\": \"$(date '+%s')\"," >> $MANIFEST_FILE
@@ -126,12 +129,32 @@ let
     cp "$MANIFEST_FILE" "$MANIFEST_FILE.$BACKUP_TIME"
 
     echo "Manifest generated at: $MANIFEST_FILE"
+    echo "Backup created at: $MANIFEST_FILE.$BACKUP_TIME"
     echo "Found ''${#HS_FILES[@]} Haskell files, ''${#NIX_FILES[@]} Nix files"
   '';
 
+  # Static manifest data (for Nix-level introspection)
+  manifestData = {
+    meta = {
+      projectRoot = cfg.projectRoot;
+    };
+    haskell.include = [];
+    haskell.exclude = [];
+    haskell.count = 0;
+    nix.include = [];
+    nix.exclude = [];
+    nix.count = 0;
+  };
+
 in {
+  # Static data
+  data = manifestData;
+  json = builtins.toJSON manifestData;
+
+  # The script
   generateScript = generateManifestScript;
 
+  # Debug info
   debug = {
     config = cfg;
     excludePattern = excludePatternStr;
