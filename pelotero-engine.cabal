@@ -1,7 +1,7 @@
 cabal-version: 3.6
 
 name:          pelotero-engine
-version:       0.1.0.0
+version:       0.1.1.0
 synopsis:      Fantasy baseball points engine
 description:   Phase 1: domain types and MLB wire layer.
 build-type:    Simple
