@@ -1,8 +1,8 @@
+-- test/Pelotero/Domain/PositionSpec.hs
 module Pelotero.Domain.PositionSpec (spec) where
 
-import Hedgehog (Gen, forAll, property, tripping, (===))
+import Hedgehog (Gen, forAll, tripping)
 import qualified Hedgehog.Gen as Gen
-import qualified Hedgehog.Range as Range
 import Test.Hspec (Spec, describe, it, shouldBe)
 import Test.Hspec.Hedgehog (hedgehog)
 
@@ -18,7 +18,7 @@ import Pelotero.Domain.Position
 spec :: Spec
 spec = do
   describe "parsePosition / renderPosition" $ do
-    it "round-trips for every Position" $ hedgehog $ property $ do
+    it "round-trips for every Position" $ hedgehog $ do
       p <- forAll genPosition
       tripping p renderPosition parsePosition
 
@@ -35,9 +35,9 @@ spec = do
 
   describe "classification predicates" $ do
     it "Pitcher is a pitcher and nothing else" $ do
-      isPitcher Pitcher       `shouldBe` True
-      isInfielder Pitcher     `shouldBe` False
-      isOutfielder Pitcher    `shouldBe` False
+      isPitcher Pitcher    `shouldBe` True
+      isInfielder Pitcher  `shouldBe` False
+      isOutfielder Pitcher `shouldBe` False
 
     it "Catcher is an infielder" $
       isInfielder Catcher `shouldBe` True
@@ -46,7 +46,7 @@ spec = do
       isOutfielder LeftField   `shouldBe` True
       isOutfielder CenterField `shouldBe` True
       isOutfielder RightField  `shouldBe` True
-      isInfielder LeftField    `shouldBe` False
+      isInfielder  LeftField   `shouldBe` False
 
     it "DH is none of the three" $ do
       isPitcher    DesignatedHitter `shouldBe` False

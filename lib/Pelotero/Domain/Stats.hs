@@ -6,9 +6,14 @@ module Pelotero.Domain.Stats
   , PitchingStats(..)
   , emptyBatting
   , emptyPitching
+    -- * Innings pitched
+  , parseInningsPitched
+  , renderInningsPitched
   ) where
 
 import Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Text.Read as TR
 
 -- | Per-game batting line. Fields are 'Maybe' to preserve "did this player
 -- bat at all?" information from the upstream feed.
@@ -72,9 +77,9 @@ emptyBatting = BattingStats
   }
 
 -- | Per-game pitching line. 'pitInningsPitched' is text because MLB reports
--- it as a fractional string ("6.2" = six and two-thirds innings) which is
+-- it as a fractional string (\"6.2\" = six and two-thirds innings) which is
 -- *not* a decimal — converting blindly to Double silently corrupts data.
--- Callers that need numeric IP should parse via a dedicated function.
+-- Use 'parseInningsPitched' to obtain an exact out-count.
 data PitchingStats = PitchingStats
   { pitGamesPlayed             :: Maybe Int
   , pitGamesStarted            :: Maybe Int
@@ -168,3 +173,37 @@ emptyPitching = PitchingStats
   , pitCatchersInterference    = Nothing
   , pitPassedBall              = Nothing
   }
+
+--------------------------------------------------------------------------------
+-- Innings pitched
+
+-- | Parse MLB's "innings pitched" string format. The number after the dot is
+-- /outs/, not a decimal: \"6.2\" means 6 innings + 2 outs = 20 outs total.
+-- Reading it as 'Double' (as the legacy code did) is a real bug — 6.2 as a
+-- 'Double' is 6.2, but 6.2 IP as outs is 20\/3 ≈ 6.667.
+--
+-- The result is in /outs/ rather than innings so that arithmetic on totals
+-- stays exact. Use 'renderInningsPitched' to go the other way for display.
+parseInningsPitched :: Text -> Maybe Int
+parseInningsPitched raw =
+  let t = T.strip raw
+  in case T.splitOn "." t of
+       [whole]       -> (* 3) <$> readNonNeg whole
+       [whole, frac] -> do
+         inns <- readNonNeg whole
+         outs <- readNonNeg frac
+         if outs > 2 then Nothing else Just (inns * 3 + outs)
+       _ -> Nothing
+  where
+    readNonNeg s = case TR.decimal s of
+      Right (n :: Int, rest) | T.null rest, n >= 0 -> Just n
+      _                                            -> Nothing
+
+-- | Render an out-count back to MLB IP notation (\"6.2\" for 20 outs).
+-- Negative inputs render as @"0.0"@ rather than producing garbage.
+renderInningsPitched :: Int -> Text
+renderInningsPitched outs
+  | outs < 0  = "0.0"
+  | otherwise =
+      let (i, r) = outs `divMod` 3
+      in T.pack (show i) <> "." <> T.pack (show r)

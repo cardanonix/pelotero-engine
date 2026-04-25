@@ -3,13 +3,11 @@
     "away": {
       "players": {
         "ID660271": {
-          "person": { "id": 660271, "fullName": "Shohei Ohtani" },
+          "person":       { "id": 660271, "fullName": "Shohei Ohtani" },
           "parentTeamId": 119,
           "stats": {
-            "batting": {
-              "atBats": 4, "runs": 1, "hits": 2,
-              "homeRuns": 1, "rbi": 3, "strikeOuts": 1
-            }
+            "batting":  { "atBats": 4, "hits": 2, "homeRuns": 1, "rbi": 2 },
+            "pitching": { "inningsPitched": "6.2", "strikeOuts": 9, "earnedRuns": 1 }
           }
         }
       }
@@ -17,14 +15,10 @@
     "home": {
       "players": {
         "ID545361": {
-          "person": { "id": 545361, "fullName": "Mike Trout" },
+          "person":       { "id": 545361, "fullName": "Mike Trout" },
           "parentTeamId": 108,
           "stats": {
-            "batting": {
-              "atBats": 3, "runs": 0, "hits": 0,
-              "homeRuns": 0, "rbi": 0, "strikeOuts": 2,
-              "baseOnBalls": 1
-            }
+            "batting": { "atBats": 3, "hits": 1, "homeRuns": 1, "runs": 1, "rbi": 1 }
           }
         }
       }

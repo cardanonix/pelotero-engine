@@ -2,21 +2,18 @@
   "people": [
     {
       "id": 0,
-      "useName": "Bogus",
-      "useLastName": "Player",
-      "nameSlug": "bogus",
-      "active": false
+      "active": false,
+      "useName": "Bad",
+      "useLastName": "Record",
+      "nameSlug": "bad-record-0"
     },
     {
-      "id": 700001,
+      "id": 660272,
+      "active": true,
       "useName": "Two",
       "useLastName": "Way",
-      "nameSlug": "two-way-700001",
-      "currentTeam": { "id": 117 },
-      "primaryPosition": { "code": "TWP", "abbreviation": "TWP" },
-      "batSide": { "code": "S" },
-      "pitchHand": { "code": "R" },
-      "active": true
+      "nameSlug": "two-way-660272",
+      "primaryPosition": { "code": "TWP", "abbreviation": "TWP" }
     }
   ]
 }

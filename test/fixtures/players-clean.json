@@ -2,25 +2,25 @@
   "people": [
     {
       "id": 660271,
+      "active": true,
       "useName": "Shohei",
       "useLastName": "Ohtani",
       "nameSlug": "shohei-ohtani-660271",
       "currentTeam": { "id": 119, "name": "Los Angeles Dodgers" },
       "primaryPosition": { "code": "1", "abbreviation": "P" },
-      "batSide": { "code": "L" },
-      "pitchHand": { "code": "R" },
-      "active": true
+      "batSide":   { "code": "L" },
+      "pitchHand": { "code": "R" }
     },
     {
       "id": 545361,
+      "active": true,
       "useName": "Mike",
       "useLastName": "Trout",
       "nameSlug": "mike-trout-545361",
       "currentTeam": { "id": 108, "name": "Los Angeles Angels" },
       "primaryPosition": { "code": "8", "abbreviation": "CF" },
-      "batSide": { "code": "R" },
-      "pitchHand": { "code": "R" },
-      "active": true
+      "batSide":   { "code": "R" },
+      "pitchHand": { "code": "R" }
     }
   ]
 }

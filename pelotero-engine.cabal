@@ -44,6 +44,10 @@ library
     Pelotero.Domain.Player
     Pelotero.Domain.Team
     Pelotero.Domain.Game
+    Pelotero.Domain.Roster
+    Pelotero.Domain.Scoring
+    Pelotero.Domain.Draft
+    Pelotero.Domain.League
     Pelotero.MLB.Wire.Player
     Pelotero.MLB.Wire.Schedule
     Pelotero.MLB.Wire.Boxscore
@@ -73,11 +77,15 @@ test-suite pelotero-test
   main-is:          Spec.hs
   other-modules:
     Pelotero.Domain.PositionSpec
+    Pelotero.Domain.RosterSpec
+    Pelotero.Domain.ScoringSpec
+    Pelotero.Domain.DraftSpec
     Pelotero.MLB.ConvertSpec
   build-depends:    base
                   , pelotero-engine
                   , aeson
                   , bytestring
+                  , containers
                   , hspec
                   , hedgehog
                   , hspec-hedgehog
