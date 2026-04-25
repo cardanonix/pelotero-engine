@@ -8,5 +8,5 @@ package pelotero-engine
                -Wincomplete-uni-patterns
                -Wredundant-constraints
 
-tests:      False
+tests:      True
 benchmarks: False

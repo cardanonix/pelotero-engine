@@ -1,0 +1,28 @@
+{
+  "dates": [
+    {
+      "date": "2025-04-15",
+      "games": [
+        {
+          "gamePk": 778001,
+          "teams": {
+            "away": { "team": { "id": 117 } },
+            "home": { "team": { "id": 121 } }
+          }
+        }
+      ]
+    },
+    {
+      "date": "2025-04-16",
+      "games": [
+        {
+          "gamePk": 778002,
+          "teams": {
+            "away": { "team": { "id": 110 } },
+            "home": { "team": { "id": 145 } }
+          }
+        }
+      ]
+    }
+  ]
+}

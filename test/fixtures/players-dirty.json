@@ -1,0 +1,22 @@
+{
+  "people": [
+    {
+      "id": 0,
+      "useName": "Bogus",
+      "useLastName": "Player",
+      "nameSlug": "bogus",
+      "active": false
+    },
+    {
+      "id": 700001,
+      "useName": "Two",
+      "useLastName": "Way",
+      "nameSlug": "two-way-700001",
+      "currentTeam": { "id": 117 },
+      "primaryPosition": { "code": "TWP", "abbreviation": "TWP" },
+      "batSide": { "code": "S" },
+      "pitchHand": { "code": "R" },
+      "active": true
+    }
+  ]
+}
