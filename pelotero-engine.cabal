@@ -4,6 +4,7 @@ name:          pelotero-engine
 version:       0.1.1.0
 synopsis:      Fantasy baseball points engine
 description:   Phase 1: domain types and MLB wire layer.
+               Phase 2a: schema, connection pool, migrations.
 build-type:    Simple
 
 flag use-pkg-config
@@ -52,19 +53,43 @@ library
     Pelotero.MLB.Wire.Schedule
     Pelotero.MLB.Wire.Boxscore
     Pelotero.MLB.Convert
+    Pelotero.DB.Provider
+    Pelotero.DB.Pool
+    Pelotero.DB.Migration
+    Pelotero.DB.Statement
+    Pelotero.DB.Team
+    Pelotero.DB.Player
   build-depends:    base       >= 4.11 && < 4.22
                   , aeson
                   , bytestring
                   , containers
+                  , contravariant     >= 1.5   && < 1.6
                   , text
                   , time
                   , vector
+                  -- DB layer (Phase 2a):
+                  , hasql              >= 1.9   && < 1.10
+                  , hasql-pool         >= 1.3   && < 1.5
+                  , hasql-transaction  >= 1.1   && < 1.2
+                  , directory          >= 1.3   && < 1.4
+                  , filepath           >= 1.4   && < 1.6
+                  , cryptohash-sha256  >= 0.11  && < 0.12
+                  , base16-bytestring  >= 1.0   && < 1.1
   ghc-options:      -O2
 
 executable pelotero
   import:           warnings, lang
   hs-source-dirs:   app
   main-is:          Main.hs
+  build-depends:    base
+                  , pelotero-engine
+                  , text
+  ghc-options:      -O2 -threaded
+
+executable pelotero-db-check
+  import:           warnings, lang
+  hs-source-dirs:   app
+  main-is:          DbCheck.hs
   build-depends:    base
                   , pelotero-engine
                   , text
@@ -90,4 +115,25 @@ test-suite pelotero-test
                   , hedgehog
                   , hspec-hedgehog
                   , text
+  ghc-options:      -O0 -threaded
+
+test-suite pelotero-integration-test
+  import:           warnings, lang
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   integration-test
+  main-is:          Spec.hs
+  other-modules:
+    IntegrationTest.Setup
+    IntegrationTest.TeamRepoSpec
+    IntegrationTest.PlayerRepoSpec
+  build-depends:    base
+                  , pelotero-engine
+                  , bytestring
+                  , containers
+                  , hasql
+                  , hasql-pool
+                  , hasql-transaction
+                  , hspec
+                  , text
+                  , time
   ghc-options:      -O0 -threaded

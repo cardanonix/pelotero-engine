@@ -24,7 +24,6 @@ module Pelotero.Domain.Scoring
   , scorePitching
   ) where
 
-import Data.Foldable (foldl')
 import Data.Maybe (fromMaybe)
 
 import Pelotero.Domain.Stats

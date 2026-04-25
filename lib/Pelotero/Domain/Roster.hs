@@ -56,6 +56,7 @@ import qualified Data.Map.Strict as Map
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
+import Data.Maybe (mapMaybe)
 
 import Pelotero.Domain.Id (PlayerId)
 
@@ -266,4 +267,7 @@ validateLineup limits lineup = sizeProblems <> dupProblems
     dupProblems = map LineupDuplicatePlayer (duplicates (lineupPlayers lineup))
 
 duplicates :: Ord a => [a] -> [a]
-duplicates = map head . filter (\g -> length g > 1) . group . sort
+duplicates = mapMaybe firstOfRepeat . group . sort
+  where
+    firstOfRepeat (x : _ : _) = Just x
+    firstOfRepeat _           = Nothing

@@ -23,7 +23,6 @@ import Pelotero.Domain.Draft (DraftOrderStrategy)
 import Pelotero.Domain.Id
   ( FantasyTeamId
   , LeagueId
-  , PlayerId
   )
 import Pelotero.Domain.Roster
   ( LineupLimits
