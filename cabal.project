@@ -1,0 +1,12 @@
+index-state: hackage.haskell.org 2026-03-07T23:19:49Z
+packages: .
+
+package pelotero-engine
+  ghc-options: -Wall
+               -Wcompat
+               -Wincomplete-record-updates
+               -Wincomplete-uni-patterns
+               -Wredundant-constraints
+
+tests:      False
+benchmarks: False

@@ -1,9 +1,10 @@
 { inputs }:
 
 let
-  inherit (inputs) nixpkgs flake-utils haskellNix iohkNix CHaP;
+  inherit (inputs) nixpkgs flake-utils haskellNix iohkNix CHaP hackage;
 
-  name = "pelotero-engine";
+  appConfig = import ./config.nix { };
+  name      = appConfig.name;
 
   mkSystemOutputs = system:
     let
@@ -18,12 +19,13 @@ let
         ];
       };
 
-      haskellProject = pkgs.haskell-nix.project' {
+      haskellProject = pkgs.haskell-nix.cabalProject' {
         src = ../.;
-        compiler-nix-name = "ghc928";
+        compiler-nix-name = "ghc910";
 
         inputMap = {
           "https://chap.intersectmbo.org/" = CHaP;
+          "https://hackage.haskell.org/"   = hackage;
         };
 
         shell = {
@@ -42,45 +44,59 @@ let
           ];
         };
 
+        # Match Cheeblr exactly. The cabal.project file at the top level
+        # also sets these flags via `package <name>: flags: +use-pkg-config`,
+        # plus pins index-state.
         modules = [{
-          packages.postgresql-libpq.flags.use-pkg-config = true;
-          packages.postgresql-simple.flags.use-pkg-config = true;
+          # packages.postgresql-libpq.flags.use-pkg-config = true;
+          # packages.postgresql-simple.flags.use-pkg-config = true;
         }];
       };
 
       backendFlake = haskellProject.flake { };
 
+      dbConfig = appConfig.database;
+
       postgresModule = import ./postgres-utils.nix {
         inherit pkgs name;
-        database = (import ./config.nix { inherit name; }).database;
+        database = dbConfig;
       };
 
       deployModule = import ./deploy.nix {
         inherit pkgs name;
       };
 
-      appConfig = import ./config.nix { inherit name; };
-      dbConfig = appConfig.database;
+      sopsModule = import ./sops-dev.nix {
+        inherit pkgs lib name;
+      };
+
+      fileTools = import ./scripts/file-tools.nix {
+        inherit pkgs lib name;
+        backendPath = ".";
+        hsDirs      = [ "lib" "src-new" "app" ];
+        hsTestDirs  = [];
+        hsConfig    = appConfig.haskell;
+      };
+
+      defaultPackage =
+        backendFlake.packages."${name}:exe:pelotero" or
+        backendFlake.packages."${name}:exe:fetch-rosters" or
+        (builtins.head (builtins.attrValues backendFlake.packages));
 
     in {
       legacyPackages = pkgs;
 
       packages = backendFlake.packages // {
-        default = backendFlake.packages."${name}:exe:fetch-rosters" or
-                  backendFlake.packages."${name}:lib:${name}" or
-                  (builtins.head (builtins.attrValues backendFlake.packages));
+        default = defaultPackage;
       };
 
       devShells = let
         shell = pkgs.mkShell {
           inherit name;
 
-          inputsFrom = [
-            backendFlake.devShells.default
-          ];
+          inputsFrom = [ backendFlake.devShells.default ];
 
           buildInputs = with pkgs; [
-            # PostgreSQL management
             postgresModule.pg-start
             postgresModule.pg-connect
             postgresModule.pg-stop
@@ -90,16 +106,26 @@ let
             postgresModule.pg-rotate-credentials
             postgresModule.pg-stats
 
-            # Deploy/dev scripts
             deployModule.db-start
             deployModule.db-stop
-            deployModule.backend-start
             deployModule.fetch-rosters
             deployModule.dev
             deployModule.deploy
             deployModule.stop
 
-            # System tools
+            sopsModule.sops-init-key
+            sopsModule.sops-pubkey
+            sopsModule.sops-bootstrap
+            sopsModule.sops-get
+            sopsModule.sops-exec
+            sopsModule.sops-status
+
+            fileTools.generate-manifest
+            fileTools.compile-manifest
+            fileTools.compile-archive
+            fileTools.llm-context
+            fileTools.manifest-tui
+
             postgresql
             pgcli
             pkg-config
@@ -107,52 +133,73 @@ let
             zlib
             lsof
             tmux
-            gettext  # for envsubst
+            gettext
             jq
+            sops
+            age
+            ssh-to-age
+            gum
           ];
 
           shellHook = ''
             export PGDATA="${dbConfig.dataDir}"
             export PGPORT="${toString dbConfig.port}"
             export PGUSER="${dbConfig.user}"
-            export PGPASSWORD="${dbConfig.password}"
-            export PGDATABASE="${appConfig.database.name}"
+            export PGDATABASE="${dbConfig.name}"
             export PGHOST="$PGDATA"
             export PKG_CONFIG_PATH="${pkgs.postgresql.lib}/lib/pkgconfig:$PKG_CONFIG_PATH"
+            export SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/pelotero-engine.txt"
+
+            mkdir -p "$(pwd)/script/concat_archive/output" \
+                    "$(pwd)/script/concat_archive/archive" \
+                    "$(pwd)/script/concat_archive/.hashes"
 
             echo ""
-            echo "  ╔══════════════════════════════════════╗"
-            echo "  ║     Pelotero Engine Dev Environment   ║"
-            echo "  ╚══════════════════════════════════════╝"
+            echo "  Pelotero Engine Dev Environment"
+            echo "  ================================"
             echo ""
-            echo "  Database:"
-            echo "    pg-start          Start PostgreSQL"
-            echo "    pg-connect        Connect via psql"
-            echo "    pg-stop           Stop PostgreSQL"
-            echo "    pg-backup         Backup database"
-            echo "    pg-restore <f>    Restore from backup"
-            echo "    pg-stats          Show DB statistics"
+            echo "  Secrets (sops):"
+            ${sopsModule.loadSecretsHook}
+            echo ""
+            echo "  Database (port ${toString dbConfig.port}):"
+            echo "    pg-start               Start PostgreSQL"
+            echo "    pg-connect             Connect via psql"
+            echo "    pg-stop                Stop PostgreSQL"
+            echo "    pg-cleanup             Remove data directory"
+            echo "    pg-backup              Backup database"
+            echo "    pg-restore <file>      Restore from backup"
+            echo "    pg-rotate-credentials  Rotate DB password"
+            echo "    pg-stats               Show DB statistics"
             echo ""
             echo "  Development:"
-            echo "    pe-dev            Start dev environment (DB + shell)"
-            echo "    pe-deploy         Deploy with tmux"
-            echo "    pe-stop           Stop everything"
-            echo "    fetch-rosters     Fetch MLB rosters (default: 2025)"
+            echo "    pe-dev                 Start DB + dev shell"
+            echo "    pe-deploy              Deploy with tmux"
+            echo "    pe-stop                Stop everything"
+            echo "    fetch-rosters [year]   Fetch MLB rosters (default: 2025)"
             echo ""
             echo "  Build:"
-            echo "    cabal build       Build all targets"
-            echo "    cabal run fetch-rosters -- 2025"
+            echo "    cabal build            Build all targets"
+            echo "    cabal run pelotero     Run the CLI entry point"
+            echo ""
+            echo "  LLM context:"
+            echo "    generate-manifest      Scan source -> script/manifest.json"
+            echo "    compile-manifest       Bundle source files for review"
+            echo "    llm-context            Generate context from git diff"
+            echo "    manifest-tui           Interactive TUI"
             echo ""
           '';
         };
       in {
         default = shell;
       };
-
-      devShell = shell;
     };
 
 in {
   perSystem = mkSystemOutputs;
-  systems = [ "x86_64-linux" "x86_64-darwin" "aarch64-darwin" ];
+  systems = [
+    "x86_64-linux"
+    "aarch64-linux"
+    "x86_64-darwin"
+    "aarch64-darwin"
+  ];
 }

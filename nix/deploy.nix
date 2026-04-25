@@ -1,13 +1,9 @@
 { pkgs, lib ? pkgs.lib, name }:
 
 let
-  config = import ./config.nix { inherit name; };
-
-  host = config.network.host;
-  bindAddress = config.network.bindAddress;
-  backendPort = toString config.haskell.port;
-  dbPort = toString config.database.port;
-  dataDir = config.dataDir;
+  config   = import ./config.nix { inherit name; };
+  dbPort   = toString config.database.port;
+  dataDir  = config.dataDir;
 
   db-start = pkgs.writeShellScriptBin "db-start" ''
     set -euo pipefail
@@ -16,7 +12,8 @@ let
 
     BACKUP_DIR="${dataDir}/backups"
     mkdir -p "$BACKUP_DIR"
-    LATEST_BACKUP="$(find "$BACKUP_DIR" -type f -name '*.sql' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n1 | cut -d' ' -f2- || true)"
+    LATEST_BACKUP="$(find "$BACKUP_DIR" -type f -name '*.sql' -printf '%T@ %p\n' 2>/dev/null \
+      | sort -nr | head -n1 | cut -d' ' -f2- || true)"
 
     if [ -z "$LATEST_BACKUP" ]; then
       echo "No backup found, starting fresh database..."
@@ -28,7 +25,7 @@ let
       pg-restore "$LATEST_BACKUP"
     fi
 
-    echo "Database started at ${host}:${dbPort}"
+    echo "Database started on localhost:${dbPort}"
     watch -n 5 pg-stats
   '';
 
@@ -41,15 +38,6 @@ let
     echo "Database stopped."
   '';
 
-  backend-start = pkgs.writeShellScriptBin "backend-start" ''
-    set -euo pipefail
-    echo "Building and starting backend..."
-    cabal build || { echo "Build failed"; exit 1; }
-    echo "Starting backend on ${host}:${backendPort}..."
-    exec cabal run cheeblr-backend 2>&1 || exec cabal run fetch-rosters 2>&1
-  '';
-
-  # Run the new fetch-rosters executable
   fetch-rosters = pkgs.writeShellScriptBin "fetch-rosters" ''
     set -euo pipefail
     SEASON="''${1:-2025}"
@@ -57,19 +45,18 @@ let
     cabal run fetch-rosters -- "$SEASON"
   '';
 
-  # Dev mode: database + watch for changes
   dev = pkgs.writeShellScriptBin "pe-dev" ''
     set -euo pipefail
 
     echo "Starting pelotero-engine dev environment..."
 
-    # Start postgres if not running
-    if ! pg_isready -h "$PGHOST" -p "$PGPORT" -q 2>/dev/null; then
+    if ! ${pkgs.postgresql}/bin/pg_isready -h "$PGHOST" -p "$PGPORT" -q 2>/dev/null; then
       echo "Starting PostgreSQL..."
       pg-start
 
       BACKUP_DIR="${dataDir}/backups"
-      LATEST_BACKUP="$(find "$BACKUP_DIR" -type f -name '*.sql' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n1 | cut -d' ' -f2- || true)"
+      LATEST_BACKUP="$(find "$BACKUP_DIR" -type f -name '*.sql' -printf '%T@ %p\n' 2>/dev/null \
+        | sort -nr | head -n1 | cut -d' ' -f2- || true)"
       if [ -n "$LATEST_BACKUP" ]; then
         echo "Restoring from backup: $LATEST_BACKUP"
         pg-restore "$LATEST_BACKUP"
@@ -79,15 +66,15 @@ let
     fi
 
     echo ""
-    echo "Database ready at: postgresql://$(whoami)@localhost:$PGPORT/fantasy_league"
+    echo "Database ready at: postgresql://$(whoami)@localhost:$PGPORT/${config.database.name}"
     echo ""
     echo "Available commands:"
-    echo "  cabal build                    - Build everything"
-    echo "  cabal run fetch-rosters -- 2025 - Fetch MLB rosters"
-    echo "  pg-connect                     - psql into fantasy_league"
-    echo "  pg-stats                       - Database statistics"
-    echo "  pg-backup                      - Backup database"
-    echo "  pg-stop                        - Stop PostgreSQL"
+    echo "  cabal build                     Build everything"
+    echo "  cabal run fetch-rosters -- 2025 Fetch MLB rosters"
+    echo "  pg-connect                      psql into ${config.database.name}"
+    echo "  pg-stats                        Database statistics"
+    echo "  pg-backup                       Backup database"
+    echo "  pg-stop                         Stop PostgreSQL"
     echo ""
   '';
 
@@ -95,18 +82,16 @@ let
     set -euo pipefail
 
     echo "TMux Commands:"
-    echo "  Ctrl-b d    - Detach"
-    echo "  Ctrl-b o    - Switch panes"
+    echo "  Ctrl-b d    Detach"
+    echo "  Ctrl-b o    Switch panes"
     echo ""
     echo "Starting services..."
-    echo "  Backend:  http://${host}:${backendPort}"
-    echo "  Postgres: ${host}:${dbPort}"
+    echo "  Postgres: localhost:${dbPort}"
     echo ""
 
     tmux kill-session -t ${name} 2>/dev/null || true
     tmux new-session -d -s ${name} -n "Services" -x 120 -y 42
 
-    # Two panes: db stats on top, shell on bottom
     tmux split-window -v -b -l 12
 
     tmux send-keys -t ${name}:Services.0 'watch -n 5 pg-stats' C-m
@@ -132,5 +117,5 @@ let
   '';
 
 in {
-  inherit db-start db-stop backend-start fetch-rosters dev deploy stop;
+  inherit db-start db-stop fetch-rosters dev deploy stop;
 }

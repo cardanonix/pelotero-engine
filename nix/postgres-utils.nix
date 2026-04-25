@@ -5,36 +5,34 @@
 }:
 
 let
-  pgConfig = if database != null then
-    { database = database; }
-  else
-    import ./config.nix { inherit name; };
+  pgConfig =
+    if database != null then { database = database; }
+    else import ./config.nix { inherit name; };
 
   postgresql = pkgs.postgresql;
   bin = {
-    pgctl = "${postgresql}/bin/pg_ctl";
-    psql = "${postgresql}/bin/psql";
-    initdb = "${postgresql}/bin/initdb";
-    createdb = "${postgresql}/bin/createdb";
+    pgctl     = "${postgresql}/bin/pg_ctl";
+    psql      = "${postgresql}/bin/psql";
+    initdb    = "${postgresql}/bin/initdb";
     pgIsReady = "${postgresql}/bin/pg_isready";
   };
 
   config = {
-    dataDir = pgConfig.database.dataDir;
-    port = pgConfig.database.port;
-    user = pgConfig.database.user;
+    dataDir  = pgConfig.database.dataDir;
+    port     = pgConfig.database.port;
+    user     = pgConfig.database.user;
     password = pgConfig.database.password;
   };
 
   settings = pgConfig.database.settings or { };
 
-  listenAddresses = settings.listen_addresses or "localhost";
-  maxConnections = settings.max_connections or 100;
-  sharedBuffers = settings.shared_buffers or "128MB";
+  listenAddresses         = settings.listen_addresses           or "localhost";
+  maxConnections          = settings.max_connections            or 100;
+  sharedBuffers           = settings.shared_buffers             or "128MB";
   dynamicSharedMemoryType = settings.dynamic_shared_memory_type or "posix";
-  logDestination = settings.log_destination or "stderr";
-  logDirectory = settings.log_directory or "log";
-  logFilename = settings.log_filename or "postgresql-%Y-%m-%d_%H%M%S.log";
+  logDestination          = settings.log_destination            or "stderr";
+  logDirectory            = settings.log_directory              or "log";
+  logFilename             = settings.log_filename               or "postgresql-%Y-%m-%d_%H%M%S.log";
 
   mkPgConfig = ''
     listen_addresses = '${listenAddresses}'
@@ -50,9 +48,9 @@ let
   '';
 
   mkHbaConfig = ''
-    local   all             all                                     trust
-    host    all             all             127.0.0.1/32           trust
-    host    all             all             ::1/128                trust
+    local   all   all                trust
+    host    all   all   127.0.0.1/32  md5
+    host    all   all   ::1/128       md5
   '';
 
   envSetup = ''
@@ -60,6 +58,15 @@ let
     export PGUSER="''${PGUSER:-${config.user}}"
     export PGDATABASE="''${PGDATABASE:-${pgConfig.database.name}}"
     export PGHOST="$PGDATA"
+    if [ -z "''${PGPASSWORD:-}" ]; then
+      _SECRETS_FILE="$(pwd)/secrets/${name}.yaml"
+      if [ -f "$_SECRETS_FILE" ] && command -v sops &>/dev/null; then
+        PGPASSWORD=$(sops --decrypt --output-type json "$_SECRETS_FILE" 2>/dev/null \
+          | ${pkgs.jq}/bin/jq -r '.db_password // empty' 2>/dev/null || true)
+      fi
+      export PGPASSWORD="''${PGPASSWORD:-${config.password}}"
+      unset _SECRETS_FILE
+    fi
   '';
 
   validateEnv = ''
@@ -72,36 +79,6 @@ let
 in {
   inherit config;
 
-  pg-cleanup = pkgs.writeShellScriptBin "pg-cleanup" ''
-    ${envSetup}
-    ${validateEnv}
-
-    echo "Checking for existing PostgreSQL processes on port $PGPORT..."
-    EXISTING_PID=$(lsof -i :$PGPORT -t || true)
-
-    if [ ! -z "$EXISTING_PID" ]; then
-      echo "Found PostgreSQL process ($EXISTING_PID) using port $PGPORT"
-      echo "Stopping process..."
-      kill $EXISTING_PID || true
-
-      RETRIES=0
-      while kill -0 $EXISTING_PID 2>/dev/null; do
-        RETRIES=$((RETRIES+1))
-        if [ $RETRIES -eq 10 ]; then
-          echo "Process not responding, forcing shutdown..."
-          kill -9 $EXISTING_PID
-          break
-        fi
-        sleep 1
-      done
-    fi
-
-    if [ -d "$PGDATA" ]; then
-      echo "Removing PGDATA directory..."
-      rm -rf "$PGDATA"
-    fi
-  '';
-
   pg-start = pkgs.writeShellScriptBin "pg-start" ''
     ${envSetup}
     ${validateEnv}
@@ -112,62 +89,70 @@ in {
     mkdir -p "$REAL_PGDATA"
     mkdir -p "$PGDATA"
 
-    echo "Initializing with user: $(whoami)"
-    ${bin.initdb} -D "$PGDATA" \
+    if [ ! -f "$PGDATA/PG_VERSION" ]; then
+      echo "Initializing PostgreSQL cluster (user: $(whoami))..."
+      ${bin.initdb} -D "$PGDATA" \
         --auth=trust \
         --no-locale \
         --encoding=UTF8 \
         --username="$(whoami)"
+    fi
 
-    cat > "$PGDATA/postgresql.conf" << EOF
+    cat > "$PGDATA/postgresql.conf" <<EOF
 ${mkPgConfig}
 EOF
 
-    cat > "$PGDATA/pg_hba.conf" << EOF
+    cat > "$PGDATA/pg_hba.conf" <<EOF
 ${mkHbaConfig}
 EOF
 
-    chown -R $(whoami) "$PGDATA"
+    chown -R "$(whoami)" "$PGDATA"
 
-    echo "Starting PostgreSQL..."
+    echo "Starting PostgreSQL on port $PGPORT..."
     ${bin.pgctl} -D "$PGDATA" -l "$PGDATA/postgresql.log" start
-
     if [ $? -ne 0 ]; then
-      echo "PostgreSQL failed to start. Here's the log:"
+      echo "PostgreSQL failed to start. Log:"
       cat "$PGDATA/postgresql.log"
       exit 1
     fi
 
-    echo "Waiting for PostgreSQL to be ready..."
+    echo "Waiting for PostgreSQL..."
     RETRIES=0
     while ! ${bin.pgIsReady} -h "$PGHOST" -p "$PGPORT" -q; do
-      RETRIES=$((RETRIES+1))
-      if [ $RETRIES -eq 10 ]; then
-        echo "PostgreSQL failed to become ready. Here's the log:"
+      RETRIES=$((RETRIES + 1))
+      if [ $RETRIES -eq 15 ]; then
+        echo "Timed out. Log:"
         cat "$PGDATA/postgresql.log"
         exit 1
       fi
       sleep 1
-      echo "Still waiting... (attempt $RETRIES/10)"
+      echo "  (attempt $RETRIES/15)"
     done
 
-    echo "Creating database and user..."
-    ${bin.psql} -h "$PGHOST" -p "$PGPORT" postgres << EOF
-    DO \$\$
-    BEGIN
-      IF NOT EXISTS (SELECT FROM pg_user WHERE usename = '$(whoami)') THEN
-        CREATE USER "$(whoami)" WITH PASSWORD '${config.password}' SUPERUSER;
-      END IF;
-    END
-    \$\$;
+    echo "Creating database user and schema..."
+    PW="$PGPASSWORD"
+    ${bin.psql} -h "$PGHOST" -p "$PGPORT" postgres <<SQL
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_user WHERE usename = '$(whoami)') THEN
+    CREATE USER "$(whoami)" WITH PASSWORD '$PW' SUPERUSER;
+  ELSE
+    ALTER USER "$(whoami)" WITH PASSWORD '$PW';
+  END IF;
+END
+\$\$;
 
-    SELECT 'CREATE DATABASE ${pgConfig.database.name}'
-    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${pgConfig.database.name}')\gexec
+SELECT 'CREATE DATABASE "${pgConfig.database.name}"'
+WHERE NOT EXISTS (
+  SELECT FROM pg_database WHERE datname = '${pgConfig.database.name}'
+)\gexec
 
-    GRANT ALL PRIVILEGES ON DATABASE ${pgConfig.database.name} TO "$(whoami)";
-EOF
+GRANT ALL PRIVILEGES ON DATABASE "${pgConfig.database.name}" TO "$(whoami)";
+SQL
 
-    echo "PostgreSQL is ready at: postgresql://$(whoami):${config.password}@localhost:$PGPORT/${pgConfig.database.name}"
+    echo ""
+    echo "PostgreSQL ready: postgresql://$(whoami):***@localhost:$PGPORT/${pgConfig.database.name}"
+    echo "(password sourced from sops when available)"
   '';
 
   pg-connect = pkgs.writeShellScriptBin "pg-connect" ''
@@ -182,85 +167,117 @@ EOF
     ${bin.pgctl} -D "$PGDATA" stop -m fast
   '';
 
+  pg-cleanup = pkgs.writeShellScriptBin "pg-cleanup" ''
+    ${envSetup}
+    ${validateEnv}
+    echo "Checking for existing PostgreSQL on port $PGPORT..."
+    EXISTING_PID=$(${pkgs.lsof}/bin/lsof -i :"$PGPORT" -t 2>/dev/null || true)
+    if [ -n "$EXISTING_PID" ]; then
+      echo "Stopping process $EXISTING_PID..."
+      kill "$EXISTING_PID" 2>/dev/null || true
+      RETRIES=0
+      while kill -0 "$EXISTING_PID" 2>/dev/null; do
+        RETRIES=$((RETRIES + 1))
+        [ $RETRIES -eq 10 ] && { kill -9 "$EXISTING_PID" 2>/dev/null || true; break; }
+        sleep 1
+      done
+    fi
+    if [ -d "$PGDATA" ]; then
+      echo "Removing PGDATA..."
+      rm -rf "$PGDATA"
+    fi
+  '';
+
   pg-backup = pkgs.writeShellScriptBin "pg-backup" ''
     ${envSetup}
     ${validateEnv}
-
     BACKUP_DIR="$HOME/.local/share/${name}/backups"
     mkdir -p "$BACKUP_DIR"
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-    BACKUP_FILE="$BACKUP_DIR/${pgConfig.database.name}_$TIMESTAMP.sql"
-
-    echo "Creating backup at $BACKUP_FILE..."
-    ${postgresql}/bin/pg_dump -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" "$PGDATABASE" > "$BACKUP_FILE"
-
+    BACKUP_FILE="$BACKUP_DIR/${name}_$TIMESTAMP.sql"
+    echo "Creating backup: $BACKUP_FILE..."
+    ${postgresql}/bin/pg_dump -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" "$PGDATABASE" \
+      > "$BACKUP_FILE"
     if [ $? -eq 0 ]; then
-      echo "Backup created successfully: $BACKUP_FILE"
+      echo "Backup created: $BACKUP_FILE"
     else
-      echo "Backup failed"
-      exit 1
+      echo "Backup failed"; exit 1
     fi
   '';
 
   pg-restore = pkgs.writeShellScriptBin "pg-restore" ''
     ${envSetup}
     ${validateEnv}
-
-    if [ -z "$1" ]; then
+    if [ -z "''${1:-}" ]; then
       echo "Usage: pg-restore <backup-file>"
       echo "Available backups:"
-      ls -lt "$HOME/.local/share/${name}/backups" 2>/dev/null || echo "No backups found"
+      ls -lh "$HOME/.local/share/${name}/backups/" 2>/dev/null || echo "  (none)"
       exit 1
     fi
-
-    if [ ! -f "$1" ]; then
-      echo "Backup file not found: $1"
-      exit 1
-    fi
-
+    [ ! -f "$1" ] && { echo "Not found: $1"; exit 1; }
     echo "Restoring from $1..."
     ${postgresql}/bin/psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" "$PGDATABASE" < "$1"
-  '';
-
-  pg-stats = pkgs.writeShellScriptBin "pg-stats" ''
-    ${envSetup}
-    ${validateEnv}
-
-    echo "Database Statistics for ${pgConfig.database.name}"
-    echo "==============================="
-
-    ${bin.psql} -h "$PGHOST" -p "$PGPORT" "$PGDATABASE" << EOF
-      \echo 'Database Size:'
-      SELECT pg_size_pretty(pg_database_size('$PGDATABASE'));
-
-      \echo '\nConnection Count:'
-      SELECT count(*) FROM pg_stat_activity;
-
-      \echo '\nTable Sizes:'
-      SELECT relname as table_name,
-             pg_size_pretty(pg_total_relation_size(relid)) as total_size,
-             n_live_tup as row_count
-      FROM pg_stat_user_tables
-      ORDER BY pg_total_relation_size(relid) DESC;
-EOF
   '';
 
   pg-rotate-credentials = pkgs.writeShellScriptBin "pg-rotate-credentials" ''
     ${envSetup}
     ${validateEnv}
-
-    NEW_PASSWORD=$(${pkgs.openssl}/bin/openssl rand -base64 12)
-
-    echo "Rotating password for user $PGUSER..."
-    ${bin.psql} -h "$PGHOST" -p "$PGPORT" postgres -c \
-      "ALTER USER \"$PGUSER\" WITH PASSWORD '$NEW_PASSWORD';"
-
+    NEW_PW=$(${pkgs.openssl}/bin/openssl rand -base64 18 | tr -d '/+=' | head -c 24)
+    echo "Rotating password for $PGUSER..."
+    ${bin.psql} -h "$PGHOST" -p "$PGPORT" postgres \
+      -c "ALTER USER \"$PGUSER\" WITH PASSWORD '$NEW_PW';"
     if [ $? -eq 0 ]; then
-      echo "Password rotated successfully"
-      echo "New password: $NEW_PASSWORD"
+      echo "Rotated."
+      echo "New password: $NEW_PW"
+      echo ""
+      echo "Update sops:  sops secrets/${name}.yaml"
+      echo "              → set db_password to the new value"
     else
-      echo "Password rotation failed"
-      exit 1
+      echo "Rotation failed"; exit 1
     fi
+  '';
+
+  pg-create-schema = pkgs.writeShellScriptBin "pg-create-schema" ''
+    ${envSetup}
+    ${validateEnv}
+    [ -z "''${1:-}" ] && { echo "Usage: pg-create-schema <name>"; exit 1; }
+    echo "Creating schema $1..."
+    ${bin.psql} -h "$PGHOST" -p "$PGPORT" "$PGDATABASE" <<SQL
+      CREATE SCHEMA IF NOT EXISTS $1;
+      GRANT ALL ON SCHEMA $1 TO "$PGUSER";
+SQL
+  '';
+
+  pg-stats = pkgs.writeShellScriptBin "pg-stats" ''
+    ${envSetup}
+    ${validateEnv}
+    echo "Database statistics: ${name}"
+    echo "==============================="
+    ${bin.psql} -h "$PGHOST" -p "$PGPORT" "$PGDATABASE" <<SQL
+      \echo 'Database size:'
+      SELECT pg_size_pretty(pg_database_size('$PGDATABASE'));
+
+      \echo '\nActive connections:'
+      SELECT count(*) FROM pg_stat_activity;
+
+      \echo '\nSchema sizes:'
+      SELECT schema_name,
+             pg_size_pretty(sum(table_size)::bigint) AS size
+      FROM (
+        SELECT table_schema AS schema_name,
+               pg_total_relation_size(
+                 quote_ident(table_schema) || '.' || quote_ident(table_name)
+               ) AS table_size
+        FROM information_schema.tables
+      ) t
+      GROUP BY schema_name
+      ORDER BY sum(table_size) DESC;
+SQL
+  '';
+
+  with-db = pkgs.writeShellScriptBin "with-db" ''
+    ${envSetup}
+    ${validateEnv}
+    exec "$@"
   '';
 }

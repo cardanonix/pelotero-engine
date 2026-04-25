@@ -1,35 +1,24 @@
-{ pkgs, name, lib, hsDirs, hsConfig ? { } }:
+{ pkgs, name, lib, backendPath, hsDirs, hsTestDirs ? [], hsConfig }:
 
 let
   manifestModule = import ./manifest.nix {
     inherit pkgs lib;
     config = {
-      inherit hsDirs;
-      inherit hsConfig;
+      inherit backendPath hsDirs hsTestDirs;
+      hsConfig = { cabalFile = hsConfig.cabalFile or null; };
     };
   };
 
   devScriptsModule = import ./devScripts.nix {
-    inherit pkgs name lib hsDirs hsConfig;
+    inherit pkgs name lib backendPath hsDirs hsTestDirs hsConfig;
+  };
+
+  tuiModule = import ./manifest-tui.nix {
+    inherit pkgs lib name backendPath hsDirs hsTestDirs;
   };
 
 in {
-  # Scripts
-  inherit (devScriptsModule) compile-manifest compile-archive;
+  inherit (devScriptsModule) compile-manifest compile-archive llm-context;
+  inherit (tuiModule)        manifest-tui;
   generate-manifest = manifestModule.generateScript;
-
-  # All tools as a list (for easy inclusion in buildInputs)
-  tools = [
-    devScriptsModule.compile-manifest
-    devScriptsModule.compile-archive
-    manifestModule.generateScript
-  ];
-
-  # Debug info
-  debug = manifestModule.debug;
-
-  # Resolved config
-  config = {
-    inherit hsDirs;
-  };
 }

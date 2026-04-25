@@ -2,42 +2,39 @@
 {
   inherit name;
 
-  network = {
-    host = "localhost";
-    bindAddress = "0.0.0.0";
-  };
-
   database = {
-    name = "fantasy_league";
-    user = "$(whoami)";
-    password = "postgres";
-    port = 5432;
-    dataDir = "$HOME/.local/share/${name}/postgres";
+    name     = name;
+    user     = "$(whoami)";
+    password = "BOOTSTRAP_FALLBACK_ONLY_USE_SOPS";
+    port     = 5433;
+    dataDir  = "$HOME/.local/share/${name}/postgres";
     settings = {
-      max_connections = 100;
-      shared_buffers = "128MB";
+      max_connections            = 100;
+      shared_buffers             = "128MB";
       dynamic_shared_memory_type = "posix";
-      log_destination = "stderr";
-      logging_collector = true;
-      log_directory = "log";
-      log_filename = "postgresql-%Y-%m-%d_%H%M%S.log";
-      log_min_messages = "info";
-      log_min_error_statement = "info";
-      log_connections = true;
-      listen_addresses = "localhost";
+      log_destination            = "stderr";
+      logging_collector          = true;
+      log_directory              = "log";
+      log_filename               = "postgresql-%Y-%m-%d_%H%M%S.log";
+      log_min_messages           = "info";
+      log_connections            = true;
+      listen_addresses           = "localhost";
     };
   };
 
   haskell = {
-    port = 8080;
     cabalFile = "./pelotero-engine.cabal";
-    codeDirs = [
-      "./src"
-      "./src-new"
-      "./app"
-    ];
-    tests = "./test";
+    codeDirs  = [ "./lib" "./src-new" "./app" ];
+    tests     = "./test";
+  };
+
+  license = {
+    holder = "Harry Pray IV";
+    years  = "2024-2026";
+    spdx   = "AGPL-3.0-or-later";
+    name   = "GNU AGPLv3 or later";
   };
 
   dataDir = "$HOME/.local/share/${name}";
+  logDir  = "$HOME/.local/share/${name}/logs";
 }

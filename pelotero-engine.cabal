@@ -1,143 +1,46 @@
 cabal-version: 3.6
 
-name: pelotero-engine
-version: 0.0.9.0
+name:          pelotero-engine
+version:       0.0.10.0
+synopsis:      Fantasy baseball points engine
+description:   Refactor in progress. Phase 0: dev shell skeleton only.
+               Legacy code lives on disk under src/ and src-new/ but is not
+               wired into the cabal build until rewritten phase by phase.
+build-type:    Simple
 
-common shared-libs
-  build-depends:  base >= 4.11 && < 4.22
-                , random
-                , random-shuffle
-                , memory
-                , filepath
-                , http-conduit
-                , time
-                , bytestring
-                , aeson
-                , vector
-                , unordered-containers
-                , text
-                , containers
-                , cryptohash-sha256
-                , crypton
-                , scientific
-                , directory
-  ghc-options: -O2
+flag use-pkg-config
+    description: Use pkg-config to find libpq
+    default:     True
+    manual:      True
 
--- NEW: shared library for the refactored code
-common new-libs
-  build-depends:  base >= 4.11 && < 4.22
-                , aeson
-                , bytestring
-                , containers
-                , crypton
-                , http-conduit
-                , memory
-                , postgresql-simple
-                , resource-pool
-                , text
-                , time
-                , unix
-  ghc-options: -O2 -Wall
+common warnings
+  ghc-options:
+    -Wall
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wmissing-export-lists
+    -Wmissing-home-modules
+    -Wpartial-fields
+    -Wredundant-constraints
 
 library
-  import:         new-libs
-  hs-source-dirs: src-new
+  import:           warnings
+  hs-source-dirs:   lib
   exposed-modules:
-    Types.Player
-    DB.Connection
-    DB.Migration
-    DB.Player
-    MLB.Client
-    MLB.Parse
+    Pelotero.Prelude
+  build-depends:    base >= 4.11 && < 4.22
+                  , text
+  ghc-options:      -O2
+  default-language: Haskell2010
 
--- NEW: fetch rosters from MLB API into database
-executable fetch-rosters
-  import:         new-libs
-  hs-source-dirs: app
-  main-is:        FetchRosters.hs
-  build-depends:  pelotero-engine
-
--- ============================================================
--- OLD executables
--- ============================================================
-
-executable fetchStats
-  import: shared-libs
-  hs-source-dirs: src, src/ADT, src/League
-  main-is: FetchStats.hs
-  other-modules:  Input, Middle, Scraper, Points, Config, Roster, OfficialRoster, Validators, PlayerRanking, PointCalc, Utility
-  build-depends:  async
-
-executable roster
-  import: shared-libs
-  hs-source-dirs: src, src/ADT, src/League
-  main-is: FetchActiveRoster.hs
-  other-modules:  Input, Middle, Scraper, Points, Roster, Config, Leaderboard, OfficialRoster, PlayerRanking, Validators, PointCalc, Conversion, Utility
-  build-depends:  cassava
-                , async
-
-executable playground
-  import: shared-libs
-  hs-source-dirs: src, src/ADT, src/League
-  main-is: Playground.hs
-  other-modules:  Config, Points, Input, Leaderboard, Middle, OfficialRoster, Roster, Scraper, PlayerRanking, Validators, PointCalc, Utility
-  build-depends:  async
-
-executable head2head
-  import: shared-libs
-  hs-source-dirs: src, src/ADT, src/League
-  main-is: Head2Head.hs
-  other-modules:  Scraper, Input, Middle, Roster, Config, Points, OfficialRoster, Validators, PlayerRanking, PointCalc, Stats, Utility
-  build-depends:  async
-
-executable league
-  import: shared-libs
-  hs-source-dirs: src, src/ADT, src/League
-  main-is: LeagueTEST.hs
-  other-modules:  Validators, Config, Points, Input, Middle, OfficialRoster, Roster, PlayerRanking, PointCalc, Utility
-
-executable official
-  import: shared-libs
-  hs-source-dirs: src, src/ADT, src/League
-  main-is: OfficialTest.hs
-  other-modules:  Roster, Config, Input, OfficialRoster, Points, Middle, PointCalc, PlayerRanking, Validators, Utility
-
-executable generators
-  import: shared-libs
-  hs-source-dirs: src, src/ADT, src/League
-  main-is: Generators.hs
-  other-modules:  Config, OfficialRoster, Roster, PlayerRanking, Input, Middle, Points, Validators, Utility
-
-executable autodraft
-  import: shared-libs
-  hs-source-dirs: src, src/ADT, src/League
-  main-is: AutoDraft.hs
-  other-modules:  Config, OfficialRoster, Roster, PlayerRanking, Input, Middle, Points, Validators, Utility, Draft
-
-executable test_adt
-  import: shared-libs
-  hs-source-dirs: src, src/ADT, src/League
-  main-is: Test.hs
-  other-modules:  Input_trace
-  build-depends:  base >= 4.11 && < 4.22
-                , debug-trace-var
-                , bytestring
-                , aeson
-                , text
-                , containers
-                , async
-
-executable graphviz
-  import: shared-libs
-  hs-source-dirs: src, src/ADT, src/League
-  main-is: TypeGraph.hs
-  other-modules:  Roster, Config, Input, OfficialRoster, Points, Middle, PointCalc, PlayerRanking, Validators, Utility
-  build-depends:  base >= 4.11 && < 4.22
-                , debug-trace-var
-                , bytestring
-                , aeson
-                , text
-                , containers
-                , async
-                , graphviz
-                , process
+executable pelotero
+  import:           warnings
+  hs-source-dirs:   app
+  main-is:          Main.hs
+  build-depends:    base
+                  , pelotero-engine
+                  , text
+  ghc-options:      -O2 -threaded
+  default-language: Haskell2010
