@@ -1,17 +1,19 @@
 module Main (main) where
 
-import Test.Hspec (hspec, describe)
+import Test.Hspec
 
-import qualified Pelotero.Domain.DraftSpec    as DraftSpec
-import qualified Pelotero.Domain.PositionSpec as PositionSpec
-import qualified Pelotero.Domain.RosterSpec   as RosterSpec
-import qualified Pelotero.Domain.ScoringSpec  as ScoringSpec
-import qualified Pelotero.MLB.ConvertSpec     as ConvertSpec
+import qualified Pelotero.Domain.PositionSpec   as Position
+import qualified Pelotero.Domain.RosterSpec     as Roster
+import qualified Pelotero.Domain.ScoringSpec    as Scoring
+import qualified Pelotero.Domain.DraftSpec      as Draft
+import qualified Pelotero.MLB.ConvertSpec       as Convert
+import qualified Pelotero.Effects.PlayersSpec   as PlayersEff
 
 main :: IO ()
 main = hspec $ do
-  describe "Pelotero.Domain.Position" PositionSpec.spec
-  describe "Pelotero.Domain.Roster"   RosterSpec.spec
-  describe "Pelotero.Domain.Scoring"  ScoringSpec.spec
-  describe "Pelotero.Domain.Draft"    DraftSpec.spec
-  describe "Pelotero.MLB.Convert"     ConvertSpec.spec
+  Position.spec
+  Roster.spec
+  Scoring.spec
+  Draft.spec
+  Convert.spec
+  PlayersEff.spec
