@@ -1,5 +1,14 @@
--- | Repository for the @lineup_slot@ table. Same shape as 'RosterSlot';
--- the distinction is semantic (active lineup vs. full roster).
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module Pelotero.DB.LineupSlot
   ( LineupSlotRow(..)
   , getSlotsForTeamT
@@ -14,17 +23,64 @@ module Pelotero.DB.LineupSlot
   , replaceTeamLineup
   ) where
 
-import Data.Functor.Contravariant ((>$<))
-import Data.Text                  (Text)
-import qualified Data.Vector as V
-import qualified Hasql.Decoders   as D
-import qualified Hasql.Encoders   as E
-import qualified Hasql.Statement  as Stmt
-import qualified Hasql.Transaction as Tx
+import           Data.Functor.Contravariant ((>$<))
+import           Data.Int                   (Int64)
+import           Data.Text                  (Text)
+import           Data.Time                  (UTCTime)
+import           GHC.Generics               (Generic)
+
+import qualified Hasql.Transaction          as Tx
+
+import           Rel8                       ( Column
+                                            , Name
+                                            , Rel8able
+                                            , Result
+                                            , TableSchema(..)
+                                            , (==.)
+                                            , (&&.)
+                                            )
+import qualified Rel8                       as R
 
 import Pelotero.DB.Pool      (DBError, Pool, runTransaction)
-import Pelotero.DB.Statement
+import Pelotero.DB.Rel8Instances ()
 import Pelotero.Domain.Id    (DbLeagueTeamId(..), DbPlayerId(..))
+
+-- ============================================================================
+-- lineup_slot
+--
+-- Same shape as roster_slot: surrogate id and created_at exist on disk but
+-- aren't part of the public API. The (league_team_id, player_id) unique
+-- constraint is the logical key.
+-- ============================================================================
+
+data LineupSlotE f = LineupSlotE
+  { _lsId           :: Column f Int64
+  , _lsLeagueTeamId :: Column f DbLeagueTeamId
+  , _lsSlot         :: Column f Text
+  , _lsPlayerId     :: Column f DbPlayerId
+  , _lsCreatedAt    :: Column f UTCTime
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+deriving stock instance f ~ Result => Show (LineupSlotE f)
+deriving stock instance f ~ Result => Eq   (LineupSlotE f)
+
+lineupSlotSchema :: TableSchema (LineupSlotE Name)
+lineupSlotSchema = TableSchema
+  { name    = "lineup_slot"
+  , columns = LineupSlotE
+      { _lsId           = "id"
+      , _lsLeagueTeamId = "league_team_id"
+      , _lsSlot         = "slot"
+      , _lsPlayerId     = "player_id"
+      , _lsCreatedAt    = "created_at"
+      }
+  }
+
+-- ============================================================================
+-- Public row type (API compatibility with old hasql module)
+-- ============================================================================
 
 data LineupSlotRow = LineupSlotRow
   { lsLeagueTeamId :: !DbLeagueTeamId
@@ -33,22 +89,82 @@ data LineupSlotRow = LineupSlotRow
   }
   deriving stock (Show, Eq)
 
-getSlotsForTeamT :: DbLeagueTeamId -> Tx.Transaction [LineupSlotRow]
-getSlotsForTeamT tid = V.toList <$> Tx.statement tid selectForTeamStmt
+fromResult :: LineupSlotE Result -> LineupSlotRow
+fromResult LineupSlotE{..} = LineupSlotRow
+  { lsLeagueTeamId = _lsLeagueTeamId
+  , lsSlot         = _lsSlot
+  , lsPlayerId     = _lsPlayerId
+  }
+
+-- ============================================================================
+-- Transaction-flavored CRUD
+--
+-- addSlotT does ON CONFLICT (league_team_id, player_id) DO UPDATE SET slot,
+-- preserving the old hasql module's "moving a player to a new lineup slot
+-- doesn't fail" semantics.
+-- ============================================================================
 
 addSlotT :: LineupSlotRow -> Tx.Transaction ()
-addSlotT row = Tx.statement row insertStmt
+addSlotT row = Tx.statement () $ R.run_ $ R.insert R.Insert
+  { R.into       = lineupSlotSchema
+  , R.rows       = R.values
+      [ LineupSlotE
+          { _lsId           = R.unsafeDefault
+          , _lsLeagueTeamId = R.lit (lsLeagueTeamId row)
+          , _lsSlot         = R.lit (lsSlot row)
+          , _lsPlayerId     = R.lit (lsPlayerId row)
+          , _lsCreatedAt    = R.unsafeDefault
+          }
+      ]
+  , R.onConflict = R.DoUpdate R.Upsert
+      { R.index       = \r -> (_lsLeagueTeamId r, _lsPlayerId r)
+      , R.predicate   = Nothing
+      , R.set         = \new old -> LineupSlotE
+          { _lsId           = _lsId old
+          , _lsLeagueTeamId = _lsLeagueTeamId old
+          , _lsSlot         = _lsSlot new
+          , _lsPlayerId     = _lsPlayerId old
+          , _lsCreatedAt    = _lsCreatedAt old
+          }
+      , R.updateWhere = \_ _ -> R.lit True
+      }
+  , R.returning  = R.NoReturning
+  }
+
+getSlotsForTeamT :: DbLeagueTeamId -> Tx.Transaction [LineupSlotRow]
+getSlotsForTeamT tid = do
+  rows <- Tx.statement () $ R.run $ R.select $
+    R.orderBy ((_lsSlot >$< R.asc) <> (_lsPlayerId >$< R.asc)) $ do
+      r <- R.each lineupSlotSchema
+      R.where_ (_lsLeagueTeamId r ==. R.lit tid)
+      pure r
+  pure (map fromResult rows)
 
 removeSlotT :: DbLeagueTeamId -> DbPlayerId -> Tx.Transaction ()
-removeSlotT tid pid = Tx.statement (tid, pid) deleteOneStmt
+removeSlotT tid pid = Tx.statement () $ R.run_ $ R.delete R.Delete
+  { R.from        = lineupSlotSchema
+  , R.using       = pure ()
+  , R.deleteWhere = \_ r ->
+      _lsLeagueTeamId r ==. R.lit tid &&. _lsPlayerId r ==. R.lit pid
+  , R.returning   = R.NoReturning
+  }
 
 clearTeamLineupT :: DbLeagueTeamId -> Tx.Transaction ()
-clearTeamLineupT tid = Tx.statement tid deleteAllStmt
+clearTeamLineupT tid = Tx.statement () $ R.run_ $ R.delete R.Delete
+  { R.from        = lineupSlotSchema
+  , R.using       = pure ()
+  , R.deleteWhere = \_ r -> _lsLeagueTeamId r ==. R.lit tid
+  , R.returning   = R.NoReturning
+  }
 
 replaceTeamLineupT :: DbLeagueTeamId -> [LineupSlotRow] -> Tx.Transaction ()
 replaceTeamLineupT tid rows = do
   clearTeamLineupT tid
   mapM_ addSlotT rows
+
+-- ============================================================================
+-- Pool-flavored CRUD
+-- ============================================================================
 
 getSlotsForTeam :: Pool -> DbLeagueTeamId -> IO (Either DBError [LineupSlotRow])
 getSlotsForTeam pool tid = runTransaction pool (getSlotsForTeamT tid)
@@ -64,43 +180,3 @@ clearTeamLineup pool tid = runTransaction pool (clearTeamLineupT tid)
 
 replaceTeamLineup :: Pool -> DbLeagueTeamId -> [LineupSlotRow] -> IO (Either DBError ())
 replaceTeamLineup pool tid rows = runTransaction pool (replaceTeamLineupT tid rows)
-
-rowEncoder :: E.Params LineupSlotRow
-rowEncoder =
-     (lsLeagueTeamId >$< encDbLeagueTeamId)
-  <> (lsSlot         >$< encText)
-  <> (lsPlayerId     >$< encDbPlayerId)
-
-rowDecoder :: D.Row LineupSlotRow
-rowDecoder = LineupSlotRow
-  <$> decDbLeagueTeamId
-  <*> decText
-  <*> decDbPlayerId
-
-insertStmt :: Stmt.Statement LineupSlotRow ()
-insertStmt = Stmt.Statement sql rowEncoder D.noResult True
-  where
-    sql = "INSERT INTO lineup_slot (league_team_id, slot, player_id) \
-          \VALUES ($1, $2, $3) \
-          \ON CONFLICT (league_team_id, player_id) DO UPDATE SET \
-          \  slot = EXCLUDED.slot"
-
-selectForTeamStmt :: Stmt.Statement DbLeagueTeamId (V.Vector LineupSlotRow)
-selectForTeamStmt = Stmt.Statement sql encDbLeagueTeamId (D.rowVector rowDecoder) True
-  where
-    sql = "SELECT league_team_id, slot, player_id \
-          \FROM lineup_slot \
-          \WHERE league_team_id = $1 \
-          \ORDER BY slot, player_id"
-
-deleteOneStmt :: Stmt.Statement (DbLeagueTeamId, DbPlayerId) ()
-deleteOneStmt = Stmt.Statement sql encoder D.noResult True
-  where
-    sql = "DELETE FROM lineup_slot \
-          \WHERE league_team_id = $1 AND player_id = $2"
-    encoder = (fst >$< encDbLeagueTeamId) <> (snd >$< encDbPlayerId)
-
-deleteAllStmt :: Stmt.Statement DbLeagueTeamId ()
-deleteAllStmt = Stmt.Statement sql encDbLeagueTeamId D.noResult True
-  where
-    sql = "DELETE FROM lineup_slot WHERE league_team_id = $1"

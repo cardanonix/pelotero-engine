@@ -1,16 +1,22 @@
--- | Repository for the @league_team@ table. A league_team is a fantasy
--- team within a league, identified by @(league_config_id, team_key)@.
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module Pelotero.DB.LeagueTeam
-  ( -- * Row type
-    LeagueTeamRow(..)
-    -- * Transaction-level API
+  ( LeagueTeamRow(..)
   , insertLeagueTeamT
   , updateLeagueTeamT
   , getByIdT
   , lookupByKeyT
   , getForLeagueT
   , deleteT
-    -- * Pool/IO API
   , insertLeagueTeam
   , updateLeagueTeam
   , getById
@@ -19,20 +25,58 @@ module Pelotero.DB.LeagueTeam
   , delete
   ) where
 
-import Data.Functor.Contravariant ((>$<))
-import Data.Text                  (Text)
-import qualified Data.Vector as V
-import qualified Hasql.Decoders   as D
-import qualified Hasql.Encoders   as E
-import qualified Hasql.Statement  as Stmt
-import qualified Hasql.Transaction as Tx
+import           Data.Functor.Contravariant ((>$<))
+import           Data.Text                  (Text)
+import           GHC.Generics               (Generic)
+
+import qualified Hasql.Transaction          as Tx
+
+import           Rel8                       ( Column
+                                            , Name
+                                            , Rel8able
+                                            , Result
+                                            , TableSchema(..)
+                                            , (==.)
+                                            , (&&.)
+                                            )
+import qualified Rel8                       as R
 
 import Pelotero.DB.Pool      (DBError, Pool, runTransaction)
-import Pelotero.DB.Statement
+import Pelotero.DB.Rel8Instances ()
 import Pelotero.Domain.Id    (DbLeagueConfigId(..), DbLeagueTeamId(..))
 
---------------------------------------------------------------------------------
--- Row type
+-- ============================================================================
+-- league_team
+-- ============================================================================
+
+data LeagueTeam f = LeagueTeam
+  { _ltId             :: Column f DbLeagueTeamId
+  , _ltLeagueConfigId :: Column f DbLeagueConfigId
+  , _ltTeamKey        :: Column f Text
+  , _ltName           :: Column f Text
+  , _ltOwner          :: Column f Text
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+deriving stock instance f ~ Result => Show (LeagueTeam f)
+deriving stock instance f ~ Result => Eq   (LeagueTeam f)
+
+leagueTeamSchema :: TableSchema (LeagueTeam Name)
+leagueTeamSchema = TableSchema
+  { name    = "league_team"
+  , columns = LeagueTeam
+      { _ltId             = "id"
+      , _ltLeagueConfigId = "league_config_id"
+      , _ltTeamKey        = "team_key"
+      , _ltName           = "name"
+      , _ltOwner          = "owner"
+      }
+  }
+
+-- ============================================================================
+-- Public row type (API compatibility with old hasql module)
+-- ============================================================================
 
 data LeagueTeamRow = LeagueTeamRow
   { ltId             :: !(Maybe DbLeagueTeamId)
@@ -43,30 +87,90 @@ data LeagueTeamRow = LeagueTeamRow
   }
   deriving stock (Show, Eq)
 
---------------------------------------------------------------------------------
--- Transaction-level API
+fromResult :: LeagueTeam Result -> LeagueTeamRow
+fromResult LeagueTeam{..} = LeagueTeamRow
+  { ltId             = Just _ltId
+  , ltLeagueConfigId = _ltLeagueConfigId
+  , ltTeamKey        = _ltTeamKey
+  , ltName           = _ltName
+  , ltOwner          = _ltOwner
+  }
+
+-- ============================================================================
+-- Transaction-flavored CRUD
+-- ============================================================================
 
 insertLeagueTeamT :: LeagueTeamRow -> Tx.Transaction DbLeagueTeamId
-insertLeagueTeamT row = Tx.statement row insertStmt
+insertLeagueTeamT row = Tx.statement () $ R.run1 $ R.insert R.Insert
+  { R.into       = leagueTeamSchema
+  , R.rows       = R.values
+      [ LeagueTeam
+          { _ltId             = R.unsafeDefault
+          , _ltLeagueConfigId = R.lit (ltLeagueConfigId row)
+          , _ltTeamKey        = R.lit (ltTeamKey row)
+          , _ltName           = R.lit (ltName row)
+          , _ltOwner          = R.lit (ltOwner row)
+          }
+      ]
+  , R.onConflict = R.Abort
+  , R.returning  = R.Returning _ltId
+  }
 
 updateLeagueTeamT :: DbLeagueTeamId -> LeagueTeamRow -> Tx.Transaction ()
-updateLeagueTeamT ltid row = Tx.statement (ltid, row) updateStmt
+updateLeagueTeamT ltid row = Tx.statement () $ R.run_ $ R.update R.Update
+  { R.target      = leagueTeamSchema
+  , R.from        = pure ()
+  , R.set         = \_ t -> t
+      { _ltLeagueConfigId = R.lit (ltLeagueConfigId row)
+      , _ltTeamKey        = R.lit (ltTeamKey row)
+      , _ltName           = R.lit (ltName row)
+      , _ltOwner          = R.lit (ltOwner row)
+      }
+  , R.updateWhere = \_ t -> _ltId t ==. R.lit ltid
+  , R.returning   = R.NoReturning
+  }
 
 getByIdT :: DbLeagueTeamId -> Tx.Transaction (Maybe LeagueTeamRow)
-getByIdT ltid = Tx.statement ltid selectByIdStmt
+getByIdT ltid = do
+  rows <- Tx.statement () $ R.run $ R.select $ do
+    t <- R.each leagueTeamSchema
+    R.where_ (_ltId t ==. R.lit ltid)
+    pure t
+  pure $ case rows of
+    (t : _) -> Just (fromResult t)
+    []      -> Nothing
 
 lookupByKeyT
   :: DbLeagueConfigId -> Text -> Tx.Transaction (Maybe LeagueTeamRow)
-lookupByKeyT lcid key = Tx.statement (lcid, key) selectByKeyStmt
+lookupByKeyT lcid key = do
+  rows <- Tx.statement () $ R.run $ R.select $ do
+    t <- R.each leagueTeamSchema
+    R.where_ (_ltLeagueConfigId t ==. R.lit lcid &&. _ltTeamKey t ==. R.lit key)
+    pure t
+  pure $ case rows of
+    (t : _) -> Just (fromResult t)
+    []      -> Nothing
 
 getForLeagueT :: DbLeagueConfigId -> Tx.Transaction [LeagueTeamRow]
-getForLeagueT lcid = V.toList <$> Tx.statement lcid selectForLeagueStmt
+getForLeagueT lcid = do
+  rows <- Tx.statement () $ R.run $ R.select $
+    R.orderBy (_ltName >$< R.asc) $ do
+      t <- R.each leagueTeamSchema
+      R.where_ (_ltLeagueConfigId t ==. R.lit lcid)
+      pure t
+  pure (map fromResult rows)
 
 deleteT :: DbLeagueTeamId -> Tx.Transaction ()
-deleteT ltid = Tx.statement ltid deleteStmt
+deleteT ltid = Tx.statement () $ R.run_ $ R.delete R.Delete
+  { R.from        = leagueTeamSchema
+  , R.using       = pure ()
+  , R.deleteWhere = \_ t -> _ltId t ==. R.lit ltid
+  , R.returning   = R.NoReturning
+  }
 
---------------------------------------------------------------------------------
--- Pool/IO API
+-- ============================================================================
+-- Pool-flavored CRUD
+-- ============================================================================
 
 insertLeagueTeam :: Pool -> LeagueTeamRow -> IO (Either DBError DbLeagueTeamId)
 insertLeagueTeam pool row = runTransaction pool (insertLeagueTeamT row)
@@ -86,74 +190,3 @@ getForLeague pool lcid = runTransaction pool (getForLeagueT lcid)
 
 delete :: Pool -> DbLeagueTeamId -> IO (Either DBError ())
 delete pool ltid = runTransaction pool (deleteT ltid)
-
---------------------------------------------------------------------------------
--- Encoder
-
-insertEncoder :: E.Params LeagueTeamRow
-insertEncoder =
-     (ltLeagueConfigId >$< encDbLeagueConfigId)
-  <> (ltTeamKey        >$< encText)
-  <> (ltName           >$< encText)
-  <> (ltOwner          >$< encText)
-
---------------------------------------------------------------------------------
--- Decoder
-
-rowDecoder :: D.Row LeagueTeamRow
-rowDecoder = LeagueTeamRow
-  <$> (Just <$> decDbLeagueTeamId)
-  <*> decDbLeagueConfigId
-  <*> decText
-  <*> decText
-  <*> decText
-
---------------------------------------------------------------------------------
--- Statements
-
-insertStmt :: Stmt.Statement LeagueTeamRow DbLeagueTeamId
-insertStmt = Stmt.Statement sql insertEncoder (D.singleRow decDbLeagueTeamId) True
-  where
-    sql = "INSERT INTO league_team \
-          \  (league_config_id, team_key, name, owner) \
-          \VALUES ($1, $2, $3, $4) \
-          \RETURNING id"
-
-updateStmt :: Stmt.Statement (DbLeagueTeamId, LeagueTeamRow) ()
-updateStmt = Stmt.Statement sql encoder D.noResult True
-  where
-    sql = "UPDATE league_team SET \
-          \  league_config_id = $2, \
-          \  team_key         = $3, \
-          \  name             = $4, \
-          \  owner            = $5, \
-          \  updated_at       = NOW() \
-          \WHERE id = $1"
-    encoder = (fst >$< encDbLeagueTeamId) <> (snd >$< insertEncoder)
-
-selectByIdStmt :: Stmt.Statement DbLeagueTeamId (Maybe LeagueTeamRow)
-selectByIdStmt = Stmt.Statement sql encDbLeagueTeamId (D.rowMaybe rowDecoder) True
-  where
-    sql = "SELECT id, league_config_id, team_key, name, owner \
-          \FROM league_team WHERE id = $1"
-
-selectByKeyStmt :: Stmt.Statement (DbLeagueConfigId, Text) (Maybe LeagueTeamRow)
-selectByKeyStmt = Stmt.Statement sql encoder (D.rowMaybe rowDecoder) True
-  where
-    sql = "SELECT id, league_config_id, team_key, name, owner \
-          \FROM league_team \
-          \WHERE league_config_id = $1 AND team_key = $2"
-    encoder = (fst >$< encDbLeagueConfigId) <> (snd >$< encText)
-
-selectForLeagueStmt :: Stmt.Statement DbLeagueConfigId (V.Vector LeagueTeamRow)
-selectForLeagueStmt = Stmt.Statement sql encDbLeagueConfigId (D.rowVector rowDecoder) True
-  where
-    sql = "SELECT id, league_config_id, team_key, name, owner \
-          \FROM league_team \
-          \WHERE league_config_id = $1 \
-          \ORDER BY name"
-
-deleteStmt :: Stmt.Statement DbLeagueTeamId ()
-deleteStmt = Stmt.Statement sql encDbLeagueTeamId D.noResult True
-  where
-    sql = "DELETE FROM league_team WHERE id = $1"

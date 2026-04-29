@@ -1,3 +1,5 @@
+-- lib/Pelotero/Domain/Roster.hs
+
 module Pelotero.Domain.Roster
   (
     RosterSlot(..)

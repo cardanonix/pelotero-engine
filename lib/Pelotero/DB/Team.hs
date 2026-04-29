@@ -1,20 +1,16 @@
--- | Repository for the @team@ table and its @team_external_id@ side table.
---
--- The module exposes two parallel APIs:
---
---   * @*T@ functions return 'Tx.Transaction'. Use these for tests
---     (composable with rollback) and for multi-step atomic operations
---     (where you want a single transaction across several reads and
---     writes).
---   * Unsuffixed functions return @IO (Either DBError a)@. They wrap the
---     @T@ variants in 'runTransaction'. Use these from one-shot call sites
---     (a single sync step, a CLI tool, a one-off lookup).
---
--- The implementation lives in the @T@ variants; the IO wrappers are thin.
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module Pelotero.DB.Team
-  ( -- * Row type
-    TeamRow(..)
-    -- * Transaction-level API
+  ( TeamRow(..)
   , insertTeamT
   , updateTeamT
   , getByIdT
@@ -23,7 +19,6 @@ module Pelotero.DB.Team
   , lookupByExternalIdT
   , getExternalIdT
   , upsertByExternalIdT
-    -- * Pool/IO API (wrappers)
   , insertTeam
   , updateTeam
   , getById
@@ -34,22 +29,85 @@ module Pelotero.DB.Team
   , upsertByExternalId
   ) where
 
-import Data.Functor.Contravariant ((>$<))
-import Data.Text                  (Text)
-import Data.Time                  (UTCTime)
-import qualified Data.Vector as V
-import qualified Hasql.Decoders   as D
-import qualified Hasql.Encoders   as E
-import qualified Hasql.Statement  as Stmt
-import qualified Hasql.Transaction as Tx
+import           Data.Functor.Contravariant ((>$<))
+import           Data.Text                  (Text)
+import           Data.Time                  (UTCTime)
+import           GHC.Generics               (Generic)
+
+import qualified Hasql.Transaction          as Tx
+
+import           Rel8                       ( Column
+                                            , Name
+                                            , Rel8able
+                                            , Result
+                                            , TableSchema(..)
+                                            , (==.)
+                                            )
+import qualified Rel8                       as R
 
 import Pelotero.DB.Pool      (DBError, Pool, runTransaction)
 import Pelotero.DB.Provider  (ProviderName)
-import Pelotero.DB.Statement
+import Pelotero.DB.Rel8Instances ()
 import Pelotero.Domain.Id    (DbTeamId(..))
 
---------------------------------------------------------------------------------
--- Row type
+-- ============================================================================
+-- team
+-- ============================================================================
+
+data Team f = Team
+  { _teamId                 :: Column f DbTeamId
+  , _teamName               :: Column f Text
+  , _teamAbbreviation       :: Column f Text
+  , _teamLocationName       :: Column f Text
+  , _teamLastSyncedProvider :: Column f (Maybe ProviderName)
+  , _teamLastSyncedAt       :: Column f (Maybe UTCTime)
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+deriving stock instance f ~ Result => Show (Team f)
+deriving stock instance f ~ Result => Eq   (Team f)
+
+teamSchema :: TableSchema (Team Name)
+teamSchema = TableSchema
+  { name    = "team"
+  , columns = Team
+      { _teamId                 = "id"
+      , _teamName               = "name"
+      , _teamAbbreviation       = "abbreviation"
+      , _teamLocationName       = "location_name"
+      , _teamLastSyncedProvider = "last_synced_provider"
+      , _teamLastSyncedAt       = "last_synced_at"
+      }
+  }
+
+-- ============================================================================
+-- team_external_id
+-- ============================================================================
+
+data TeamExternalId f = TeamExternalId
+  { _teidTeamId     :: Column f DbTeamId
+  , _teidProvider   :: Column f ProviderName
+  , _teidExternalId :: Column f Text
+  , _teidFetchedAt  :: Column f UTCTime
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+teamExternalIdSchema :: TableSchema (TeamExternalId Name)
+teamExternalIdSchema = TableSchema
+  { name    = "team_external_id"
+  , columns = TeamExternalId
+      { _teidTeamId     = "team_id"
+      , _teidProvider   = "provider"
+      , _teidExternalId = "external_id"
+      , _teidFetchedAt  = "fetched_at"
+      }
+  }
+
+-- ============================================================================
+-- Public row type (API compatibility)
+-- ============================================================================
 
 data TeamRow = TeamRow
   { teamRowId                 :: !(Maybe DbTeamId)
@@ -61,43 +119,107 @@ data TeamRow = TeamRow
   }
   deriving stock (Show, Eq)
 
---------------------------------------------------------------------------------
--- Transaction-level API
+fromResult :: Team Result -> TeamRow
+fromResult Team{..} = TeamRow
+  { teamRowId                 = Just _teamId
+  , teamRowName               = _teamName
+  , teamRowAbbreviation       = _teamAbbreviation
+  , teamRowLocationName       = _teamLocationName
+  , teamRowLastSyncedProvider = _teamLastSyncedProvider
+  , teamRowLastSyncedAt       = _teamLastSyncedAt
+  }
+
+-- ============================================================================
+-- Transaction-flavored CRUD
+-- ============================================================================
 
 insertTeamT :: TeamRow -> Tx.Transaction DbTeamId
-insertTeamT row = Tx.statement (toFieldsTuple row) insertStmt
+insertTeamT row = Tx.statement () $ R.run1 $ R.insert R.Insert
+  { R.into       = teamSchema
+  , R.rows       = R.values
+      [ Team
+          { _teamId                 = R.unsafeDefault
+          , _teamName               = R.lit (teamRowName row)
+          , _teamAbbreviation       = R.lit (teamRowAbbreviation row)
+          , _teamLocationName       = R.lit (teamRowLocationName row)
+          , _teamLastSyncedProvider = R.lit (teamRowLastSyncedProvider row)
+          , _teamLastSyncedAt       = R.lit (teamRowLastSyncedAt row)
+          }
+      ]
+  , R.onConflict = R.Abort
+  , R.returning  = R.Returning _teamId
+  }
 
 updateTeamT :: DbTeamId -> TeamRow -> Tx.Transaction ()
-updateTeamT tid row = Tx.statement (tid, toFieldsTuple row) updateStmt
+updateTeamT tid row = Tx.statement () $ R.run_ $ R.update R.Update
+  { R.target      = teamSchema
+  , R.from        = pure ()
+  , R.set         = \_ t -> t
+      { _teamName               = R.lit (teamRowName row)
+      , _teamAbbreviation       = R.lit (teamRowAbbreviation row)
+      , _teamLocationName       = R.lit (teamRowLocationName row)
+      , _teamLastSyncedProvider = R.lit (teamRowLastSyncedProvider row)
+      , _teamLastSyncedAt       = R.lit (teamRowLastSyncedAt row)
+      }
+  , R.updateWhere = \_ t -> _teamId t ==. R.lit tid
+  , R.returning   = R.NoReturning
+  }
 
 getByIdT :: DbTeamId -> Tx.Transaction (Maybe TeamRow)
-getByIdT tid = Tx.statement tid selectByIdStmt
+getByIdT tid = do
+  rows <- Tx.statement () $ R.run $ R.select $ do
+    t <- R.each teamSchema
+    R.where_ (_teamId t ==. R.lit tid)
+    pure t
+  pure $ case rows of
+    (t : _) -> Just (fromResult t)
+    []      -> Nothing
 
 getAllT :: Tx.Transaction [TeamRow]
-getAllT = V.toList <$> Tx.statement () selectAllStmt
+getAllT = do
+  rows <- Tx.statement () $ R.run $ R.select $
+    R.orderBy (_teamName >$< R.asc) (R.each teamSchema)
+  pure (map fromResult rows)
 
-linkExternalIdT
-  :: DbTeamId -> ProviderName -> Text -> Tx.Transaction ()
-linkExternalIdT tid provider extId =
-  Tx.statement (tid, provider, extId) linkExternalIdStmt
+linkExternalIdT :: DbTeamId -> ProviderName -> Text -> Tx.Transaction ()
+linkExternalIdT tid provider extId = Tx.statement () $ R.run_ $ R.insert R.Insert
+  { R.into       = teamExternalIdSchema
+  , R.rows       = R.values
+      [ TeamExternalId
+          { _teidTeamId     = R.lit tid
+          , _teidProvider   = R.lit provider
+          , _teidExternalId = R.lit extId
+          , _teidFetchedAt  = R.unsafeDefault
+          }
+      ]
+  , R.onConflict = R.DoNothing
+  , R.returning  = R.NoReturning
+  }
 
-lookupByExternalIdT
-  :: ProviderName -> Text -> Tx.Transaction (Maybe DbTeamId)
-lookupByExternalIdT provider extId =
-  Tx.statement (provider, extId) lookupByExternalIdStmt
+lookupByExternalIdT :: ProviderName -> Text -> Tx.Transaction (Maybe DbTeamId)
+lookupByExternalIdT provider extId = do
+  rows <- Tx.statement () $ R.run $ R.select $ do
+    e <- R.each teamExternalIdSchema
+    R.where_ (_teidProvider   e ==. R.lit provider)
+    R.where_ (_teidExternalId e ==. R.lit extId)
+    pure (_teidTeamId e)
+  pure $ case rows of
+    (tid : _) -> Just tid
+    []        -> Nothing
 
-getExternalIdT
-  :: DbTeamId -> ProviderName -> Tx.Transaction (Maybe Text)
-getExternalIdT tid provider =
-  Tx.statement (tid, provider) getExternalIdStmt
+getExternalIdT :: DbTeamId -> ProviderName -> Tx.Transaction (Maybe Text)
+getExternalIdT tid provider = do
+  rows <- Tx.statement () $ R.run $ R.select $ do
+    e <- R.each teamExternalIdSchema
+    R.where_ (_teidTeamId   e ==. R.lit tid)
+    R.where_ (_teidProvider e ==. R.lit provider)
+    pure (_teidExternalId e)
+  pure $ case rows of
+    (extId : _) -> Just extId
+    []          -> Nothing
 
--- | Atomic version of 'upsertByExternalId': lookup, then insert+link or
--- update, all in one transaction. No race window.
 upsertByExternalIdT
-  :: ProviderName
-  -> Text
-  -> TeamRow
-  -> Tx.Transaction DbTeamId
+  :: ProviderName -> Text -> TeamRow -> Tx.Transaction DbTeamId
 upsertByExternalIdT provider extId row = do
   found <- lookupByExternalIdT provider extId
   case found of
@@ -109,8 +231,9 @@ upsertByExternalIdT provider extId row = do
       linkExternalIdT tid provider extId
       pure tid
 
---------------------------------------------------------------------------------
--- Pool/IO API (wrappers)
+-- ============================================================================
+-- Pool-flavored CRUD
+-- ============================================================================
 
 insertTeam :: Pool -> TeamRow -> IO (Either DBError DbTeamId)
 insertTeam pool row = runTransaction pool (insertTeamT row)
@@ -137,114 +260,6 @@ getExternalId pool tid provider =
   runTransaction pool (getExternalIdT tid provider)
 
 upsertByExternalId
-  :: Pool
-  -> ProviderName
-  -> Text
-  -> TeamRow
-  -> IO (Either DBError DbTeamId)
+  :: Pool -> ProviderName -> Text -> TeamRow -> IO (Either DBError DbTeamId)
 upsertByExternalId pool provider extId row =
   runTransaction pool (upsertByExternalIdT provider extId row)
-
---------------------------------------------------------------------------------
--- Field tuples and encoders
-
-type TeamFields =
-  ( Text                     -- name
-  , Text                     -- abbreviation
-  , Text                     -- location_name
-  , Maybe ProviderName       -- last_synced_provider
-  , Maybe UTCTime            -- last_synced_at
-  )
-
-toFieldsTuple :: TeamRow -> TeamFields
-toFieldsTuple TeamRow{..} =
-  ( teamRowName
-  , teamRowAbbreviation
-  , teamRowLocationName
-  , teamRowLastSyncedProvider
-  , teamRowLastSyncedAt
-  )
-
-teamFieldsEncoder :: E.Params TeamFields
-teamFieldsEncoder =
-     ((\(a,_,_,_,_) -> a) >$< encText)
-  <> ((\(_,b,_,_,_) -> b) >$< encText)
-  <> ((\(_,_,c,_,_) -> c) >$< encText)
-  <> ((\(_,_,_,d,_) -> d) >$< encProviderMaybe)
-  <> ((\(_,_,_,_,e) -> e) >$< encUTCTimeMaybe)
-
---------------------------------------------------------------------------------
--- Row decoder
-
-rowDecoder :: D.Row TeamRow
-rowDecoder = TeamRow
-  <$> (Just <$> decDbTeamId)
-  <*> decText
-  <*> decText
-  <*> decText
-  <*> decProviderMaybe
-  <*> decUTCTimeMaybe
-
---------------------------------------------------------------------------------
--- Statements
-
-insertStmt :: Stmt.Statement TeamFields DbTeamId
-insertStmt = Stmt.Statement sql teamFieldsEncoder (D.singleRow decDbTeamId) True
-  where
-    sql = "INSERT INTO team \
-          \  (name, abbreviation, location_name, last_synced_provider, last_synced_at) \
-          \VALUES ($1, $2, $3, $4, $5) \
-          \RETURNING id"
-
-updateStmt :: Stmt.Statement (DbTeamId, TeamFields) ()
-updateStmt = Stmt.Statement sql encoder D.noResult True
-  where
-    sql = "UPDATE team SET \
-          \  name = $2, \
-          \  abbreviation = $3, \
-          \  location_name = $4, \
-          \  last_synced_provider = $5, \
-          \  last_synced_at = $6, \
-          \  updated_at = NOW() \
-          \WHERE id = $1"
-    encoder = (fst >$< encDbTeamId) <> (snd >$< teamFieldsEncoder)
-
-selectByIdStmt :: Stmt.Statement DbTeamId (Maybe TeamRow)
-selectByIdStmt = Stmt.Statement sql encDbTeamId (D.rowMaybe rowDecoder) True
-  where
-    sql = "SELECT id, name, abbreviation, location_name, \
-          \       last_synced_provider, last_synced_at \
-          \FROM team WHERE id = $1"
-
-selectAllStmt :: Stmt.Statement () (V.Vector TeamRow)
-selectAllStmt = Stmt.Statement sql E.noParams (D.rowVector rowDecoder) True
-  where
-    sql = "SELECT id, name, abbreviation, location_name, \
-          \       last_synced_provider, last_synced_at \
-          \FROM team \
-          \ORDER BY name"
-
-linkExternalIdStmt :: Stmt.Statement (DbTeamId, ProviderName, Text) ()
-linkExternalIdStmt = Stmt.Statement sql encoder D.noResult True
-  where
-    sql = "INSERT INTO team_external_id (team_id, provider, external_id) \
-          \VALUES ($1, $2, $3) \
-          \ON CONFLICT (provider, external_id) DO NOTHING"
-    encoder =
-         ((\(a,_,_) -> a) >$< encDbTeamId)
-      <> ((\(_,b,_) -> b) >$< encProvider)
-      <> ((\(_,_,c) -> c) >$< encText)
-
-lookupByExternalIdStmt :: Stmt.Statement (ProviderName, Text) (Maybe DbTeamId)
-lookupByExternalIdStmt = Stmt.Statement sql encoder (D.rowMaybe decDbTeamId) True
-  where
-    sql = "SELECT team_id FROM team_external_id \
-          \WHERE provider = $1 AND external_id = $2"
-    encoder = (fst >$< encProvider) <> (snd >$< encText)
-
-getExternalIdStmt :: Stmt.Statement (DbTeamId, ProviderName) (Maybe Text)
-getExternalIdStmt = Stmt.Statement sql encoder (D.rowMaybe decText) True
-  where
-    sql = "SELECT external_id FROM team_external_id \
-          \WHERE team_id = $1 AND provider = $2"
-    encoder = (fst >$< encDbTeamId) <> (snd >$< encProvider)

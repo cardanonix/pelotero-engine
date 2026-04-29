@@ -1,14 +1,21 @@
--- | Repository for the @league_config@ table.
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module Pelotero.DB.LeagueConfig
-  ( -- * Row type
-    LeagueConfigRow(..)
-    -- * Transaction-level API
+  ( LeagueConfigRow(..)
   , insertLeagueConfigT
   , updateLeagueConfigT
   , getByIdT
   , getByLeagueIdT
   , getAllT
-    -- * Pool/IO API
   , insertLeagueConfig
   , updateLeagueConfig
   , getById
@@ -16,23 +23,74 @@ module Pelotero.DB.LeagueConfig
   , getAll
   ) where
 
-import Data.Functor.Contravariant ((>$<))
-import Data.Text                  (Text)
-import Data.Time                  (UTCTime)
-import qualified Data.Vector as V
-import qualified Hasql.Decoders   as D
-import qualified Hasql.Encoders   as E
-import qualified Hasql.Statement  as Stmt
-import qualified Hasql.Transaction as Tx
+import           Data.Functor.Contravariant ((>$<))
+import           Data.Text                  (Text)
+import           Data.Time                  (UTCTime)
+import           GHC.Generics               (Generic)
 
-import Pelotero.DB.Pool      (DBError, Pool, runTransaction)
-import Pelotero.DB.Statement
-import Pelotero.Domain.Id    (DbLeagueConfigId(..))
-import Pelotero.Domain.Roster (RosterLimits, LineupLimits)
+import qualified Hasql.Transaction          as Tx
+
+import           Rel8                       ( Column
+                                            , Name
+                                            , Rel8able
+                                            , Result
+                                            , TableSchema(..)
+                                            , (==.)
+                                            )
+import qualified Rel8                       as R
+
+import Pelotero.DB.Pool       (DBError, Pool, runTransaction)
+import Pelotero.DB.Rel8Instances  ()
+import Pelotero.Domain.Id     (DbLeagueConfigId(..))
+import Pelotero.Domain.Roster (LineupLimits, RosterLimits)
 import Pelotero.Domain.Scoring (LeagueScoring)
 
---------------------------------------------------------------------------------
--- Row type
+-- ============================================================================
+-- league_config
+-- ============================================================================
+
+data LeagueConfig f = LeagueConfig
+  { _lcId            :: Column f DbLeagueConfigId
+  , _lcLeagueId      :: Column f Text
+  , _lcCommissioner  :: Column f Text
+  , _lcStatus        :: Column f Text
+  , _lcScoring       :: Column f LeagueScoring
+  , _lcRosterLimits  :: Column f RosterLimits
+  , _lcLineupLimits  :: Column f LineupLimits
+  , _lcDraftAuto     :: Column f Bool
+  , _lcDraftStrategy :: Column f Text
+  , _lcDraftAutoAt   :: Column f (Maybe UTCTime)
+  , _lcScoringStart  :: Column f UTCTime
+  , _lcScoringEnd    :: Column f UTCTime
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+deriving stock instance f ~ Result => Show (LeagueConfig f)
+deriving stock instance f ~ Result => Eq   (LeagueConfig f)
+
+leagueConfigSchema :: TableSchema (LeagueConfig Name)
+leagueConfigSchema = TableSchema
+  { name    = "league_config"
+  , columns = LeagueConfig
+      { _lcId            = "id"
+      , _lcLeagueId      = "league_id"
+      , _lcCommissioner  = "commissioner"
+      , _lcStatus        = "status"
+      , _lcScoring       = "scoring_config"
+      , _lcRosterLimits  = "roster_limits"
+      , _lcLineupLimits  = "lineup_limits"
+      , _lcDraftAuto     = "draft_auto"
+      , _lcDraftStrategy = "draft_strategy"
+      , _lcDraftAutoAt   = "draft_auto_at"
+      , _lcScoringStart  = "scoring_start"
+      , _lcScoringEnd    = "scoring_end"
+      }
+  }
+
+-- ============================================================================
+-- Public row type (API compatibility with old hasql module)
+-- ============================================================================
 
 data LeagueConfigRow = LeagueConfigRow
   { lcId            :: !(Maybe DbLeagueConfigId)
@@ -50,26 +108,99 @@ data LeagueConfigRow = LeagueConfigRow
   }
   deriving stock (Show, Eq)
 
---------------------------------------------------------------------------------
--- Transaction-level API
+fromResult :: LeagueConfig Result -> LeagueConfigRow
+fromResult LeagueConfig{..} = LeagueConfigRow
+  { lcId            = Just _lcId
+  , lcLeagueId      = _lcLeagueId
+  , lcCommissioner  = _lcCommissioner
+  , lcStatus        = _lcStatus
+  , lcScoring       = _lcScoring
+  , lcRosterLimits  = _lcRosterLimits
+  , lcLineupLimits  = _lcLineupLimits
+  , lcDraftAuto     = _lcDraftAuto
+  , lcDraftStrategy = _lcDraftStrategy
+  , lcDraftAutoAt   = _lcDraftAutoAt
+  , lcScoringStart  = _lcScoringStart
+  , lcScoringEnd    = _lcScoringEnd
+  }
+
+-- ============================================================================
+-- Transaction-flavored CRUD
+-- ============================================================================
 
 insertLeagueConfigT :: LeagueConfigRow -> Tx.Transaction DbLeagueConfigId
-insertLeagueConfigT row = Tx.statement row insertStmt
+insertLeagueConfigT row = Tx.statement () $ R.run1 $ R.insert R.Insert
+  { R.into       = leagueConfigSchema
+  , R.rows       = R.values
+      [ LeagueConfig
+          { _lcId            = R.unsafeDefault
+          , _lcLeagueId      = R.lit (lcLeagueId row)
+          , _lcCommissioner  = R.lit (lcCommissioner row)
+          , _lcStatus        = R.lit (lcStatus row)
+          , _lcScoring       = R.lit (lcScoring row)
+          , _lcRosterLimits  = R.lit (lcRosterLimits row)
+          , _lcLineupLimits  = R.lit (lcLineupLimits row)
+          , _lcDraftAuto     = R.lit (lcDraftAuto row)
+          , _lcDraftStrategy = R.lit (lcDraftStrategy row)
+          , _lcDraftAutoAt   = R.lit (lcDraftAutoAt row)
+          , _lcScoringStart  = R.lit (lcScoringStart row)
+          , _lcScoringEnd    = R.lit (lcScoringEnd row)
+          }
+      ]
+  , R.onConflict = R.Abort
+  , R.returning  = R.Returning _lcId
+  }
 
 updateLeagueConfigT :: DbLeagueConfigId -> LeagueConfigRow -> Tx.Transaction ()
-updateLeagueConfigT lcid row = Tx.statement (lcid, row) updateStmt
+updateLeagueConfigT lcid row = Tx.statement () $ R.run_ $ R.update R.Update
+  { R.target      = leagueConfigSchema
+  , R.from        = pure ()
+  , R.set         = \_ c -> c
+      { _lcLeagueId      = R.lit (lcLeagueId row)
+      , _lcCommissioner  = R.lit (lcCommissioner row)
+      , _lcStatus        = R.lit (lcStatus row)
+      , _lcScoring       = R.lit (lcScoring row)
+      , _lcRosterLimits  = R.lit (lcRosterLimits row)
+      , _lcLineupLimits  = R.lit (lcLineupLimits row)
+      , _lcDraftAuto     = R.lit (lcDraftAuto row)
+      , _lcDraftStrategy = R.lit (lcDraftStrategy row)
+      , _lcDraftAutoAt   = R.lit (lcDraftAutoAt row)
+      , _lcScoringStart  = R.lit (lcScoringStart row)
+      , _lcScoringEnd    = R.lit (lcScoringEnd row)
+      }
+  , R.updateWhere = \_ c -> _lcId c ==. R.lit lcid
+  , R.returning   = R.NoReturning
+  }
 
 getByIdT :: DbLeagueConfigId -> Tx.Transaction (Maybe LeagueConfigRow)
-getByIdT lcid = Tx.statement lcid selectByIdStmt
+getByIdT lcid = do
+  rows <- Tx.statement () $ R.run $ R.select $ do
+    c <- R.each leagueConfigSchema
+    R.where_ (_lcId c ==. R.lit lcid)
+    pure c
+  pure $ case rows of
+    (c : _) -> Just (fromResult c)
+    []      -> Nothing
 
 getByLeagueIdT :: Text -> Tx.Transaction (Maybe LeagueConfigRow)
-getByLeagueIdT lid = Tx.statement lid selectByLeagueIdStmt
+getByLeagueIdT lid = do
+  rows <- Tx.statement () $ R.run $ R.select $ do
+    c <- R.each leagueConfigSchema
+    R.where_ (_lcLeagueId c ==. R.lit lid)
+    pure c
+  pure $ case rows of
+    (c : _) -> Just (fromResult c)
+    []      -> Nothing
 
 getAllT :: Tx.Transaction [LeagueConfigRow]
-getAllT = V.toList <$> Tx.statement () selectAllStmt
+getAllT = do
+  rows <- Tx.statement () $ R.run $ R.select $
+    R.orderBy (_lcLeagueId >$< R.asc) (R.each leagueConfigSchema)
+  pure (map fromResult rows)
 
---------------------------------------------------------------------------------
--- Pool/IO API
+-- ============================================================================
+-- Pool-flavored CRUD
+-- ============================================================================
 
 insertLeagueConfig :: Pool -> LeagueConfigRow -> IO (Either DBError DbLeagueConfigId)
 insertLeagueConfig pool row = runTransaction pool (insertLeagueConfigT row)
@@ -85,98 +216,3 @@ getByLeagueId pool lid = runTransaction pool (getByLeagueIdT lid)
 
 getAll :: Pool -> IO (Either DBError [LeagueConfigRow])
 getAll pool = runTransaction pool getAllT
-
---------------------------------------------------------------------------------
--- Encoder
-
-insertEncoder :: E.Params LeagueConfigRow
-insertEncoder =
-     (lcLeagueId      >$< encText)
-  <> (lcCommissioner  >$< encText)
-  <> (lcStatus        >$< encText)
-  <> (lcScoring       >$< encJsonb)
-  <> (lcRosterLimits  >$< encJsonb)
-  <> (lcLineupLimits  >$< encJsonb)
-  <> (lcDraftAuto     >$< encBool)
-  <> (lcDraftStrategy >$< encText)
-  <> (lcDraftAutoAt   >$< encUTCTimeMaybe)
-  <> (lcScoringStart  >$< encUTCTime)
-  <> (lcScoringEnd    >$< encUTCTime)
-
---------------------------------------------------------------------------------
--- Decoder
-
-rowDecoder :: D.Row LeagueConfigRow
-rowDecoder = LeagueConfigRow
-  <$> (Just <$> decDbLeagueConfigId)
-  <*> decText
-  <*> decText
-  <*> decText
-  <*> decJsonb
-  <*> decJsonb
-  <*> decJsonb
-  <*> decBool
-  <*> decText
-  <*> decUTCTimeMaybe
-  <*> decUTCTime
-  <*> decUTCTime
-
---------------------------------------------------------------------------------
--- Statements
-
-insertStmt :: Stmt.Statement LeagueConfigRow DbLeagueConfigId
-insertStmt = Stmt.Statement sql insertEncoder (D.singleRow decDbLeagueConfigId) True
-  where
-    sql = "INSERT INTO league_config \
-          \  (league_id, commissioner, status, scoring_config, \
-          \   roster_limits, lineup_limits, draft_auto, draft_strategy, \
-          \   draft_auto_at, scoring_start, scoring_end) \
-          \VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) \
-          \RETURNING id"
-
-updateStmt :: Stmt.Statement (DbLeagueConfigId, LeagueConfigRow) ()
-updateStmt = Stmt.Statement sql encoder D.noResult True
-  where
-    sql = "UPDATE league_config SET \
-          \  league_id      = $2, \
-          \  commissioner   = $3, \
-          \  status         = $4, \
-          \  scoring_config = $5, \
-          \  roster_limits  = $6, \
-          \  lineup_limits  = $7, \
-          \  draft_auto     = $8, \
-          \  draft_strategy = $9, \
-          \  draft_auto_at  = $10, \
-          \  scoring_start  = $11, \
-          \  scoring_end    = $12, \
-          \  updated_at     = NOW() \
-          \WHERE id = $1"
-    encoder = (fst >$< encDbLeagueConfigId) <> (snd >$< insertEncoder)
-
-selectByIdStmt :: Stmt.Statement DbLeagueConfigId (Maybe LeagueConfigRow)
-selectByIdStmt = Stmt.Statement sql encDbLeagueConfigId (D.rowMaybe rowDecoder) True
-  where
-    sql = "SELECT id, league_id, commissioner, status, \
-          \       scoring_config, roster_limits, lineup_limits, \
-          \       draft_auto, draft_strategy, draft_auto_at, \
-          \       scoring_start, scoring_end \
-          \FROM league_config WHERE id = $1"
-
-selectByLeagueIdStmt :: Stmt.Statement Text (Maybe LeagueConfigRow)
-selectByLeagueIdStmt = Stmt.Statement sql encText (D.rowMaybe rowDecoder) True
-  where
-    sql = "SELECT id, league_id, commissioner, status, \
-          \       scoring_config, roster_limits, lineup_limits, \
-          \       draft_auto, draft_strategy, draft_auto_at, \
-          \       scoring_start, scoring_end \
-          \FROM league_config WHERE league_id = $1"
-
-selectAllStmt :: Stmt.Statement () (V.Vector LeagueConfigRow)
-selectAllStmt = Stmt.Statement sql E.noParams (D.rowVector rowDecoder) True
-  where
-    sql = "SELECT id, league_id, commissioner, status, \
-          \       scoring_config, roster_limits, lineup_limits, \
-          \       draft_auto, draft_strategy, draft_auto_at, \
-          \       scoring_start, scoring_end \
-          \FROM league_config \
-          \ORDER BY league_id"

@@ -9,7 +9,7 @@ import qualified Data.Text.IO    as TIO
 import System.Exit           (exitFailure)
 import System.IO             (hPutStrLn, stderr)
 
-import qualified Effectful      as E
+import Effectful()
 import Effectful              (runEff)
 
 import qualified Pelotero.DB.Migration as Mig

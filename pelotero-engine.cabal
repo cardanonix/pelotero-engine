@@ -63,7 +63,7 @@ library
     Pelotero.DB.Provider
     Pelotero.DB.Pool
     Pelotero.DB.Migration
-    Pelotero.DB.Statement
+    Pelotero.DB.Rel8Instances
     Pelotero.DB.Team
     Pelotero.DB.Player
     Pelotero.DB.FetchLog
@@ -110,6 +110,7 @@ library
                   , http-client        >= 0.7   && < 0.8
                   , http-conduit
                   , http-types         >= 0.12  && < 0.13
+                  , rel8               >= 1.7   && < 1.8
   ghc-options:      -O2
 
 executable pelotero
@@ -177,6 +178,12 @@ test-suite pelotero-integration-test
     IntegrationTest.FetchLogRepoSpec
     IntegrationTest.GameRepoSpec
     IntegrationTest.BoxscoreEntryRepoSpec
+    IntegrationTest.RosterSlotRepoSpec
+    IntegrationTest.LeagueConfigRepoSpec
+    IntegrationTest.LeagueTeamRepoSpec
+    IntegrationTest.LineupSlotRepoSpec
+    IntegrationTest.PlayerRankingRepoSpec
+    IntegrationTest.DraftPickRepoSpec
   build-depends:    base
                   , pelotero-engine
                   , bytestring

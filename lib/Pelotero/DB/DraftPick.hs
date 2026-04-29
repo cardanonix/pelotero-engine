@@ -1,6 +1,14 @@
--- | Repository for the @draft_pick@ table. Append-only during a draft;
--- the UNIQUE constraints on (league, pick_number) and (league, player)
--- enforce that no player is drafted twice and no pick slot is used twice.
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module Pelotero.DB.DraftPick
   ( DraftPickRow(..)
   , recordPickT
@@ -11,17 +19,24 @@ module Pelotero.DB.DraftPick
   , getPickCount
   ) where
 
-import Data.Functor.Contravariant ((>$<))
-import Data.Int                   (Int32, Int64)
-import Data.Time                  (UTCTime)
-import qualified Data.Vector as V
-import qualified Hasql.Decoders   as D
-import qualified Hasql.Encoders   as E
-import qualified Hasql.Statement  as Stmt
-import qualified Hasql.Transaction as Tx
+import           Data.Functor.Contravariant ((>$<))
+import           Data.Int                   (Int32, Int64)
+import           Data.Time                  (UTCTime)
+import           GHC.Generics               (Generic)
+
+import qualified Hasql.Transaction          as Tx
+
+import           Rel8                       ( Column
+                                            , Name
+                                            , Rel8able
+                                            , Result
+                                            , TableSchema(..)
+                                            , (==.)
+                                            )
+import qualified Rel8                       as R
 
 import Pelotero.DB.Pool      (DBError, Pool, runTransaction)
-import Pelotero.DB.Statement
+import Pelotero.DB.Rel8Instances ()
 import Pelotero.Domain.Id
   ( DbDraftPickId(..)
   , DbLeagueConfigId(..)
@@ -29,26 +44,104 @@ import Pelotero.Domain.Id
   , DbPlayerId(..)
   )
 
+-- ============================================================================
+-- draft_pick
+-- ============================================================================
+
+data DraftPickE f = DraftPickE
+  { _dpId             :: Column f DbDraftPickId
+  , _dpLeagueConfigId :: Column f DbLeagueConfigId
+  , _dpPickNumber     :: Column f Int32
+  , _dpLeagueTeamId   :: Column f DbLeagueTeamId
+  , _dpPlayerId       :: Column f DbPlayerId
+  , _dpPickedAt       :: Column f UTCTime
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+deriving stock instance f ~ Result => Show (DraftPickE f)
+deriving stock instance f ~ Result => Eq   (DraftPickE f)
+
+draftPickSchema :: TableSchema (DraftPickE Name)
+draftPickSchema = TableSchema
+  { name    = "draft_pick"
+  , columns = DraftPickE
+      { _dpId             = "id"
+      , _dpLeagueConfigId = "league_config_id"
+      , _dpPickNumber     = "pick_number"
+      , _dpLeagueTeamId   = "league_team_id"
+      , _dpPlayerId       = "player_id"
+      , _dpPickedAt       = "picked_at"
+      }
+  }
+
+-- ============================================================================
+-- Public row type (API compatibility with old hasql module)
+-- ============================================================================
+
 data DraftPickRow = DraftPickRow
-  { dpId              :: !(Maybe DbDraftPickId)
-  , dpLeagueConfigId  :: !DbLeagueConfigId
-  , dpPickNumber      :: !Int32
-  , dpLeagueTeamId    :: !DbLeagueTeamId
-  , dpPlayerId        :: !DbPlayerId
-  , dpPickedAt        :: !(Maybe UTCTime)
+  { dpId             :: !(Maybe DbDraftPickId)
+  , dpLeagueConfigId :: !DbLeagueConfigId
+  , dpPickNumber     :: !Int32
+  , dpLeagueTeamId   :: !DbLeagueTeamId
+  , dpPlayerId       :: !DbPlayerId
+  , dpPickedAt       :: !(Maybe UTCTime)
   }
   deriving stock (Show, Eq)
 
+fromResult :: DraftPickE Result -> DraftPickRow
+fromResult DraftPickE{..} = DraftPickRow
+  { dpId             = Just _dpId
+  , dpLeagueConfigId = _dpLeagueConfigId
+  , dpPickNumber     = _dpPickNumber
+  , dpLeagueTeamId   = _dpLeagueTeamId
+  , dpPlayerId       = _dpPlayerId
+  , dpPickedAt       = Just _dpPickedAt
+  }
+
+-- ============================================================================
+-- Transaction-flavored CRUD
+-- ============================================================================
+
 recordPickT :: DraftPickRow -> Tx.Transaction DbDraftPickId
-recordPickT row = Tx.statement row insertStmt
+recordPickT row = Tx.statement () $ R.run1 $ R.insert R.Insert
+  { R.into       = draftPickSchema
+  , R.rows       = R.values
+      [ DraftPickE
+          { _dpId             = R.unsafeDefault
+          , _dpLeagueConfigId = R.lit (dpLeagueConfigId row)
+          , _dpPickNumber     = R.lit (dpPickNumber row)
+          , _dpLeagueTeamId   = R.lit (dpLeagueTeamId row)
+          , _dpPlayerId       = R.lit (dpPlayerId row)
+          , _dpPickedAt       = R.unsafeDefault
+          }
+      ]
+  , R.onConflict = R.Abort
+  , R.returning  = R.Returning _dpId
+  }
 
 getPicksForLeagueT :: DbLeagueConfigId -> Tx.Transaction [DraftPickRow]
-getPicksForLeagueT lcid = V.toList <$> Tx.statement lcid selectForLeagueStmt
+getPicksForLeagueT lcid = do
+  rows <- Tx.statement () $ R.run $ R.select $
+    R.orderBy (_dpPickNumber >$< R.asc) $ do
+      d <- R.each draftPickSchema
+      R.where_ (_dpLeagueConfigId d ==. R.lit lcid)
+      pure d
+  pure (map fromResult rows)
 
 getPickCountT :: DbLeagueConfigId -> Tx.Transaction Int64
 getPickCountT lcid = do
-  mc <- Tx.statement lcid countStmt
-  pure (maybe 0 id mc)
+  ns <- Tx.statement () $ R.run $ R.select $ R.aggregate1 R.countStar $ do
+    d <- R.each draftPickSchema
+    R.where_ (_dpLeagueConfigId d ==. R.lit lcid)
+    pure d
+  pure $ case ns of
+    (n : _) -> n
+    []      -> 0
+
+-- ============================================================================
+-- Pool-flavored CRUD
+-- ============================================================================
 
 recordPick :: Pool -> DraftPickRow -> IO (Either DBError DbDraftPickId)
 recordPick pool row = runTransaction pool (recordPickT row)
@@ -58,44 +151,3 @@ getPicksForLeague pool lcid = runTransaction pool (getPicksForLeagueT lcid)
 
 getPickCount :: Pool -> DbLeagueConfigId -> IO (Either DBError Int64)
 getPickCount pool lcid = runTransaction pool (getPickCountT lcid)
-
-insertEncoder :: E.Params DraftPickRow
-insertEncoder =
-     (dpLeagueConfigId >$< encDbLeagueConfigId)
-  <> (dpPickNumber     >$< encInt32')
-  <> (dpLeagueTeamId   >$< encDbLeagueTeamId)
-  <> (dpPlayerId       >$< encDbPlayerId)
-  where
-    encInt32' :: E.Params Int32
-    encInt32' = E.param (E.nonNullable E.int4)
-
-rowDecoder :: D.Row DraftPickRow
-rowDecoder = DraftPickRow
-  <$> (Just <$> decDbDraftPickId)
-  <*> decDbLeagueConfigId
-  <*> D.column (D.nonNullable D.int4)
-  <*> decDbLeagueTeamId
-  <*> decDbPlayerId
-  <*> (Just <$> decUTCTime)
-
-insertStmt :: Stmt.Statement DraftPickRow DbDraftPickId
-insertStmt = Stmt.Statement sql insertEncoder (D.singleRow decDbDraftPickId) True
-  where
-    sql = "INSERT INTO draft_pick \
-          \  (league_config_id, pick_number, league_team_id, player_id) \
-          \VALUES ($1, $2, $3, $4) \
-          \RETURNING id"
-
-selectForLeagueStmt :: Stmt.Statement DbLeagueConfigId (V.Vector DraftPickRow)
-selectForLeagueStmt = Stmt.Statement sql encDbLeagueConfigId (D.rowVector rowDecoder) True
-  where
-    sql = "SELECT id, league_config_id, pick_number, league_team_id, \
-          \       player_id, picked_at \
-          \FROM draft_pick \
-          \WHERE league_config_id = $1 \
-          \ORDER BY pick_number"
-
-countStmt :: Stmt.Statement DbLeagueConfigId (Maybe Int64)
-countStmt = Stmt.Statement sql encDbLeagueConfigId (D.rowMaybe decInt64) True
-  where
-    sql = "SELECT COUNT(*) FROM draft_pick WHERE league_config_id = $1"

@@ -1,13 +1,16 @@
--- | Repository for the @game@ table and its @game_external_id@ side table.
--- See "Pelotero.DB.Team" for the API conventions.
---
--- A game's away/home teams are required (NOT NULL FKs to @team@); upsert
--- callers must have already inserted the teams first. The sync layer is
--- responsible for ordering: teams come before games come before stats.
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module Pelotero.DB.Game
-  ( -- * Row type
-    GameRow(..)
-    -- * Transaction-level API
+  ( GameRow(..)
   , insertGameT
   , updateGameT
   , getByIdT
@@ -16,7 +19,6 @@ module Pelotero.DB.Game
   , lookupByExternalIdT
   , getExternalIdT
   , upsertByExternalIdT
-    -- * Pool/IO API (wrappers)
   , insertGame
   , updateGame
   , getById
@@ -27,22 +29,85 @@ module Pelotero.DB.Game
   , upsertByExternalId
   ) where
 
-import Data.Functor.Contravariant ((>$<))
-import Data.Text                  (Text)
-import Data.Time                  (Day, UTCTime)
-import qualified Data.Vector as V
-import qualified Hasql.Decoders   as D
-import qualified Hasql.Encoders   as E
-import qualified Hasql.Statement  as Stmt
-import qualified Hasql.Transaction as Tx
+import           Data.Functor.Contravariant ((>$<))
+import           Data.Text                  (Text)
+import           Data.Time                  (Day, UTCTime)
+import           GHC.Generics               (Generic)
+
+import qualified Hasql.Transaction          as Tx
+
+import           Rel8                       ( Column
+                                            , Name
+                                            , Rel8able
+                                            , Result
+                                            , TableSchema(..)
+                                            , (==.)
+                                            )
+import qualified Rel8                       as R
 
 import Pelotero.DB.Pool      (DBError, Pool, runTransaction)
 import Pelotero.DB.Provider  (ProviderName)
-import Pelotero.DB.Statement
-import Pelotero.Domain.Id    (DbGameId(..), DbTeamId)
+import Pelotero.DB.Rel8Instances ()
+import Pelotero.Domain.Id    (DbGameId(..), DbTeamId(..))
 
---------------------------------------------------------------------------------
--- Row type
+-- ============================================================================
+-- game
+-- ============================================================================
+
+data Game f = Game
+  { _gameId                 :: Column f DbGameId
+  , _gameGameDate           :: Column f Day
+  , _gameAwayTeamId         :: Column f DbTeamId
+  , _gameHomeTeamId         :: Column f DbTeamId
+  , _gameLastSyncedProvider :: Column f (Maybe ProviderName)
+  , _gameLastSyncedAt       :: Column f (Maybe UTCTime)
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+deriving stock instance f ~ Result => Show (Game f)
+deriving stock instance f ~ Result => Eq   (Game f)
+
+gameSchema :: TableSchema (Game Name)
+gameSchema = TableSchema
+  { name    = "game"
+  , columns = Game
+      { _gameId                 = "id"
+      , _gameGameDate           = "game_date"
+      , _gameAwayTeamId         = "away_team_id"
+      , _gameHomeTeamId         = "home_team_id"
+      , _gameLastSyncedProvider = "last_synced_provider"
+      , _gameLastSyncedAt       = "last_synced_at"
+      }
+  }
+
+-- ============================================================================
+-- game_external_id
+-- ============================================================================
+
+data GameExternalId f = GameExternalId
+  { _geidGameId     :: Column f DbGameId
+  , _geidProvider   :: Column f ProviderName
+  , _geidExternalId :: Column f Text
+  , _geidFetchedAt  :: Column f UTCTime
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+gameExternalIdSchema :: TableSchema (GameExternalId Name)
+gameExternalIdSchema = TableSchema
+  { name    = "game_external_id"
+  , columns = GameExternalId
+      { _geidGameId     = "game_id"
+      , _geidProvider   = "provider"
+      , _geidExternalId = "external_id"
+      , _geidFetchedAt  = "fetched_at"
+      }
+  }
+
+-- ============================================================================
+-- Public row type (API compatibility with old hasql module)
+-- ============================================================================
 
 data GameRow = GameRow
   { gameRowId                 :: !(Maybe DbGameId)
@@ -54,37 +119,107 @@ data GameRow = GameRow
   }
   deriving stock (Show, Eq)
 
---------------------------------------------------------------------------------
--- Transaction-level API
+fromResult :: Game Result -> GameRow
+fromResult Game{..} = GameRow
+  { gameRowId                 = Just _gameId
+  , gameRowGameDate           = _gameGameDate
+  , gameRowAwayTeamId         = _gameAwayTeamId
+  , gameRowHomeTeamId         = _gameHomeTeamId
+  , gameRowLastSyncedProvider = _gameLastSyncedProvider
+  , gameRowLastSyncedAt       = _gameLastSyncedAt
+  }
+
+-- ============================================================================
+-- Transaction-flavored CRUD
+-- ============================================================================
 
 insertGameT :: GameRow -> Tx.Transaction DbGameId
-insertGameT row = Tx.statement (toFieldsTuple row) insertStmt
+insertGameT row = Tx.statement () $ R.run1 $ R.insert R.Insert
+  { R.into       = gameSchema
+  , R.rows       = R.values
+      [ Game
+          { _gameId                 = R.unsafeDefault
+          , _gameGameDate           = R.lit (gameRowGameDate row)
+          , _gameAwayTeamId         = R.lit (gameRowAwayTeamId row)
+          , _gameHomeTeamId         = R.lit (gameRowHomeTeamId row)
+          , _gameLastSyncedProvider = R.lit (gameRowLastSyncedProvider row)
+          , _gameLastSyncedAt       = R.lit (gameRowLastSyncedAt row)
+          }
+      ]
+  , R.onConflict = R.Abort
+  , R.returning  = R.Returning _gameId
+  }
 
 updateGameT :: DbGameId -> GameRow -> Tx.Transaction ()
-updateGameT gid row = Tx.statement (gid, toFieldsTuple row) updateStmt
+updateGameT gid row = Tx.statement () $ R.run_ $ R.update R.Update
+  { R.target      = gameSchema
+  , R.from        = pure ()
+  , R.set         = \_ g -> g
+      { _gameGameDate           = R.lit (gameRowGameDate row)
+      , _gameAwayTeamId         = R.lit (gameRowAwayTeamId row)
+      , _gameHomeTeamId         = R.lit (gameRowHomeTeamId row)
+      , _gameLastSyncedProvider = R.lit (gameRowLastSyncedProvider row)
+      , _gameLastSyncedAt       = R.lit (gameRowLastSyncedAt row)
+      }
+  , R.updateWhere = \_ g -> _gameId g ==. R.lit gid
+  , R.returning   = R.NoReturning
+  }
 
 getByIdT :: DbGameId -> Tx.Transaction (Maybe GameRow)
-getByIdT gid = Tx.statement gid selectByIdStmt
+getByIdT gid = do
+  rows <- Tx.statement () $ R.run $ R.select $ do
+    g <- R.each gameSchema
+    R.where_ (_gameId g ==. R.lit gid)
+    pure g
+  pure $ case rows of
+    (g : _) -> Just (fromResult g)
+    []      -> Nothing
 
--- | All games on a given calendar date, ordered by id (the natural insertion
--- order, which roughly tracks game-time). Used by the day-by-day sync flow.
 getByDateT :: Day -> Tx.Transaction [GameRow]
-getByDateT d = V.toList <$> Tx.statement d selectByDateStmt
+getByDateT d = do
+  rows <- Tx.statement () $ R.run $ R.select $
+    R.orderBy (_gameId >$< R.asc) $ do
+      g <- R.each gameSchema
+      R.where_ (_gameGameDate g ==. R.lit d)
+      pure g
+  pure (map fromResult rows)
 
-linkExternalIdT
-  :: DbGameId -> ProviderName -> Text -> Tx.Transaction ()
-linkExternalIdT gid provider extId =
-  Tx.statement (gid, provider, extId) linkExternalIdStmt
+linkExternalIdT :: DbGameId -> ProviderName -> Text -> Tx.Transaction ()
+linkExternalIdT gid provider extId = Tx.statement () $ R.run_ $ R.insert R.Insert
+  { R.into       = gameExternalIdSchema
+  , R.rows       = R.values
+      [ GameExternalId
+          { _geidGameId     = R.lit gid
+          , _geidProvider   = R.lit provider
+          , _geidExternalId = R.lit extId
+          , _geidFetchedAt  = R.unsafeDefault
+          }
+      ]
+  , R.onConflict = R.DoNothing
+  , R.returning  = R.NoReturning
+  }
 
-lookupByExternalIdT
-  :: ProviderName -> Text -> Tx.Transaction (Maybe DbGameId)
-lookupByExternalIdT provider extId =
-  Tx.statement (provider, extId) lookupByExternalIdStmt
+lookupByExternalIdT :: ProviderName -> Text -> Tx.Transaction (Maybe DbGameId)
+lookupByExternalIdT provider extId = do
+  rows <- Tx.statement () $ R.run $ R.select $ do
+    e <- R.each gameExternalIdSchema
+    R.where_ (_geidProvider   e ==. R.lit provider)
+    R.where_ (_geidExternalId e ==. R.lit extId)
+    pure (_geidGameId e)
+  pure $ case rows of
+    (gid : _) -> Just gid
+    []        -> Nothing
 
-getExternalIdT
-  :: DbGameId -> ProviderName -> Tx.Transaction (Maybe Text)
-getExternalIdT gid provider =
-  Tx.statement (gid, provider) getExternalIdStmt
+getExternalIdT :: DbGameId -> ProviderName -> Tx.Transaction (Maybe Text)
+getExternalIdT gid provider = do
+  rows <- Tx.statement () $ R.run $ R.select $ do
+    e <- R.each gameExternalIdSchema
+    R.where_ (_geidGameId   e ==. R.lit gid)
+    R.where_ (_geidProvider e ==. R.lit provider)
+    pure (_geidExternalId e)
+  pure $ case rows of
+    (extId : _) -> Just extId
+    []          -> Nothing
 
 upsertByExternalIdT
   :: ProviderName -> Text -> GameRow -> Tx.Transaction DbGameId
@@ -99,8 +234,9 @@ upsertByExternalIdT provider extId row = do
       linkExternalIdT gid provider extId
       pure gid
 
---------------------------------------------------------------------------------
--- Pool/IO API (wrappers)
+-- ============================================================================
+-- Pool-flavored CRUD
+-- ============================================================================
 
 insertGame :: Pool -> GameRow -> IO (Either DBError DbGameId)
 insertGame pool row = runTransaction pool (insertGameT row)
@@ -126,112 +262,7 @@ getExternalId :: Pool -> DbGameId -> ProviderName -> IO (Either DBError (Maybe T
 getExternalId pool gid provider =
   runTransaction pool (getExternalIdT gid provider)
 
-upsertByExternalId :: Pool -> ProviderName -> Text -> GameRow -> IO (Either DBError DbGameId)
+upsertByExternalId
+  :: Pool -> ProviderName -> Text -> GameRow -> IO (Either DBError DbGameId)
 upsertByExternalId pool provider extId row =
   runTransaction pool (upsertByExternalIdT provider extId row)
-
---------------------------------------------------------------------------------
--- Field tuple and encoder
-
-type GameFields =
-  ( Day                    -- game_date
-  , DbTeamId               -- away_team_id
-  , DbTeamId               -- home_team_id
-  , Maybe ProviderName     -- last_synced_provider
-  , Maybe UTCTime          -- last_synced_at
-  )
-
-toFieldsTuple :: GameRow -> GameFields
-toFieldsTuple GameRow{..} =
-  ( gameRowGameDate
-  , gameRowAwayTeamId
-  , gameRowHomeTeamId
-  , gameRowLastSyncedProvider
-  , gameRowLastSyncedAt
-  )
-
-gameFieldsEncoder :: E.Params GameFields
-gameFieldsEncoder =
-     ((\(a,_,_,_,_) -> a) >$< encDay)
-  <> ((\(_,b,_,_,_) -> b) >$< encDbTeamId)
-  <> ((\(_,_,c,_,_) -> c) >$< encDbTeamId)
-  <> ((\(_,_,_,d,_) -> d) >$< encProviderMaybe)
-  <> ((\(_,_,_,_,e) -> e) >$< encUTCTimeMaybe)
-
---------------------------------------------------------------------------------
--- Row decoder
-
-rowDecoder :: D.Row GameRow
-rowDecoder = GameRow
-  <$> (Just <$> decDbGameId)
-  <*> decDay
-  <*> decDbTeamId
-  <*> decDbTeamId
-  <*> decProviderMaybe
-  <*> decUTCTimeMaybe
-
---------------------------------------------------------------------------------
--- Statements
-
-insertStmt :: Stmt.Statement GameFields DbGameId
-insertStmt = Stmt.Statement sql gameFieldsEncoder (D.singleRow decDbGameId) True
-  where
-    sql = "INSERT INTO game \
-          \  (game_date, away_team_id, home_team_id, \
-          \   last_synced_provider, last_synced_at) \
-          \VALUES ($1, $2, $3, $4, $5) \
-          \RETURNING id"
-
-updateStmt :: Stmt.Statement (DbGameId, GameFields) ()
-updateStmt = Stmt.Statement sql encoder D.noResult True
-  where
-    sql = "UPDATE game SET \
-          \  game_date            = $2, \
-          \  away_team_id         = $3, \
-          \  home_team_id         = $4, \
-          \  last_synced_provider = $5, \
-          \  last_synced_at       = $6, \
-          \  updated_at = NOW() \
-          \WHERE id = $1"
-    encoder = (fst >$< encDbGameId) <> (snd >$< gameFieldsEncoder)
-
-selectByIdStmt :: Stmt.Statement DbGameId (Maybe GameRow)
-selectByIdStmt = Stmt.Statement sql encDbGameId (D.rowMaybe rowDecoder) True
-  where
-    sql = "SELECT id, game_date, away_team_id, home_team_id, \
-          \       last_synced_provider, last_synced_at \
-          \FROM game WHERE id = $1"
-
-selectByDateStmt :: Stmt.Statement Day (V.Vector GameRow)
-selectByDateStmt = Stmt.Statement sql encDay (D.rowVector rowDecoder) True
-  where
-    sql = "SELECT id, game_date, away_team_id, home_team_id, \
-          \       last_synced_provider, last_synced_at \
-          \FROM game \
-          \WHERE game_date = $1 \
-          \ORDER BY id"
-
-linkExternalIdStmt :: Stmt.Statement (DbGameId, ProviderName, Text) ()
-linkExternalIdStmt = Stmt.Statement sql encoder D.noResult True
-  where
-    sql = "INSERT INTO game_external_id (game_id, provider, external_id) \
-          \VALUES ($1, $2, $3) \
-          \ON CONFLICT (provider, external_id) DO NOTHING"
-    encoder =
-         ((\(a,_,_) -> a) >$< encDbGameId)
-      <> ((\(_,b,_) -> b) >$< encProvider)
-      <> ((\(_,_,c) -> c) >$< encText)
-
-lookupByExternalIdStmt :: Stmt.Statement (ProviderName, Text) (Maybe DbGameId)
-lookupByExternalIdStmt = Stmt.Statement sql encoder (D.rowMaybe decDbGameId) True
-  where
-    sql = "SELECT game_id FROM game_external_id \
-          \WHERE provider = $1 AND external_id = $2"
-    encoder = (fst >$< encProvider) <> (snd >$< encText)
-
-getExternalIdStmt :: Stmt.Statement (DbGameId, ProviderName) (Maybe Text)
-getExternalIdStmt = Stmt.Statement sql encoder (D.rowMaybe decText) True
-  where
-    sql = "SELECT external_id FROM game_external_id \
-          \WHERE game_id = $1 AND provider = $2"
-    encoder = (fst >$< encDbGameId) <> (snd >$< encProvider)

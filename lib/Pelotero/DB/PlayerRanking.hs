@@ -1,36 +1,79 @@
--- | Repository for the @player_ranking@ table. Rankings are always
--- operated on as a complete list per team: read all, replace all, clear.
--- There is no single-row upsert because partial ranking edits are a
--- domain error (the ordering of the full list is the ranking).
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module Pelotero.DB.PlayerRanking
-  ( -- * Row type
-    PlayerRankingRow(..)
-    -- * Transaction-level API
+  ( PlayerRankingRow(..)
   , getRankingsForTeamT
   , replaceRankingsT
   , clearRankingsT
   , getRankingCountT
-    -- * Pool/IO API
   , getRankingsForTeam
   , replaceRankings
   , clearRankings
   , getRankingCount
   ) where
 
-import Data.Functor.Contravariant ((>$<))
-import Data.Int                   (Int32, Int64)
-import qualified Data.Vector as V
-import qualified Hasql.Decoders   as D
-import qualified Hasql.Encoders   as E
-import qualified Hasql.Statement  as Stmt
-import qualified Hasql.Transaction as Tx
+import           Data.Functor.Contravariant ((>$<))
+import           Data.Int                   (Int32, Int64)
+import           Data.Time                  (UTCTime)
+import           GHC.Generics               (Generic)
+
+import qualified Hasql.Transaction          as Tx
+
+import           Rel8                       ( Column
+                                            , Name
+                                            , Rel8able
+                                            , Result
+                                            , TableSchema(..)
+                                            , (==.)
+                                            )
+import qualified Rel8                       as R
 
 import Pelotero.DB.Pool      (DBError, Pool, runTransaction)
-import Pelotero.DB.Statement
+import Pelotero.DB.Rel8Instances ()
 import Pelotero.Domain.Id    (DbLeagueTeamId(..), DbPlayerId(..))
 
---------------------------------------------------------------------------------
--- Row type
+-- ============================================================================
+-- player_ranking
+--
+-- No surrogate id; (league_team_id, player_id) is the natural primary key.
+-- updated_at is server-managed.
+-- ============================================================================
+
+data PlayerRankingE f = PlayerRankingE
+  { _prLeagueTeamId :: Column f DbLeagueTeamId
+  , _prPlayerId     :: Column f DbPlayerId
+  , _prRankSlot     :: Column f Int32
+  , _prUpdatedAt    :: Column f UTCTime
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+deriving stock instance f ~ Result => Show (PlayerRankingE f)
+deriving stock instance f ~ Result => Eq   (PlayerRankingE f)
+
+playerRankingSchema :: TableSchema (PlayerRankingE Name)
+playerRankingSchema = TableSchema
+  { name    = "player_ranking"
+  , columns = PlayerRankingE
+      { _prLeagueTeamId = "league_team_id"
+      , _prPlayerId     = "player_id"
+      , _prRankSlot     = "rank_slot"
+      , _prUpdatedAt    = "updated_at"
+      }
+  }
+
+-- ============================================================================
+-- Public row type (API compatibility with old hasql module)
+-- ============================================================================
 
 data PlayerRankingRow = PlayerRankingRow
   { prLeagueTeamId :: !DbLeagueTeamId
@@ -39,29 +82,67 @@ data PlayerRankingRow = PlayerRankingRow
   }
   deriving stock (Show, Eq)
 
---------------------------------------------------------------------------------
--- Transaction-level API
+fromResult :: PlayerRankingE Result -> PlayerRankingRow
+fromResult PlayerRankingE{..} = PlayerRankingRow
+  { prLeagueTeamId = _prLeagueTeamId
+  , prPlayerId     = _prPlayerId
+  , prRankSlot     = _prRankSlot
+  }
+
+-- ============================================================================
+-- Transaction-flavored CRUD
+-- ============================================================================
+
+insertOneT :: PlayerRankingRow -> Tx.Transaction ()
+insertOneT row = Tx.statement () $ R.run_ $ R.insert R.Insert
+  { R.into       = playerRankingSchema
+  , R.rows       = R.values
+      [ PlayerRankingE
+          { _prLeagueTeamId = R.lit (prLeagueTeamId row)
+          , _prPlayerId     = R.lit (prPlayerId row)
+          , _prRankSlot     = R.lit (prRankSlot row)
+          , _prUpdatedAt    = R.unsafeDefault
+          }
+      ]
+  , R.onConflict = R.Abort
+  , R.returning  = R.NoReturning
+  }
 
 getRankingsForTeamT :: DbLeagueTeamId -> Tx.Transaction [PlayerRankingRow]
-getRankingsForTeamT tid = V.toList <$> Tx.statement tid selectForTeamStmt
+getRankingsForTeamT tid = do
+  rows <- Tx.statement () $ R.run $ R.select $
+    R.orderBy (_prRankSlot >$< R.asc) $ do
+      r <- R.each playerRankingSchema
+      R.where_ (_prLeagueTeamId r ==. R.lit tid)
+      pure r
+  pure (map fromResult rows)
 
--- | Replace all rankings for a team atomically. Callers pass the full
--- ranked list in order; 'prRankSlot' in each row must already be set.
+clearRankingsT :: DbLeagueTeamId -> Tx.Transaction ()
+clearRankingsT tid = Tx.statement () $ R.run_ $ R.delete R.Delete
+  { R.from        = playerRankingSchema
+  , R.using       = pure ()
+  , R.deleteWhere = \_ r -> _prLeagueTeamId r ==. R.lit tid
+  , R.returning   = R.NoReturning
+  }
+
 replaceRankingsT :: DbLeagueTeamId -> [PlayerRankingRow] -> Tx.Transaction ()
 replaceRankingsT tid rows = do
   clearRankingsT tid
   mapM_ insertOneT rows
 
-clearRankingsT :: DbLeagueTeamId -> Tx.Transaction ()
-clearRankingsT tid = Tx.statement tid deleteAllStmt
-
 getRankingCountT :: DbLeagueTeamId -> Tx.Transaction Int64
 getRankingCountT tid = do
-  mc <- Tx.statement tid countStmt
-  pure (maybe 0 id mc)
+  ns <- Tx.statement () $ R.run $ R.select $ R.aggregate1 R.countStar $ do
+    r <- R.each playerRankingSchema
+    R.where_ (_prLeagueTeamId r ==. R.lit tid)
+    pure r
+  pure $ case ns of
+    (n : _) -> n
+    []      -> 0
 
---------------------------------------------------------------------------------
--- Pool/IO API
+-- ============================================================================
+-- Pool-flavored CRUD
+-- ============================================================================
 
 getRankingsForTeam :: Pool -> DbLeagueTeamId -> IO (Either DBError [PlayerRankingRow])
 getRankingsForTeam pool tid = runTransaction pool (getRankingsForTeamT tid)
@@ -74,55 +155,3 @@ clearRankings pool tid = runTransaction pool (clearRankingsT tid)
 
 getRankingCount :: Pool -> DbLeagueTeamId -> IO (Either DBError Int64)
 getRankingCount pool tid = runTransaction pool (getRankingCountT tid)
-
---------------------------------------------------------------------------------
--- Internal
-
-insertOneT :: PlayerRankingRow -> Tx.Transaction ()
-insertOneT row = Tx.statement row insertStmt
-
---------------------------------------------------------------------------------
--- Encoder / Decoder
-
-rowEncoder :: E.Params PlayerRankingRow
-rowEncoder =
-     (prLeagueTeamId >$< encDbLeagueTeamId)
-  <> (prPlayerId     >$< encDbPlayerId)
-  <> (prRankSlot     >$< encInt32')
-  where
-    encInt32' :: E.Params Int32
-    encInt32' = E.param (E.nonNullable E.int4)
-
-rowDecoder :: D.Row PlayerRankingRow
-rowDecoder = PlayerRankingRow
-  <$> decDbLeagueTeamId
-  <*> decDbPlayerId
-  <*> D.column (D.nonNullable D.int4)
-
---------------------------------------------------------------------------------
--- Statements
-
-insertStmt :: Stmt.Statement PlayerRankingRow ()
-insertStmt = Stmt.Statement sql rowEncoder D.noResult True
-  where
-    sql = "INSERT INTO player_ranking \
-          \  (league_team_id, player_id, rank_slot) \
-          \VALUES ($1, $2, $3)"
-
-selectForTeamStmt :: Stmt.Statement DbLeagueTeamId (V.Vector PlayerRankingRow)
-selectForTeamStmt = Stmt.Statement sql encDbLeagueTeamId (D.rowVector rowDecoder) True
-  where
-    sql = "SELECT league_team_id, player_id, rank_slot \
-          \FROM player_ranking \
-          \WHERE league_team_id = $1 \
-          \ORDER BY rank_slot"
-
-deleteAllStmt :: Stmt.Statement DbLeagueTeamId ()
-deleteAllStmt = Stmt.Statement sql encDbLeagueTeamId D.noResult True
-  where
-    sql = "DELETE FROM player_ranking WHERE league_team_id = $1"
-
-countStmt :: Stmt.Statement DbLeagueTeamId (Maybe Int64)
-countStmt = Stmt.Statement sql encDbLeagueTeamId (D.rowMaybe decInt64) True
-  where
-    sql = "SELECT COUNT(*) FROM player_ranking WHERE league_team_id = $1"
