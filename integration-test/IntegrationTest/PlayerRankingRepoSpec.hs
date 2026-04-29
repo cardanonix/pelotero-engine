@@ -1,6 +1,5 @@
 module IntegrationTest.PlayerRankingRepoSpec (spec) where
 
-import           Data.List                  (sort)
 import qualified Data.Map.Strict            as Map
 import           Data.Text                  (Text)
 import           Data.Time                  (UTCTime(..), fromGregorian, secondsToDiffTime)

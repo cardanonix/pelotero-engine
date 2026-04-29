@@ -3,6 +3,7 @@
 {-# LANGUAGE TypeOperators     #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE GADTs             #-}
+{-# LANGUAGE LambdaCase        #-}
 
 module Pelotero.Effects.Players
   ( Players(..)
@@ -22,15 +23,11 @@ import Effectful (Effect, IOE, Dispatch(Dynamic), DispatchOf)
 import qualified Effectful as E
 import Effectful.Dispatch.Dynamic (interpret_, send)
 
-import Pelotero.DB.Pool      (DBError, runTransaction)
 import Pelotero.DB.Player    (PlayerRow(..))
 import qualified Pelotero.DB.Player as PlayerRepo
 import Pelotero.DB.Provider  (ProviderName)
 import Pelotero.Domain.Id    (DbPlayerId(..))
-import Pelotero.Effects.DbPool (DbPool, getPool)
-
---------------------------------------------------------------------------------
--- Capability
+import Pelotero.Effects.Database (Database, runTx)
 
 data Players :: Effect where
   UpsertPlayerByExternalId :: ProviderName -> Text -> PlayerRow -> Players m DbPlayerId
@@ -39,9 +36,6 @@ data Players :: Effect where
   GetActivePlayers         :: Players m [PlayerRow]
 
 type instance DispatchOf Players = 'Dynamic
-
---------------------------------------------------------------------------------
--- Operations
 
 upsertPlayerByExternalId
   :: Players E.:> es
@@ -61,36 +55,19 @@ getPlayerById = send . GetPlayerById
 getActivePlayers :: Players E.:> es => E.Eff es [PlayerRow]
 getActivePlayers = send GetActivePlayers
 
---------------------------------------------------------------------------------
--- DB interpreter
-
 runPlayersDB
-  :: (IOE E.:> es, DbPool E.:> es)
+  :: Database E.:> es
   => E.Eff (Players : es) a
   -> E.Eff es a
 runPlayersDB = interpret_ $ \case
-  UpsertPlayerByExternalId provider extId row -> do
-    pool <- getPool
-    runOrThrow $ runTransaction pool
-      (PlayerRepo.upsertByExternalIdT provider extId row)
-  LookupPlayerByExternalId provider extId -> do
-    pool <- getPool
-    runOrThrow $ runTransaction pool
-      (PlayerRepo.lookupByExternalIdT provider extId)
-  GetPlayerById pid -> do
-    pool <- getPool
-    runOrThrow $ runTransaction pool (PlayerRepo.getByIdT pid)
-  GetActivePlayers -> do
-    pool <- getPool
-    runOrThrow $ runTransaction pool PlayerRepo.getActiveT
-  where
-    runOrThrow :: IOE E.:> es' => IO (Either DBError a) -> E.Eff es' a
-    runOrThrow io = E.liftIO io >>= \case
-      Right a  -> pure a
-      Left err -> E.liftIO (ioError (userError ("DB error: " <> show err)))
-
---------------------------------------------------------------------------------
--- In-memory interpreter
+  UpsertPlayerByExternalId provider extId row ->
+    runTx (PlayerRepo.upsertByExternalIdT provider extId row)
+  LookupPlayerByExternalId provider extId ->
+    runTx (PlayerRepo.lookupByExternalIdT provider extId)
+  GetPlayerById pid ->
+    runTx (PlayerRepo.getByIdT pid)
+  GetActivePlayers ->
+    runTx PlayerRepo.getActiveT
 
 data PlayerStore = PlayerStore
   { externalIdToDb :: !(Map.Map (ProviderName, Text) DbPlayerId)

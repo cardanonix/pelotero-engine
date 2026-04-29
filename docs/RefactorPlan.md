@@ -26,31 +26,6 @@ The honest read: the old code is what happens when a project grows by accretion.
 
 12. **No tests.** `Test.hs` reads two JSON files and prints them. That's not a test.
 
-## Issues with the in-progress refactor in `src-new/`
-
-You've made the right move (database) but you're not using the stack you use everywhere else:
-
-1. **`postgresql-simple` instead of `rel8` + `hasql` + `hasql-pool`.** You spent significant effort on Cheeblr migrating *away* from `postgresql-simple` to `rel8`/`hasql`. Why reintroduce it here? You'll just migrate it again. **This is the single biggest correction I'd make before you write another line of DB code.**
-
-2. **No effects layer.** Cheeblr uses `effectful`. This is plain IO with hidden capabilities. If you want this to ever be testable in-memory (and you should), the same effect discipline needs to apply.
-
-3. **No Katip.** `hPutStrLn stderr` is fine for a script; not for a system you want to keep.
-
-4. **`getLoginName` as the DB user default and a hardcoded `"postgres"` password.** This needs to come from `sops-nix` the same way Cheeblr does it.
-
-5. **Migrations are inline `execute_` with no version table.** Add a `schema_migrations` table or use `hasql-migration`/`dbmate`. You'll regret unversioned migrations the first time you change a column type.
-
-6. **`fromMaybe "" mlbUseName` etc.** You're conflating "absent" and "empty string." Either model absence with `Maybe` end-to-end, or assert presence at the parse boundary and store `NOT NULL`. Don't paper over it with `""`.
-
-7. **`upsertPlayers` does N round-trips inside a transaction.** `executeMany` or generate a multi-row `INSERT ... ON CONFLICT`. ~1500 active players makes it a non-issue today, but it's a habit worth getting right.
-
-8. **`error "Failed to connect..."`** in `connectWithRetry`. Throw a typed exception or return `Either`. Bare `error` in production code is sloppy.
-
-9. **No `flake.nix`.** You prefer flakes everywhere else; this project should match.
-
-## What I'd actually do
-
-Match Cheeblr's stack. The duplication of mental models across your projects is the real cost — every time you switch projects you pay a tax remembering which DB library, which logging library, which effect approach.
 
 **Target stack:**
 - `rel8` + `hasql` + `hasql-pool` + `hasql-migration`

@@ -13,6 +13,7 @@ import qualified IntegrationTest.LeagueConfigRepoSpec  as LeagueConfigRepoSpec
 import qualified IntegrationTest.LeagueTeamRepoSpec    as LeagueTeamRepoSpec
 import qualified IntegrationTest.PlayerRankingRepoSpec as PlayerRankingRepoSpec
 import qualified IntegrationTest.DraftPickRepoSpec     as DraftPickRepoSpec
+import qualified IntegrationTest.SyncPlayersSpec       as SyncPlayersSpec
 
 main :: IO ()
 main = hspec $ do
@@ -27,3 +28,4 @@ main = hspec $ do
   LeagueTeamRepoSpec.spec
   PlayerRankingRepoSpec.spec
   DraftPickRepoSpec.spec
+  SyncPlayersSpec.spec

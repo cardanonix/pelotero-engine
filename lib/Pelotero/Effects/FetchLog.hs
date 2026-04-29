@@ -5,8 +5,6 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE GADTs             #-}
 
--- | The 'FetchLog' capability. Sync code records that it performed a
--- fetch and queries the most recent fetch for change detection.
 module Pelotero.Effects.FetchLog
   ( FetchLog(..)
   , recordFetch
@@ -22,11 +20,10 @@ import Effectful (Effect, IOE, Dispatch(Dynamic), DispatchOf)
 import qualified Effectful as E
 import Effectful.Dispatch.Dynamic (interpret_, send)
 
-import Pelotero.DB.Pool      (DBError, runTransaction)
 import Pelotero.DB.FetchLog  (FetchLogRow(..))
 import qualified Pelotero.DB.FetchLog as FetchLogRepo
 import Pelotero.DB.Provider  (ProviderName)
-import Pelotero.Effects.DbPool (DbPool, getPool)
+import Pelotero.Effects.Database (Database, runTx)
 
 data FetchLog :: Effect where
   RecordFetch  :: FetchLogRow -> FetchLog m ()
@@ -40,30 +37,21 @@ recordFetch = send . RecordFetch
 getLastFetch
   :: FetchLog E.:> es
   => ProviderName
-  -> Text                  -- ^ resource
-  -> Text                  -- ^ scope
+  -> Text
+  -> Text
   -> E.Eff es (Maybe FetchLogRow)
 getLastFetch p r s = send (GetLastFetch p r s)
 
 runFetchLogDB
-  :: (IOE E.:> es, DbPool E.:> es)
+  :: Database E.:> es
   => E.Eff (FetchLog : es) a
   -> E.Eff es a
 runFetchLogDB = interpret_ $ \case
-  RecordFetch row -> do
-    pool <- getPool
-    runOrThrow $ runTransaction pool (FetchLogRepo.recordFetchT row)
-  GetLastFetch provider resource scope -> do
-    pool <- getPool
-    runOrThrow $ runTransaction pool
-      (FetchLogRepo.getLastFetchT provider resource scope)
-  where
-    runOrThrow :: IOE E.:> es' => IO (Either DBError a) -> E.Eff es' a
-    runOrThrow io = E.liftIO io >>= \case
-      Right a  -> pure a
-      Left err -> E.liftIO (ioError (userError ("DB error: " <> show err)))
+  RecordFetch row ->
+    runTx (FetchLogRepo.recordFetchT row)
+  GetLastFetch provider resource scope ->
+    runTx (FetchLogRepo.getLastFetchT provider resource scope)
 
--- | In-memory fetch log: list of records, newest-first.
 runFetchLogInMemory
   :: IOE E.:> es
   => E.Eff (FetchLog : es) a

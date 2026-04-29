@@ -1,0 +1,26 @@
+{
+  "people": [
+    {
+      "id": 514888,
+      "useName": "Jose",
+      "useLastName": "Altuve",
+      "nameSlug": "jose-altuve-514888",
+      "currentTeam": { "id": 117, "name": "Houston Astros" },
+      "primaryPosition": { "code": "4", "abbreviation": "2B" },
+      "batSide": { "code": "R" },
+      "pitchHand": { "code": "R" },
+      "active": true
+    },
+    {
+      "id": 624413,
+      "useName": "Pete",
+      "useLastName": "Alonso",
+      "nameSlug": "pete-alonso-624413",
+      "currentTeam": { "id": 121, "name": "New York Mets" },
+      "primaryPosition": { "code": "3", "abbreviation": "1B" },
+      "batSide": { "code": "R" },
+      "pitchHand": { "code": "R" },
+      "active": true
+    }
+  ]
+}

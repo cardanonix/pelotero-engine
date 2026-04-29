@@ -3,10 +3,8 @@
 {-# LANGUAGE TypeOperators     #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE GADTs             #-}
+{-# LANGUAGE LambdaCase        #-}
 
--- | The 'Games' capability. Used by schedule sync and (soon) boxscore sync.
--- 'GetExternalId' lets the boxscore fetcher go from a DB game back to the
--- upstream identifier needed to construct the boxscore URL.
 module Pelotero.Effects.Games
   ( Games(..)
   , upsertGameByExternalId
@@ -27,15 +25,11 @@ import Effectful (Effect, IOE, Dispatch(Dynamic), DispatchOf)
 import qualified Effectful as E
 import Effectful.Dispatch.Dynamic (interpret_, send)
 
-import Pelotero.DB.Pool      (DBError, runTransaction)
 import Pelotero.DB.Game      (GameRow(..))
 import qualified Pelotero.DB.Game as GameRepo
 import Pelotero.DB.Provider  (ProviderName)
 import Pelotero.Domain.Id    (DbGameId(..))
-import Pelotero.Effects.DbPool (DbPool, getPool)
-
---------------------------------------------------------------------------------
--- Capability
+import Pelotero.Effects.Database (Database, runTx)
 
 data Games :: Effect where
   UpsertGameByExternalId :: ProviderName -> Text -> GameRow -> Games m DbGameId
@@ -45,9 +39,6 @@ data Games :: Effect where
   GetGamesByDate         :: Day -> Games m [GameRow]
 
 type instance DispatchOf Games = 'Dynamic
-
---------------------------------------------------------------------------------
--- Operations
 
 upsertGameByExternalId
   :: Games E.:> es => ProviderName -> Text -> GameRow -> E.Eff es DbGameId
@@ -59,8 +50,6 @@ lookupGameByExternalId
 lookupGameByExternalId provider extId =
   send (LookupGameByExternalId provider extId)
 
--- | Retrieve the upstream identifier for a game. Used by boxscore sync to
--- construct the fetch URL from a DB game row.
 getGameExternalId
   :: Games E.:> es => DbGameId -> ProviderName -> E.Eff es (Maybe Text)
 getGameExternalId gid provider = send (GetGameExternalId gid provider)
@@ -71,40 +60,21 @@ getGameById = send . GetGameById
 getGamesByDate :: Games E.:> es => Day -> E.Eff es [GameRow]
 getGamesByDate = send . GetGamesByDate
 
---------------------------------------------------------------------------------
--- DB interpreter
-
 runGamesDB
-  :: (IOE E.:> es, DbPool E.:> es)
+  :: Database E.:> es
   => E.Eff (Games : es) a
   -> E.Eff es a
 runGamesDB = interpret_ $ \case
-  UpsertGameByExternalId provider extId row -> do
-    pool <- getPool
-    runOrThrow $ runTransaction pool
-      (GameRepo.upsertByExternalIdT provider extId row)
-  LookupGameByExternalId provider extId -> do
-    pool <- getPool
-    runOrThrow $ runTransaction pool
-      (GameRepo.lookupByExternalIdT provider extId)
-  GetGameExternalId gid provider -> do
-    pool <- getPool
-    runOrThrow $ runTransaction pool
-      (GameRepo.getExternalIdT gid provider)
-  GetGameById gid -> do
-    pool <- getPool
-    runOrThrow $ runTransaction pool (GameRepo.getByIdT gid)
-  GetGamesByDate day -> do
-    pool <- getPool
-    runOrThrow $ runTransaction pool (GameRepo.getByDateT day)
-  where
-    runOrThrow :: IOE E.:> es' => IO (Either DBError a) -> E.Eff es' a
-    runOrThrow io = E.liftIO io >>= \case
-      Right a  -> pure a
-      Left err -> E.liftIO (ioError (userError ("DB error: " <> show err)))
-
---------------------------------------------------------------------------------
--- In-memory interpreter
+  UpsertGameByExternalId provider extId row ->
+    runTx (GameRepo.upsertByExternalIdT provider extId row)
+  LookupGameByExternalId provider extId ->
+    runTx (GameRepo.lookupByExternalIdT provider extId)
+  GetGameExternalId gid provider ->
+    runTx (GameRepo.getExternalIdT gid provider)
+  GetGameById gid ->
+    runTx (GameRepo.getByIdT gid)
+  GetGamesByDate day ->
+    runTx (GameRepo.getByDateT day)
 
 data GameStore = GameStore
   { gameExternalIdToDb :: !(Map.Map (ProviderName, Text) DbGameId)

@@ -28,8 +28,8 @@ module Pelotero.DB.Pool
 import Control.Exception (Exception)
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Hasql.Connection.Setting           as ConnSetting
-import qualified Hasql.Connection.Setting.Connection as ConnConnection
+import qualified Hasql.Connection.Setting                  as ConnSetting
+import qualified Hasql.Connection.Setting.Connection       as ConnConnection
 import qualified Hasql.Connection.Setting.Connection.Param as ConnParam
 import           Hasql.Pool (Pool)
 import qualified Hasql.Pool        as Pool
@@ -54,8 +54,6 @@ data DBConfig = DBConfig
   }
   deriving stock (Show, Eq)
 
--- | Defaults that match the dev shell in @nix/postgres-utils.nix@. Used when
--- a corresponding environment variable isn't set.
 defaultDBConfig :: DBConfig
 defaultDBConfig = DBConfig
   { dbHost           = "localhost"
@@ -67,7 +65,6 @@ defaultDBConfig = DBConfig
   , dbAcquireTimeout = 10.0
   }
 
--- | Read a 'DBConfig' from the process environment.
 loadDBConfig :: IO DBConfig
 loadDBConfig = do
   host       <- envText "PGHOST"     (dbHost           defaultDBConfig)
@@ -100,7 +97,6 @@ loadDBConfig = do
 --------------------------------------------------------------------------------
 -- Pool lifecycle
 
--- | Construct the @hasql-pool@ config from our 'DBConfig'.
 poolConfig :: DBConfig -> PoolConfig.Config
 poolConfig DBConfig{..} = PoolConfig.settings
   [ PoolConfig.size dbPoolSize
@@ -116,17 +112,12 @@ poolConfig DBConfig{..} = PoolConfig.settings
       ]
   ]
 
--- | Bring up a pool. No connections are opened eagerly; the first
--- 'runSession' call lazily acquires one. To fail fast at startup, run
--- a trivial session (or 'Pelotero.DB.Migration.runMigrations') immediately.
 acquire :: DBConfig -> IO Pool
 acquire = Pool.acquire . poolConfig
 
--- | Tear the pool down. Calls in flight finish; new ones fail.
 release :: Pool -> IO ()
 release = Pool.release
 
--- | Run a 'Session' against the pool. Wraps usage errors into our 'DBError'.
 runSession :: Pool -> Session a -> IO (Either DBError a)
 runSession pool sess = do
   res <- Pool.use pool sess
@@ -134,10 +125,6 @@ runSession pool sess = do
     Right a  -> Right a
     Left err -> Left (PoolUsageError (T.pack (show err)))
 
-
--- | Run a 'Tx.Transaction' against the pool in a serialisable read-write
--- transaction. The default for repository-level operations: writes commit
--- on success, roll back on any error or thrown exception.
 runTransaction :: Pool -> Tx.Transaction a -> IO (Either DBError a)
 runTransaction pool tx =
   runSession pool (TxS.transaction TxS.ReadCommitted TxS.Write tx)
@@ -145,11 +132,6 @@ runTransaction pool tx =
 --------------------------------------------------------------------------------
 -- Errors
 
--- | Errors produced by the DB layer. Stringly-typed (Text) on purpose for
--- the pool branch — @hasql-pool@'s error type is a sum of session, connection
--- and acquisition errors, and threading the structured form up through the
--- application is more ceremony than it earns at this stage. Migration errors
--- are added by "Pelotero.DB.Migration".
 data DBError
   = PoolUsageError !Text
   | MigrationError !Text

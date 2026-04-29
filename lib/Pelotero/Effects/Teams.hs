@@ -3,6 +3,7 @@
 {-# LANGUAGE TypeOperators     #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE GADTs             #-}
+{-# LANGUAGE LambdaCase        #-}
 
 module Pelotero.Effects.Teams
   ( Teams(..)
@@ -22,12 +23,11 @@ import Effectful (Effect, IOE, Dispatch(Dynamic), DispatchOf)
 import qualified Effectful as E
 import Effectful.Dispatch.Dynamic (interpret_, send)
 
-import Pelotero.DB.Pool      (DBError, runTransaction)
 import Pelotero.DB.Team      (TeamRow(..))
 import qualified Pelotero.DB.Team as TeamRepo
 import Pelotero.DB.Provider  (ProviderName)
 import Pelotero.Domain.Id    (DbTeamId(..))
-import Pelotero.Effects.DbPool (DbPool, getPool)
+import Pelotero.Effects.Database (Database, runTx)
 
 data Teams :: Effect where
   UpsertTeamByExternalId :: ProviderName -> Text -> TeamRow -> Teams m DbTeamId
@@ -54,29 +54,18 @@ getAllTeams :: Teams E.:> es => E.Eff es [TeamRow]
 getAllTeams = send GetAllTeams
 
 runTeamsDB
-  :: (IOE E.:> es, DbPool E.:> es)
+  :: Database E.:> es
   => E.Eff (Teams : es) a
   -> E.Eff es a
 runTeamsDB = interpret_ $ \case
-  UpsertTeamByExternalId provider extId row -> do
-    pool <- getPool
-    runOrThrow $ runTransaction pool
-      (TeamRepo.upsertByExternalIdT provider extId row)
-  LookupTeamByExternalId provider extId -> do
-    pool <- getPool
-    runOrThrow $ runTransaction pool
-      (TeamRepo.lookupByExternalIdT provider extId)
-  GetTeamById tid -> do
-    pool <- getPool
-    runOrThrow $ runTransaction pool (TeamRepo.getByIdT tid)
-  GetAllTeams -> do
-    pool <- getPool
-    runOrThrow $ runTransaction pool TeamRepo.getAllT
-  where
-    runOrThrow :: IOE E.:> es' => IO (Either DBError a) -> E.Eff es' a
-    runOrThrow io = E.liftIO io >>= \case
-      Right a  -> pure a
-      Left err -> E.liftIO (ioError (userError ("DB error: " <> show err)))
+  UpsertTeamByExternalId provider extId row ->
+    runTx (TeamRepo.upsertByExternalIdT provider extId row)
+  LookupTeamByExternalId provider extId ->
+    runTx (TeamRepo.lookupByExternalIdT provider extId)
+  GetTeamById tid ->
+    runTx (TeamRepo.getByIdT tid)
+  GetAllTeams ->
+    runTx TeamRepo.getAllT
 
 data TeamStore = TeamStore
   { teamExternalIdToDb :: !(Map.Map (ProviderName, Text) DbTeamId)

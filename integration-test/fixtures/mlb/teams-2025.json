@@ -1,0 +1,16 @@
+{
+  "teams": [
+    {
+      "id": 117,
+      "name": "Houston Astros",
+      "abbreviation": "HOU",
+      "locationName": "Houston"
+    },
+    {
+      "id": 121,
+      "name": "New York Mets",
+      "abbreviation": "NYM",
+      "locationName": "New York"
+    }
+  ]
+}
