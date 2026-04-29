@@ -24,8 +24,8 @@
 
   haskell = {
     cabalFile = "./pelotero-engine.cabal";
-    codeDirs  = [ "./lib" "./src-new" "./app" ];
-    tests     = "./test";
+    codeDirs  = [ "./lib" "./app" ];
+    tests     = [ "./test" "./integration-test" ];
   };
 
   license = {

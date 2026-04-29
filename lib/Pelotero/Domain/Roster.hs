@@ -1,24 +1,12 @@
--- lib/Pelotero/Domain/Roster.hs
--- | Fantasy roster and lineup representation. The key design decision: a
--- @Map RosterSlot (Seq PlayerId)@ instead of one record field per slot. This
--- collapses what used to be a 9-arm case expression on every operation into
--- a single 'Map.adjust' or 'Map.lookup', and makes adding new slot types
--- (Bench, IL, DH-only) a one-line constructor change.
---
--- Why 'Seq' and not 'Set'? Lineups have order — leagues care which outfielder
--- bats third. 'Seq' preserves insertion order and is the right shape for
--- "list of players at this slot" with O(1) cons/snoc and O(log n) lookup.
--- Duplicate detection is explicit ('hasDuplicates'); it's not free, but it's
--- also rare enough that a 'Set' would over-pay structurally.
 module Pelotero.Domain.Roster
-  ( -- * Slot types
+  (
     RosterSlot(..)
   , allRosterSlots
   , parseRosterSlot
   , renderRosterSlot
   , isPitcherSlot
   , isBatterSlot
-    -- * Rosters and lineups
+
   , Roster(..)
   , Lineup(..)
   , emptyRoster
@@ -35,41 +23,34 @@ module Pelotero.Domain.Roster
   , lineupContains
   , countAt
   , countAtLineup
-    -- * Limits
+
   , RosterLimits(..)
   , LineupLimits(..)
   , rosterLimitFor
   , lineupLimitFor
   , totalRosterSize
   , totalLineupSize
-    -- * Validation
+
   , RosterError(..)
   , LineupError(..)
   , validateRoster
   , validateLineup
   ) where
 
-import Data.Foldable (toList)
-import Data.List (group, sort)
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
-import Data.Sequence (Seq)
-import qualified Data.Sequence as Seq
-import Data.Text (Text)
-import Data.Maybe (mapMaybe)
+import           Data.Aeson         (FromJSON(..), ToJSON(..))
+import qualified Data.Aeson.Types   as Aeson
+import           Data.Foldable      (toList)
+import           Data.List          (group, sort)
+import           Data.Map.Strict    (Map)
+import qualified Data.Map.Strict    as Map
+import           Data.Maybe         (mapMaybe)
+import           Data.Sequence      (Seq)
+import qualified Data.Sequence      as Seq
+import           Data.Text          (Text)
+import qualified Data.Text          as T
 
 import Pelotero.Domain.Id (PlayerId)
 
---------------------------------------------------------------------------------
--- Slot types
-
--- | A roster/lineup slot. We split pitchers into starting and relief because
--- most fantasy formats do, and we keep 'Utility' as its own slot rather than
--- conflating it with a flexible position marker — utility players are a
--- specific role, not a wildcard.
---
--- Adding a new slot here (Bench, IL, DH) is the only place it needs to be
--- listed. 'allRosterSlots' is derived via 'Bounded'/'Enum'.
 data RosterSlot
   = SlotCatcher
   | SlotFirstBase
@@ -85,9 +66,6 @@ data RosterSlot
 allRosterSlots :: [RosterSlot]
 allRosterSlots = [minBound .. maxBound]
 
--- | Parse a slot from one of the legacy text codes (\"catcher\", \"first\",
--- \"s_pitcher\", ...). Used at the JSON boundary; pure code should never need
--- this.
 parseRosterSlot :: Text -> Maybe RosterSlot
 parseRosterSlot = \case
   "catcher"   -> Just SlotCatcher
@@ -122,34 +100,18 @@ isPitcherSlot = \case
 isBatterSlot :: RosterSlot -> Bool
 isBatterSlot = not . isPitcherSlot
 
---------------------------------------------------------------------------------
--- Rosters and lineups
-
--- | A team's full draft roster. Distinct from 'Lineup' — a team carries more
--- players on the roster than they can field in any one game. A roster
--- always has every 'RosterSlot' as a key (possibly with an empty 'Seq');
--- this invariant lets callers do 'rosterAt' without a 'Maybe' wrapper.
 newtype Roster = Roster { unRoster :: Map RosterSlot (Seq PlayerId) }
   deriving stock (Show, Eq)
 
--- | A team's active lineup for a scoring period. Same shape as 'Roster' but
--- semantically distinct, so we keep the types separate to prevent accidental
--- swaps. Adding/removing in either case goes through the same helpers
--- parameterised over the underlying map.
 newtype Lineup = Lineup { unLineup :: Map RosterSlot (Seq PlayerId) }
   deriving stock (Show, Eq)
 
--- | A roster with all slots present and empty. Use this rather than
--- 'Roster Map.empty' so the all-slots-present invariant holds from the start.
 emptyRoster :: Roster
 emptyRoster = Roster $ Map.fromList [(s, Seq.empty) | s <- allRosterSlots]
 
 emptyLineup :: Lineup
 emptyLineup = Lineup $ Map.fromList [(s, Seq.empty) | s <- allRosterSlots]
 
--- | Players at a given slot. Returns 'Seq.empty' if the slot is unpopulated;
--- never returns a missing-key 'Maybe' because 'emptyRoster' / 'addToRoster'
--- maintain the invariant that all slots exist as keys.
 rosterAt :: RosterSlot -> Roster -> Seq PlayerId
 rosterAt slot (Roster m) = Map.findWithDefault Seq.empty slot m
 
@@ -164,10 +126,6 @@ addToLineup :: RosterSlot -> PlayerId -> Lineup -> Lineup
 addToLineup slot pid (Lineup m) =
   Lineup (Map.insertWith (\_new old -> old Seq.|> pid) slot (Seq.singleton pid) m)
 
--- | Remove the first occurrence of a player from a slot. No-op if the player
--- isn't there. Removing only the first occurrence is intentional: if a player
--- somehow ended up in the same slot twice, removing both at once would mask
--- the bug.
 removeFromRoster :: RosterSlot -> PlayerId -> Roster -> Roster
 removeFromRoster slot pid (Roster m) = Roster (Map.adjust (seqRemoveFirst pid) slot m)
 
@@ -198,11 +156,6 @@ countAt slot = Seq.length . rosterAt slot
 countAtLineup :: RosterSlot -> Lineup -> Int
 countAtLineup slot = Seq.length . lineupAt slot
 
---------------------------------------------------------------------------------
--- Limits
-
--- | Roster size limits per slot. Like 'Roster' itself, this is keyed on
--- 'RosterSlot' so adding a new slot doesn't ripple through field names.
 newtype RosterLimits = RosterLimits { unRosterLimits :: Map RosterSlot Int }
   deriving stock (Show, Eq)
 
@@ -221,16 +174,9 @@ totalRosterSize = sum . Map.elems . unRosterLimits
 totalLineupSize :: LineupLimits -> Int
 totalLineupSize = sum . Map.elems . unLineupLimits
 
---------------------------------------------------------------------------------
--- Validation
-
--- | Things that can be wrong with a 'Roster'. Slot-specific rather than a
--- bag of strings, so callers can match on cause.
 data RosterError
-  = -- | Too many players at this slot. @TooManyAt slot actual limit@.
-    RosterTooManyAt !RosterSlot !Int !Int
-  | -- | Player listed more than once across the roster.
-    RosterDuplicatePlayer !PlayerId
+  = RosterTooManyAt !RosterSlot !Int !Int
+  | RosterDuplicatePlayer !PlayerId
   deriving stock (Show, Eq)
 
 data LineupError
@@ -238,10 +184,6 @@ data LineupError
   | LineupDuplicatePlayer !PlayerId
   deriving stock (Show, Eq)
 
--- | Validate a roster against its limits. Returns the empty list on success,
--- a list of every distinct problem otherwise. We intentionally return all
--- problems instead of stopping at the first; users want to fix all the
--- mistakes in one pass, not play whack-a-mole.
 validateRoster :: RosterLimits -> Roster -> [RosterError]
 validateRoster limits roster = sizeProblems <> dupProblems
   where
@@ -271,3 +213,29 @@ duplicates = mapMaybe firstOfRepeat . group . sort
   where
     firstOfRepeat (x : _ : _) = Just x
     firstOfRepeat _           = Nothing
+
+instance ToJSON RosterLimits where
+  toJSON (RosterLimits m) = toJSON (Map.mapKeys renderRosterSlot m)
+
+instance FromJSON RosterLimits where
+  parseJSON v = do
+    raw    <- parseJSON v :: Aeson.Parser (Map.Map Text Int)
+    parsed <- Map.fromList <$> traverse parsePair (Map.toList raw)
+    pure (RosterLimits parsed)
+    where
+      parsePair (k, n) = case parseRosterSlot k of
+        Just slot -> pure (slot, n)
+        Nothing   -> fail ("RosterLimits: unknown slot key " <> T.unpack k)
+
+instance ToJSON LineupLimits where
+  toJSON (LineupLimits m) = toJSON (Map.mapKeys renderRosterSlot m)
+
+instance FromJSON LineupLimits where
+  parseJSON v = do
+    raw    <- parseJSON v :: Aeson.Parser (Map.Map Text Int)
+    parsed <- Map.fromList <$> traverse parsePair (Map.toList raw)
+    pure (LineupLimits parsed)
+    where
+      parsePair (k, n) = case parseRosterSlot k of
+        Just slot -> pure (slot, n)
+        Nothing   -> fail ("LineupLimits: unknown slot key " <> T.unpack k)

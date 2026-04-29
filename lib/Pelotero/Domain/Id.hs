@@ -17,6 +17,9 @@ module Pelotero.Domain.Id
   , DbPlayerId(..)
   , DbTeamId(..)
   , DbGameId(..)
+  , DbLeagueConfigId(..)
+  , DbLeagueTeamId(..)
+  , DbDraftPickId(..)
   ) where
 
 import Data.Int  (Int64)
@@ -60,4 +63,16 @@ newtype DbTeamId = DbTeamId { unDbTeamId :: Int64 }
 
 -- | Surrogate primary key for @game.id@.
 newtype DbGameId = DbGameId { unDbGameId :: Int64 }
+  deriving stock (Show, Eq, Ord)
+
+-- | Surrogate primary key for @league_config.id@.
+newtype DbLeagueConfigId = DbLeagueConfigId { unDbLeagueConfigId :: Int64 }
+  deriving stock (Show, Eq, Ord)
+
+-- | Surrogate primary key for @league_team.id@.
+newtype DbLeagueTeamId = DbLeagueTeamId { unDbLeagueTeamId :: Int64 }
+  deriving stock (Show, Eq, Ord)
+
+-- | Surrogate primary key for @draft_pick.id@.
+newtype DbDraftPickId = DbDraftPickId { unDbDraftPickId :: Int64 }
   deriving stock (Show, Eq, Ord)

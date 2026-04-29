@@ -111,3 +111,57 @@ Two questions before we start writing code:
 2. Do you want this project's flake to match Cheeblr's `haskell.nix`-based setup, or a lighter `nixpkgs.haskellPackages` flake since this is single-target?
 
 Once those are settled I'd start with Phase 0 and Phase 1 — flake + library skeleton + the consolidated domain types — and we can verify the shape before touching the DB.
+
+
+__________
+
+new notes:
+```
+The compile error is one specific thing: a misplaced file. Cabal is looking for `lib/Pelotero/DB/RosterSlot.hs` (because the module declares `module Pelotero.DB.RosterSlot`), but the file is sitting at `lib/Pelotero/Domain/RosterSlot.hs`.
+
+```
+mv lib/Pelotero/Domain/RosterSlot.hs lib/Pelotero/DB/RosterSlot.hs
+```
+
+The file's content is correct — it's a DB-layer module (it imports `Pelotero.DB.Pool`, `Pelotero.DB.Statement`, defines `RosterSlotRow`, runs `Tx.Transaction`), it just got saved to the wrong directory at some point. Once moved, that error clears.
+
+## Other things you'll hit immediately after
+
+**`app/Combined.hs` has three `module Main` declarations stacked in one file.** Either your dumper concatenated DbCheck/Main/FetchRoster into it by mistake, or you've actually got a half-finished merge file in your tree. If it's real, delete it — it'll fail to compile the moment Cabal looks at it. The three real apps (`DbCheck.hs`, `Main.hs`, `FetchRoster.hs`) are fine on their own.
+
+**`error` in pure-ish code that should be `fail`-in-Parser or proper `Either`.**
+- `Pelotero.DB.Statement.decJsonb` calls `error` on a bad JSONB row. That's a runtime crash on dirty data inside a `D.Row`. It should `fail` (decoders support that via the underlying parser monad — or just store the raw bytes and parse separately).
+- `Pelotero.Domain.Roster`'s `FromJSON RosterLimits`/`LineupLimits` calls `error ("bad slot: ...")` inside a `Parser`. Use `fail` instead. Right now a malformed config file crashes the process instead of returning a JSON parse error.
+
+## Bigger issues worth correcting before you write more tables
+
+**You said Phase 2 is rel8, but there's no rel8 anywhere.** Every repository module is hand-rolled hasql with manual `>$<` contramap encoders, manual `Row` decoders, and the column list duplicated 4–6 times per table (insert tuple, update set list, select projection, conflict update). `BattingRow` alone has the column name list repeated four times across 28 fields. This is not sustainable as the schema grows, and it's the exact boilerplate rel8 exists to eliminate. If you're going to use raw hasql, fine — but be honest with yourself that you're choosing more boilerplate forever, and document that decision so future-you doesn't migrate again. My recommendation stands: switch to rel8 now while there are 14 tables, not 40.
+
+**Effect interpreters throw IO exceptions instead of using `Effectful.Error.Static`.**
+```haskell
+runOrThrow io = E.liftIO io >>= \case
+  Right a  -> pure a
+  Left err -> E.liftIO (ioError (userError ("DB error: " <> show err)))
+```
+This throws away the type-level promise of effectful's effect rows. Either:
+- Add `Error DBError :> es` to your effects and `throwError` instead of `ioError`, or
+- Be explicit that DB failures are treated as IO exceptions and document the rationale.
+
+Picking one and sticking with it matters more than which one.
+
+**`Rational` in `Pelotero.Domain.Scoring` is precise, but JSON parses `Rational` via `Double`.** The aeson `FromJSON Rational` instance goes through `Scientific`/`Double`, so `0.1` in your config becomes `3602879701896397 % 36028797018963968`, not `1 % 10`. If you want exact rationals, parse from a `String` like `"0.5"` or a `[num, den]` array, not raw JSON numbers. Otherwise just use `Double` and stop pretending.
+
+**No `katip`, no `crem`, no `hasql-migration`.** You rolled your own migration runner (it's correct, but `hasql-migration` already exists and is what Cheeblr-adjacent projects use). The draft state machine is plain functions instead of crem. Logging is `hPutStrLn stderr` and `TIO.putStrLn`. Whether these are acceptable in Phase 2 depends on what "Phase 2" means to you — but the divergence from the Cheeblr stack you wanted to mirror is widening, not closing.
+
+**`fetchLogId :: Maybe Int64` and `playerRowId :: Maybe DbPlayerId` patterns** smell — you're using `Nothing` to mean "I haven't been inserted yet." That's the standard hack but it forces every caller to handle a case that's impossible after insert. Consider `data PlayerRow` (no id field) plus `data StoredPlayerRow = StoredPlayerRow !DbPlayerId !PlayerRow`. Splits the "before persisted" and "after persisted" types cleanly.
+
+## Order of operations I'd suggest
+
+1. Move the file (one line, makes the build progress to the next real error).
+2. Delete `app/Combined.hs` if it's real.
+3. Fix the two `error` calls so bad data doesn't crash the process.
+4. **Decide rel8 vs raw hasql for real, and commit to it.** If raw hasql, write a small generator (TH or just a helper module) so each new table is ≤ 30 lines, not 200+. If rel8, port the existing 14 tables before adding more.
+5. Then continue with Phase 2.
+
+Want me to write a sample rel8 port of one of the larger tables (BoxscoreEntry, say) so you can compare the boilerplate side-by-side and decide?
+```

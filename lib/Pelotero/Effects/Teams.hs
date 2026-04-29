@@ -2,14 +2,12 @@
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE TypeOperators     #-}
 {-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE GADTs             #-}
 
--- | The 'Teams' capability. Mirrors 'Pelotero.Effects.Players' in shape.
--- See that module for the design pattern.
 module Pelotero.Effects.Teams
   ( Teams(..)
   , upsertTeamByExternalId
+  , lookupTeamByExternalId
   , getTeamById
   , getAllTeams
   , runTeamsDB
@@ -33,6 +31,7 @@ import Pelotero.Effects.DbPool (DbPool, getPool)
 
 data Teams :: Effect where
   UpsertTeamByExternalId :: ProviderName -> Text -> TeamRow -> Teams m DbTeamId
+  LookupTeamByExternalId :: ProviderName -> Text -> Teams m (Maybe DbTeamId)
   GetTeamById            :: DbTeamId -> Teams m (Maybe TeamRow)
   GetAllTeams            :: Teams m [TeamRow]
 
@@ -42,6 +41,11 @@ upsertTeamByExternalId
   :: Teams E.:> es => ProviderName -> Text -> TeamRow -> E.Eff es DbTeamId
 upsertTeamByExternalId provider extId row =
   send (UpsertTeamByExternalId provider extId row)
+
+lookupTeamByExternalId
+  :: Teams E.:> es => ProviderName -> Text -> E.Eff es (Maybe DbTeamId)
+lookupTeamByExternalId provider extId =
+  send (LookupTeamByExternalId provider extId)
 
 getTeamById :: Teams E.:> es => DbTeamId -> E.Eff es (Maybe TeamRow)
 getTeamById = send . GetTeamById
@@ -58,6 +62,10 @@ runTeamsDB = interpret_ $ \case
     pool <- getPool
     runOrThrow $ runTransaction pool
       (TeamRepo.upsertByExternalIdT provider extId row)
+  LookupTeamByExternalId provider extId -> do
+    pool <- getPool
+    runOrThrow $ runTransaction pool
+      (TeamRepo.lookupByExternalIdT provider extId)
   GetTeamById tid -> do
     pool <- getPool
     runOrThrow $ runTransaction pool (TeamRepo.getByIdT tid)
@@ -91,6 +99,9 @@ runTeamsInMemory action = do
     handler ref = \case
       UpsertTeamByExternalId provider extId row ->
         E.liftIO $ atomicModifyIORef' ref (upsertOp provider extId row)
+      LookupTeamByExternalId provider extId -> do
+        store <- E.liftIO (readIORef ref)
+        pure (Map.lookup (provider, extId) (teamExternalIdToDb store))
       GetTeamById tid -> do
         store <- E.liftIO (readIORef ref)
         pure (Map.lookup tid (teamRowsByDb store))

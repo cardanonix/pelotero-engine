@@ -1,4 +1,3 @@
--- lib/Pelotero/Domain/Scoring.hs
 -- | Fantasy points scoring. Pure functions over 'BattingStats' /
 -- 'PitchingStats' from "Pelotero.Domain.Stats". The wire layer never appears
 -- here — that's deliberate so scoring is testable in complete isolation.
@@ -31,6 +30,7 @@ import Pelotero.Domain.Stats
   , PitchingStats(..)
   , parseInningsPitched
   )
+import Data.Aeson (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
 
 --------------------------------------------------------------------------------
 -- Points
@@ -173,3 +173,76 @@ scorePitching m s = sumPoints
 
 rationalPts :: Int -> Points
 rationalPts = Points . toRational
+
+-- After the existing type definitions:
+
+instance ToJSON BattingMultipliers where
+  toJSON BattingMultipliers{..} = object
+    [ "single"          .= bmSingle
+    , "double"          .= bmDouble
+    , "triple"          .= bmTriple
+    , "homeRun"         .= bmHomeRun
+    , "rbi"             .= bmRbi
+    , "run"             .= bmRun
+    , "baseOnBalls"     .= bmBaseOnBalls
+    , "stolenBase"      .= bmStolenBase
+    , "hitByPitch"      .= bmHitByPitch
+    , "strikeOut"       .= bmStrikeOut
+    , "caughtStealing"  .= bmCaughtStealing
+    ]
+
+instance FromJSON BattingMultipliers where
+  parseJSON = withObject "BattingMultipliers" $ \o -> BattingMultipliers
+    <$> o .: "single"
+    <*> o .: "double"
+    <*> o .: "triple"
+    <*> o .: "homeRun"
+    <*> o .: "rbi"
+    <*> o .: "run"
+    <*> o .: "baseOnBalls"
+    <*> o .: "stolenBase"
+    <*> o .: "hitByPitch"
+    <*> o .: "strikeOut"
+    <*> o .: "caughtStealing"
+
+instance ToJSON PitchingMultipliers where
+  toJSON PitchingMultipliers{..} = object
+    [ "win"           .= pmWin
+    , "save"          .= pmSave
+    , "qualityStart"  .= pmQualityStart
+    , "inningPitched" .= pmInningPitched
+    , "strikeOut"     .= pmStrikeOut
+    , "completeGame"  .= pmCompleteGame
+    , "shutout"       .= pmShutout
+    , "baseOnBalls"   .= pmBaseOnBalls
+    , "hitsAllowed"   .= pmHitsAllowed
+    , "earnedRun"     .= pmEarnedRun
+    , "hitBatsman"    .= pmHitBatsman
+    , "loss"          .= pmLoss
+    ]
+
+instance FromJSON PitchingMultipliers where
+  parseJSON = withObject "PitchingMultipliers" $ \o -> PitchingMultipliers
+    <$> o .: "win"
+    <*> o .: "save"
+    <*> o .: "qualityStart"
+    <*> o .: "inningPitched"
+    <*> o .: "strikeOut"
+    <*> o .: "completeGame"
+    <*> o .: "shutout"
+    <*> o .: "baseOnBalls"
+    <*> o .: "hitsAllowed"
+    <*> o .: "earnedRun"
+    <*> o .: "hitBatsman"
+    <*> o .: "loss"
+
+instance ToJSON LeagueScoring where
+  toJSON LeagueScoring{..} = object
+    [ "batting"  .= lsBatting
+    , "pitching" .= lsPitching
+    ]
+
+instance FromJSON LeagueScoring where
+  parseJSON = withObject "LeagueScoring" $ \o -> LeagueScoring
+    <$> o .: "batting"
+    <*> o .: "pitching"

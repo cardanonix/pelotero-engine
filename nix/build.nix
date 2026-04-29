@@ -19,7 +19,7 @@ let
         ];
       };
 
-      haskellProject = pkgs.haskell-nix.cabalProject' {
+      haskellProject = pkgs.haskell-nix.project' {
         src = ../.;
         compiler-nix-name = "ghc910";
 
@@ -44,12 +44,10 @@ let
           ];
         };
 
-        # Match Cheeblr exactly. The cabal.project file at the top level
-        # also sets these flags via `package <name>: flags: +use-pkg-config`,
-        # plus pins index-state.
         modules = [{
-          # packages.postgresql-libpq.flags.use-pkg-config = true;
-          # packages.postgresql-simple.flags.use-pkg-config = true;
+          packages.http-client-tls.postPatch = ''
+            substituteInPlace http-client-tls.cabal --replace-warn "memory" "ram"
+          '';
         }];
       };
 
