@@ -1,0 +1,1106 @@
+{
+  "version": 1,
+  "modules": {
+
+    "Config": {
+      "decisions": [
+        {
+          "name": "TeamIDIsNewtypeOverText",
+          "what": "TeamID is a newtype over T.Text",
+          "why": [
+            "Prevents accidental substitution with leagueID, commissioner, or other Text fields.",
+            "Custom ToJSON/FromJSON unwrap to bare Text rather than a tagged object."
+          ],
+          "affects": ["unwrapTeamID"]
+        },
+        {
+          "name": "MultiplierFieldsParsedFromJSONStrings",
+          "what": "BattingMults and PitchingMults fields are parsed via parseDouble, which calls withText and reads the contents",
+          "why": [
+            "Source JSON quotes multipliers as strings (\"1.0\") rather than numeric literals.",
+            "withText on a numeric value will fail; the schema requires string-typed multipliers."
+          ],
+          "affects": ["parseDouble"]
+        },
+        {
+          "name": "DraftAndLineupLimitsAreSeparateRecords",
+          "what": "DraftRosterLmts and LgLineupLmts have parallel positional fields but distinct types",
+          "why": [
+            "Draft caps and lineup caps are independently configured in the JSON schema.",
+            "Field-name prefixes (dr_ vs lg_) prevent record-field collisions.",
+            "sumDraftRosterLmts only sums the dr_ side; LgLineupLmts has its own consumers in queryLgLineupLmts."
+          ],
+          "affects": ["sumDraftRosterLmts"]
+        }
+      ],
+      "invariants": {
+        "unwrapTeamID": [
+          "extracts the inner Text from a TeamID newtype"
+        ],
+        "sumDraftRosterLmts": [
+          "sums all 9 positional fields of DraftRosterLmts (catcher through r_pitcher)",
+          "duplicates the logic in Utility.totalPicksPerTeam"
+        ],
+        "parseDouble": [
+          "uses withText, then reads :: [(Double, String)] requiring full parse with empty remainder",
+          "fails the parser with 'Could not parse double from string' on numeric JSON or malformed text",
+          "consumed by every field in BattingMults FromJSON and PitchingMults FromJSON"
+        ]
+      }
+    },
+
+    "OfficialRoster": {
+      "decisions": [
+        {
+          "name": "PlayerIDstringIsUnused",
+          "what": "PlayerIDstring newtype is defined but has no consumers in the codebase",
+          "why": [
+            "Defined alongside PlayerID but never constructed or pattern-matched outside its own definition.",
+            "Dead code; safe to delete."
+          ],
+          "affects": []
+        },
+        {
+          "name": "OfficialRosterFromJSONWalksHashMap",
+          "what": "FromJSON OfficialRoster manually walks the officialPlayers HashMap via HM.elems",
+          "why": [
+            "Source JSON nests players under an object keyed by player id, not under a JSON array.",
+            "dataPulled and checksum are required (.: not .:?), unlike Input.ActiveRoster which makes them optional.",
+            "OfficialPlayer instance uses RecordWildCards in its return so all 9 fields are bound by name during parse."
+          ],
+          "affects": []
+        }
+      ],
+      "invariants": {
+        "playerIDToText": [
+          "T.pack . show; produces decimal Int representation",
+          "the only path used to convert a PlayerID to a Map key throughout the codebase"
+        ],
+        "textToPlayerID": [
+          "uses reads :: [(Int, String)] requiring full parse with empty remainder",
+          "returns Nothing on any non-Int text",
+          "round-trip with playerIDToText holds for any valid Int"
+        ],
+        "unwrapPlayerId": [
+          "extracts the inner Int from a PlayerID newtype",
+          "no consumers in the codebase"
+        ]
+      }
+    },
+
+    "Roster": {
+      "decisions": [
+        {
+          "name": "LgManagerJSONHasComissionerTypo",
+          "what": "FromJSON LgManager parses the JSON key 'comissioner' (single 'm') for the commissioner field",
+          "why": [
+            "On-disk JSON files use the misspelled key.",
+            "ToJSON LgManager emits 'commissioner' (correct spelling), so write-then-read round-trips will FAIL.",
+            "Asymmetric: this can only be fixed by editing both the FromJSON instance and every existing JSON file in lockstep, or by accepting both keys in FromJSON."
+          ],
+          "affects": []
+        },
+        {
+          "name": "LineupAndRosterAreParallelRecords",
+          "what": "CurrentLineup and Roster have identical 9-field shape, distinct types, distinct field name suffixes (C vs R)",
+          "why": [
+            "Lineup is the active set per game; Roster is the full owned set.",
+            "Field-name suffix prevents Haskell record-field namespace collisions.",
+            "Every position-mutating function exists in two parallel forms across Draft and Validators."
+          ],
+          "affects": []
+        },
+        {
+          "name": "JSONFieldNamesUseShortPositionCodes",
+          "what": "FromJSON and ToJSON for both CurrentLineup and Roster use 'C', '1B', '2B', '3B', 'SS', 'OF', 'U', 'SP', 'RP' as JSON keys",
+          "why": [
+            "Matches the short-letter convention used in positionCodeToText and positionCodeToOfficialText.",
+            "Does NOT match the draft slot names (pitcher, catcher, first, second...) used by Draft and Validators position dispatch."
+          ],
+          "affects": []
+        }
+      ],
+      "invariants": {}
+    },
+
+    "Points": {
+      "decisions": [
+        {
+          "name": "StatTypeIsTwoConstructorSum",
+          "what": "StatType = Batting | Pitching",
+          "why": [
+            "Two-constructor sum forbids the third 'undefined' state a Bool would admit.",
+            "Consumed by Validators.batterOrPitcher (lineup-based dispatch), PointCalc.calculatePointsForPlayer (stat-table dispatch), Scraper.statTypeToString and Scraper.seasonStatsUrl (URL construction).",
+            "Single point of growth if a third stat category is added."
+          ],
+          "affects": []
+        },
+        {
+          "name": "GmPointsCarriesPlayerIDInline",
+          "what": "GmPoints has gmpts_Id; BattingGmPoints has gmb_gameId; PitchingGmPoints has gmp_gameId",
+          "why": [
+            "Earlier design used external (PlayerID, GmPoints) tuples; bundling the ID inline removes the un-zip-then-rezip risk.",
+            "Forces PointCalc.mergeGmPoints to defensively check that two GmPoints share a player ID at runtime, returning Left on mismatch.",
+            "BUG: gmb_gameId and gmp_gameId are populated with the literal placeholder string 'GameID' in calcBattingPoints and calcPitchingPoints; no real game ID is ever threaded in."
+          ],
+          "affects": []
+        },
+        {
+          "name": "PlayerResultsAndResultsAreDeadCode",
+          "what": "PlayerResults and Results data types have no constructors used outside their own definitions",
+          "why": [
+            "PlayerResults was an earlier dispatch shape replaced by direct StatType handling.",
+            "Results was an earlier shape for per-team final scoring output that was never wired up.",
+            "Both are safe to delete."
+          ],
+          "affects": []
+        }
+      ],
+      "invariants": {}
+    },
+
+    "PlayerRanking": {
+      "decisions": [
+        {
+          "name": "DraftOrderStrategyIsAFunctionType",
+          "what": "DraftOrderStrategy = Int -> [TeamID] -> [TeamID]; selectDraftOrderStrategy dispatches a Text name to a strategy",
+          "why": [
+            "First-class function value lets callers pick a strategy by config string at runtime.",
+            "Unknown strategy names silently fall through to serpentine (the default branch in selectDraftOrderStrategy)."
+          ],
+          "affects": ["selectDraftOrderStrategy"]
+        },
+        {
+          "name": "RankingDataTimeFormatIsTimezoneNaive",
+          "what": "FromJSON and ToJSON for RankingData use parseTimeM/formatTime with format \"%Y-%m-%dT%H:%M\"",
+          "why": [
+            "No seconds, no timezone offset.",
+            "Despite the field type being UTCTime, parses and emissions are timezone-naive in practice."
+          ],
+          "affects": []
+        },
+        {
+          "name": "PlayerRankingsTypeAlias",
+          "what": "type PlayerRankings = [PlayerRanking]",
+          "why": [
+            "Aliases [PlayerRanking] for use in mkEmptyRankings's signature.",
+            "No other consumers in the codebase."
+          ],
+          "affects": ["mkEmptyRankings"]
+        }
+      ],
+      "invariants": {
+        "mkEmptyRankings": [
+          "type-annotated empty list of PlayerRanking",
+          "no consumers in the codebase"
+        ],
+        "serpentineOrderStrategy": {
+          "notes": [
+            "rounds = totalPicks `div` length teams (integer division; remainder dropped)",
+            "alternates teams, reverse teams, teams, reverse teams ... for 'rounds' iterations"
+          ],
+          "consumes": [
+            "selectDraftOrderStrategy"
+          ]
+        },
+        "experimentalSnakeStrategy": {
+          "notes": [
+            "rounds = totalPicks `div` length teams",
+            "4-round repeating pattern: forward, mid-shifted, reverse, mid-shifted-reverse",
+            "mid-shift uses 'drop (length teams `div` 2) $ cycle teams' taking 'length teams' elements"
+          ],
+          "consumes": [
+            "selectDraftOrderStrategy"
+          ]
+        },
+        "selectDraftOrderStrategy": {
+          "notes": [
+            "case-sensitive match on 'serpentine' or 'experimental_snake'",
+            "any other input falls through to serpentineOrderStrategy"
+          ],
+          "consumes": [
+            "Utility.generateDraftOrder"
+          ]
+        }
+      }
+    },
+
+    "Input": {
+      "decisions": [
+        {
+          "name": "PlayerGameIdBackfilledAfterParse",
+          "what": "FromJSON Player sets gameid = Nothing; Scraper.assignGameIdToPlayers populates it later",
+          "why": [
+            "GameId is at the top of the boxscore JSON, not inside individual player records.",
+            "Threading parent context through FromJSON would require a custom parser; backfill is structurally simpler.",
+            "If a code path forgets the backfill, downstream code sees Nothing and (in playerToJsonPlayerData) emits empty-string Map keys."
+          ],
+          "affects": []
+        },
+        {
+          "name": "GameIdGameDateBackfilledAfterParse",
+          "what": "FromJSON GameID sets game_date = Nothing; Scraper.assignDateToSchedule populates it later",
+          "why": [
+            "Same reason as Player.gameid backfill: the date is at a higher level in the schedule JSON than the GameID record.",
+            "Backfill runs once per fetched schedule via assignDateToSchedule."
+          ],
+          "affects": []
+        },
+        {
+          "name": "TeamDataFiltersInvalidPlayers",
+          "what": "FromJSON TeamData drops players whose allPositions is empty or absent",
+          "why": [
+            "hasValidPositions checks allPositions per-player and returns False for empty/missing lists.",
+            "Filtered players never appear in the resulting M.Map."
+          ],
+          "affects": ["hasValidPositions"]
+        },
+        {
+          "name": "ActiveRosterMetadataOptional",
+          "what": "ActiveRoster's dataPulled and checksum are Maybe Text",
+          "why": [
+            "Source MLB API does not include these fields; Scraper.writeRosterToFile adds them on write.",
+            "Asymmetric with OfficialRoster which requires both."
+          ],
+          "affects": []
+        },
+        {
+          "name": "EveryStatFieldIsMaybe",
+          "what": "BattingStats has 25 Maybe Int fields; PitchingStats has 45 fields, all Maybe Int except pit_inningsPitched :: Maybe Text",
+          "why": [
+            "MLB Stats API omits fields when the corresponding event didn't occur in the game.",
+            "Maybe Int over default-zero pushes the 'absent' vs 'zero' distinction to the consumer; in practice every consumer uses fromMaybe 0.",
+            "FromJSON uses .:? on every field so any subset can be absent."
+          ],
+          "affects": []
+        },
+        {
+          "name": "InningsPitchedIsTextNotDouble",
+          "what": "pit_inningsPitched :: Maybe Text",
+          "why": [
+            "MLB sends innings as '6.2' meaning 6 and 2/3 innings - the decimal is a sub-third count, not a tenth.",
+            "Storing as Text preserves the notation for display; PointCalc.calcPitchingPoints parses to Double via readMaybe, which silently treats '6.2' as 6.2 (not 6.6666...).",
+            "BUG: this is wrong by up to 0.06 IP per pitcher per game and affects quality_start gating."
+          ],
+          "affects": []
+        },
+        {
+          "name": "ActivePlayerNestedFieldExtraction",
+          "what": "FromJSON ActivePlayer pulls currentTeam, primaryPosition, batSide, pitchHand from nested objects via traverse (.: 'id') or traverse (.: 'code')",
+          "why": [
+            "MLB API returns these as objects with embedded code/id fields; the Haskell type flattens them to Maybe Text/Maybe Int.",
+            "If the nested object exists but lacks the inner field, the parse fails (does not silently become Nothing)."
+          ],
+          "affects": []
+        },
+        {
+          "name": "PlayerNormalizesEmptyAllPositions",
+          "what": "FromJSON Player treats allPositions = Just [] identically to allPositions = Nothing",
+          "why": [
+            "Normalization happens at parse time so consumers don't need to differentiate 'absent' from 'empty list'.",
+            "hasValidPositions then returns False for both cases."
+          ],
+          "affects": ["hasValidPositions"]
+        }
+      ],
+      "invariants": {
+        "hasValidPositions": [
+          "fromJSON-decodes the Value as Player and checks allPositions is Just non-empty",
+          "called by FromJSON TeamData to filter players before they enter the players map",
+          "duplicated identically in Validators.hasValidPositions and Input_trace.hasValidPositions"
+        ]
+      }
+    },
+
+    "Input_trace": {
+      "decisions": [
+        {
+          "name": "ModuleIsLegacyDuplicateOfInput",
+          "what": "Input_trace defines GameData, Teams, TeamData, Player, Person, Position, Status, PlayerStats, BattingStats, PitchingStats, hasValidPositions",
+          "why": [
+            "Earlier version of Input.hs; Player here lacks the gameid field that Input.Player has.",
+            "BattingStats and PitchingStats are structurally identical to Input's versions including 25 and 45 Maybe-wrapped fields respectively.",
+            "Consumed only by Test.hs main."
+          ],
+          "affects": ["hasValidPositions"]
+        }
+      ],
+      "invariants": {
+        "hasValidPositions": [
+          "duplicate of Input.hasValidPositions; uses Input_trace.Player rather than Input.Player",
+          "called by FromJSON TeamData in this module to filter players"
+        ]
+      }
+    },
+
+    "Leaderboard": {
+      "decisions": [
+        {
+          "name": "ModuleIsAlternateInputForSeasonStats",
+          "what": "Leaderboard defines its own SeasonData, Teams, TeamData, Player, Person, Status, PlayerSeasonStats, BattingTotals, PitchingTotals",
+          "why": [
+            "BattingTotals (32 fields) is a superset of Input.BattingStats with rate fields (avg, obp, slg, ops, babip, atBatsPerHomeRun) as Maybe Text.",
+            "PitchingTotals (59 fields) is a superset of Input.PitchingStats with rate fields (era, whip, strikePercentage, winPercentage, etc.) as Maybe Text.",
+            "Player here lacks parentTeamId and allPositions; carries seasonStats instead of stats.",
+            "TeamData here does NOT filter empty-allPositions players (unlike Input.TeamData) - traverses parseJSON over the full map.",
+            "No consumers in the codebase outside Playground.hs imports, and Playground's body is a large commented-out block."
+          ],
+          "affects": []
+        }
+      ],
+      "invariants": {}
+    },
+
+    "Middle": {
+      "decisions": [
+        {
+          "name": "ToJSONOnlyHere_FromJSONInStats",
+          "what": "Middle defines ToJSON for JsonPlayerData, JsonStatsData, I.Position, I.PitchingStats, I.BattingStats, I.ActiveRoster, I.ActivePlayer; Stats.hs defines the FromJSON direction for JsonPlayerData and JsonStatsData",
+          "why": [
+            "Write path (Scraper) and read path (PointCalc) are split across modules.",
+            "Field name prefixes (bat_, pit_) match the FromJSON in Stats.",
+            "Edits to one direction can drift from the other silently."
+          ],
+          "affects": []
+        },
+        {
+          "name": "ToJSONOmitsNothingFields",
+          "what": "ToJSON BattingStats and PitchingStats use catMaybes to skip fields whose Maybe value is Nothing",
+          "why": [
+            "Reduces serialized size given that most stats are absent for any given player-game.",
+            "FromJSON in Stats uses .:? on every field, so absence reads back as Nothing."
+          ],
+          "affects": []
+        },
+        {
+          "name": "PositionToJSONReadsTextAsInt",
+          "what": "ToJSON I.Position calls 'read (T.unpack pos_code)' to produce a Number",
+          "why": [
+            "The on-disk JSON schema for Middle uses numeric position codes; Input parses them as Text and Middle converts back.",
+            "read is partial; non-numeric pos_code values throw at runtime."
+          ],
+          "affects": []
+        },
+        {
+          "name": "ToJSONJsonPlayerDataKeyIsPlayerUnderscoreId",
+          "what": "ToJSON JsonPlayerData emits the key 'player_id' (with underscore), not 'playerId'",
+          "why": [
+            "Stats.FromJSON M.JsonPlayerData reads 'player_id' to match.",
+            "Inconsistent with the playerId field name used everywhere else in the codebase (camelCase)."
+          ],
+          "affects": []
+        },
+        {
+          "name": "ActivePlayerToJSONFlattensNestedFields",
+          "what": "ToJSON I.ActivePlayer emits currentTeam, primaryPosition, batSide, pitchHand as scalar values, not nested objects",
+          "why": [
+            "FromJSON ActivePlayer in Input parses these from nested objects (currentTeam.id, primaryPosition.code, etc).",
+            "ToJSON output is therefore NOT round-trippable through FromJSON ActivePlayer; the two instances target different schemas."
+          ],
+          "affects": []
+        },
+        {
+          "name": "ActiveRosterToJSONKeysByStringifiedPlayerId",
+          "what": "ToJSON I.ActiveRoster builds an officialPlayers object keyed by Text-of-Int playerId",
+          "why": [
+            "Matches the read-side schema in OfficialRoster.FromJSON which walks officialPlayers as a HashMap.",
+            "FromJSON ActiveRoster in Input uses a 'people' array, so this ToJSON path bridges to the OfficialRoster schema, not the ActiveRoster schema."
+          ],
+          "affects": []
+        }
+      ],
+      "invariants": {}
+    },
+
+    "Conversion": {
+      "decisions": [
+        {
+          "name": "ConversionDefinesItsOwnPlayerType",
+          "what": "Conversion.Player is a flat record with String fields, distinct from Input.Player and OfficialRoster.OfficialPlayer",
+          "why": [
+            "Tied to Cassava (Data.Csv) ToNamedRecord and DefaultOrdered for CSV emission.",
+            "FromJSON parses a flat object shape (no nested currentTeam.id, no nested primaryPosition.code).",
+            "PlayersFile is a newtype around HM.HashMap String Player and parses a top-level 'officialPlayers' object.",
+            "Consumed only by FetchActiveRoster.main."
+          ],
+          "affects": ["boolToString"]
+        }
+      ],
+      "invariants": {
+        "boolToString": [
+          "True -> \"TRUE\", False -> \"FALSE\"",
+          "consumed by ToNamedRecord Player to encode the active field"
+        ]
+      }
+    },
+
+    "Stats": {
+      "decisions": [
+        {
+          "name": "ModuleIsAlternateFromJSONForJsonPlayerData",
+          "what": "Stats defines GameID, GameIDstring newtypes plus FromJSON instances for Middle.JsonPlayerData, Middle.JsonStatsData, and its own BattingStats/PitchingStats",
+          "why": [
+            "Middle.hs defines ToJSON for JsonPlayerData/JsonStatsData; Stats.hs defines the FromJSON direction.",
+            "Stats.BattingStats and Stats.PitchingStats use field names prefixed 'bat_' and 'pit_' (matching Middle's ToJSON output) but are otherwise structurally identical to Input.BattingStats/Input.PitchingStats - a third copy of those types in the codebase.",
+            "GameID and GameIDstring newtypes have no consumers in the codebase."
+          ],
+          "affects": []
+        }
+      ],
+      "invariants": {}
+    },
+
+    "Draft": {
+      "decisions": [
+        {
+          "name": "DraftStateIsAFlatRecord",
+          "what": "DraftState bundles teams, availablePlayerIds, draftHistory, currentTeamIndex, draftOrder, draftComplete, teamRankings",
+          "why": [
+            "Single record threaded through the recursive draftPlayers loop.",
+            "draftComplete is a Bool flag set explicitly by selectNextPlayer's Nothing branch.",
+            "currentTeamIndex is an index into draftOrder, not into teams.",
+            "Has Show and Eq instances; Eq is used by draftCycle to detect 'no progress made' via newState == state."
+          ],
+          "affects": ["draftPlayers", "instantiateDraft", "draftCycle"]
+        },
+        {
+          "name": "DraftLoopIsRecursiveIO",
+          "what": "draftPlayers is a recursive IO action; no State monad",
+          "why": [
+            "Only IO effect is putStrLn on error.",
+            "Errors abort the loop and return the pre-failure state."
+          ],
+          "affects": ["draftPlayers"]
+        },
+        {
+          "name": "DraftConfigBundlesConfigAndPlayers",
+          "what": "DraftConfig has two fields: cfg :: C.Configuration and officialPlayers :: [O.OfficialPlayer]",
+          "why": [
+            "Avoids re-passing both arguments through every helper that needs them.",
+            "Constructed once per draft run by AutoDraft.main."
+          ],
+          "affects": ["instantiateDraft", "draftPlayers", "draftCycle", "updateState"]
+        }
+      ],
+      "invariants": {
+        "instantiateDraft": [
+          "filters teamRankings by 'PR.teamId r `elem` C.teamId config'",
+          "calls Utility.generateDraftOrder which uses System.Random.Shuffle.shuffleM (IO randomness, no seed)",
+          "creates one R.LgManager per teamId with empty lineup and roster"
+        ],
+        "draftPlayers": {
+          "notes": [
+            "loops until draftComplete is True OR draftCycle returns a Just error",
+            "on error, prints 'Error: <msg>' and returns the PRE-error state",
+            "no pick limit beyond what selectNextPlayer enforces by exhaustion"
+          ],
+          "consumes": [
+            "AutoDraft.main"
+          ]
+        },
+        "updateState": [
+          "looks up the team by teamId in DraftState.teams via find",
+          "calls addToRosterAndLineup; if isNewPlayer is False, returns the unchanged state",
+          "advances currentTeamIndex modulo (length draftOrder)",
+          "uses fromJust on the find result; aborts at runtime if teamId is not in teams"
+        ],
+        "draftCycle": [
+          "looks up the team by teamId in [(tid, t) | t@(R.LgManager _ _ tid _ _ _) <- teams state]",
+          "filters officialPlayers by availablePlayerIds, calls selectNextPlayer",
+          "Nothing from selectNextPlayer sets draftComplete = True with no error",
+          "checks newState == state via the Eq instance to detect 'no progress made' and reports 'Failed to add player to roster or lineup'"
+        ],
+        "runDraftCycle": [
+          "thin wrapper around draftCycle taking a teamState argument",
+          "no consumers in the codebase"
+        ],
+        "selectNextPlayer": [
+          "finds the team's RankingData, extracts ranked playerIds in order",
+          "returns the first available OfficialPlayer whose id appears in the rankedPlayerIds list",
+          "Nothing if no ranked player is still available - this terminates the WHOLE draft, not just this team"
+        ],
+        "addToRosterAndLineup": [
+          "branches on positionCodeToDraftText player.primaryPosition == 'pitcher'",
+          "pitcher path: addPitcherToRoster picks s_pitcher or r_pitcher slot; addPlayerToLineup uses the chosen slot",
+          "non-pitcher path: addBatterToRoster checks the position cap; addPlayerToLineup adds if cap allows",
+          "returns ((Roster, CurrentLineup), Bool) where Bool indicates whether anything was added to the roster"
+        ],
+        "addPlayerToLineup": [
+          "case-by-case dispatch on position Text against 9 lineup slots",
+          "if slot is at or above its lg_* cap, returns lineup unchanged with no signal to caller",
+          "catch-all branch returns lineup unchanged"
+        ],
+        "addPlayerToPosition": [
+          "case-by-case dispatch on position Text against 9 roster slots",
+          "no cap-checking; appends unconditionally",
+          "catch-all branch returns roster unchanged"
+        ],
+        "addPitcherToRoster": [
+          "fills s_pitcher up to dr_s_pitcher cap, then r_pitcher up to dr_r_pitcher cap",
+          "returns (roster, \"\") when both pitcher caps are reached",
+          "empty-string return is the 'no slot available' signal consumed by addToRosterAndLineup"
+        ],
+        "addBatterToRoster": [
+          "consults queryDraftRosterLmts for the cap; appends via addPlayerToPosition if under cap",
+          "returns (roster, False) when at or above cap"
+        ]
+      }
+    },
+
+    "PointCalc": {
+      "invariants": {
+        "mergeGmPoints": [
+          "compares gmpts_Id of both arguments; returns Left 'Attempting to merge points for different players!' on mismatch",
+          "on match: concatenates gmpts_batting and gmpts_pitching lists",
+          "does not re-sum total_points across the merged lists",
+          "no consumers in the codebase"
+        ],
+        "calculatePointsForPlayer": {
+          "notes": [
+            "calls Validators.batterOrPitcher to determine StatType from the LgManager's lineup",
+            "looks up M.JsonStatsData via MS.lookup (O.playerIDToText playerId) in stats",
+            "Batting branch returns Left 'Batting stats not found' if the lookup or M.batting is Nothing",
+            "Pitching branch returns Left 'Pitching stats not found' if the lookup or M.pitching is Nothing"
+          ],
+          "consumes": []
+        },
+        "calcBattingPoints": [
+          "single = bat_hits - (bat_doubles + bat_triples + bat_homeRuns), each via fromMaybe 0",
+          "negative contributions: bat_strikeOuts, bat_caughtStealing",
+          "gmb_gameId is hardcoded to the literal string \"GameID\"",
+          "gmb_total_points is computed at construction as the sum of all weighted contributions"
+        ],
+        "calcPitchingPoints": [
+          "actualInnings = fromMaybe 0.0 (readMaybe (T.unpack pit_inningsPitched) :: Maybe Double)",
+          "this reads MLB '6.2' (= 6 and 2/3 innings) as the literal Double 6.2",
+          "quality_start awarded when actualInnings >= 6 AND pit_earnedRuns <= 3",
+          "negative contributions: pit_baseOnBalls, pit_hits, pit_earnedRuns, pit_hitBatsmen, pit_losses",
+          "gmp_gameId is hardcoded to the literal string \"GameID\"",
+          "gmp_total_points is computed at construction as the sum of all weighted contributions"
+        ]
+      }
+    },
+
+    "Scraper": {
+      "decisions": [
+        {
+          "name": "BoxscoreFetchSkipsLiveGames",
+          "what": "fetchFinishedBxScore checks codedGameState == 'F' before fetching the boxscore",
+          "why": [
+            "Only finished games have stable boxscore stats.",
+            "Returns Right Nothing for non-final games; downstream filterFinishedGames removes them."
+          ],
+          "affects": ["fetchFinishedBxScore"]
+        },
+        {
+          "name": "ConcurrentFetchUnboundedAsync",
+          "what": "fetchFinishedBxScores uses Control.Concurrent.Async.mapConcurrently",
+          "why": [
+            "Parallelizes per-game HTTP fetches across an entire day's gameId list.",
+            "No bound on concurrency; no retry or rate-limit handling."
+          ],
+          "affects": ["fetchFinishedBxScores"]
+        }
+      ],
+      "invariants": {
+        "fetchGameScheduleForDate": [
+          "fetches via scheduleUrl date, decodes as GameSchedule",
+          "calls assignDateToSchedule to backfill game_date on every GameID"
+        ],
+        "fetchGameStatus": [
+          "fetches via gameStatusUrl gameId, decodes as LiveGameWrapper"
+        ],
+        "fetchFinishedBxScore": [
+          "two-step: status fetch then conditional boxscore fetch",
+          "Right (Just GameData) for finished games; Right Nothing for in-progress; Left for fetch/parse errors",
+          "calls assignGameIdToPlayers on the boxscore before returning"
+        ],
+        "fetchFinishedBxScores": [
+          "mapConcurrently over [Int]; sequenceA collapses [Either] to Either []",
+          "filters out (gameId, Nothing) entries via 'finishedGames' so the resulting Map only contains finished games"
+        ],
+        "fetchFinishedBxScoresToJsonPlayerData": [
+          "calls fetchFinishedBxScores and applies convertGameDataMapToJsonPlayerData on success"
+        ],
+        "scrapeStatsForDateRange": {
+          "notes": [
+            "iterates generateDateRange start end with mapM_ processDate",
+            "no transactionality; failures on later dates do not unwind earlier successes"
+          ],
+          "consumes": [
+            "FetchStats.main"
+          ]
+        },
+        "processDate": [
+          "fetches schedule, calls processAndPrintGames (which only prints), then re-fetches and writes stats via writeDataToFile",
+          "filename comes from formatFilename date, written under 'appData/stats'"
+        ],
+        "flattenedPlayersList": [
+          "id function on Map Text JsonPlayerData",
+          "no consumers in the codebase"
+        ],
+        "printGameData": [
+          "prints (gameId, gameData) pairs to stdout",
+          "no consumers in the codebase"
+        ],
+        "processAndPrintGames": [
+          "if hasGamesForDate is True, fetches boxscores and discards them; otherwise prints 'No games scheduled for the provided date.'"
+        ],
+        "fetchActiveRoster": [
+          "fetches via rosterUrl season, decodes as I.ActiveRoster",
+          "consumed by FetchActiveRoster.main"
+        ],
+        "writeRosterToFile": [
+          "encodes only people via encode (I.people roster) to compute the checksum",
+          "checksum covers ONLY the people field, not the full ActiveRoster",
+          "writes the full ActiveRoster (with checksum and dataPulled set) as JSON to path"
+        ],
+        "assignDateToSchedule": [
+          "sets game_date on every GameID inside every DateEntry to the provided Text date",
+          "overwrites existing dates unconditionally"
+        ],
+        "assignGameIdToPlayers": [
+          "sets gameid on every Player in both away and home teams to Just gameId",
+          "overwrites existing gameids unconditionally"
+        ],
+        "hasGamesForDate": [
+          "True iff any DateEntry has Just games (regardless of whether the inner Vector is empty)"
+        ],
+        "extractGameIds": [
+          "concatenates I.gamePk values across all DateEntry.games vectors",
+          "no deduplication"
+        ],
+        "writeDataToFile": [
+          "createDirectoryIfMissing on the path, writes encode dataToSave to path ++ '/' ++ filename"
+        ],
+        "writePlayerToJsonFile": [
+          "no consumers in the codebase"
+        ],
+        "playerToJsonPlayerData": [
+          "playerId = T.pack . show . personId . person",
+          "stats = single-entry Map keyed by 'maybe \"\" (T.pack . show) gameid'",
+          "if Player.gameid is Nothing (assignGameIdToPlayers not called), the map key is the empty string"
+        ],
+        "playerToJsonStatsData": [
+          "allPositions defaults to [] when Player.allPositions is Nothing"
+        ],
+        "convertPlayerToJson": [
+          "BL.toStrict . encode . playerToJsonPlayerData"
+        ],
+        "convertGameDataMapToJsonPlayerData": [
+          "concatMap gameDataToPlayerDataPairs over Map elements (mapMaybe id drops Nothings first)",
+          "merges duplicate-keyed entries via mergeJsonPlayerData",
+          "rawStringToText replaces escaped backslash and quote sequences in the key"
+        ],
+        "mergeJsonPlayerData": [
+          "keeps existing playerId and fullName",
+          "merges stats via M.unionWith mergeJsonStatsData"
+        ],
+        "mergeJsonStatsData": [
+          "discards the first argument; returns the second unchanged",
+          "second argument always wins on key collision"
+        ],
+        "formatFilename": [
+          "replaces '-' with '_' and appends '.json' to the date string"
+        ],
+        "createOutputDirectory": [
+          "createDirectoryIfMissing True"
+        ],
+        "stringToDay": [
+          "parseTimeOrError True defaultTimeLocale '%Y-%m-%d'; partial on bad input"
+        ],
+        "incrementDay": [
+          "addDays 1"
+        ],
+        "statTypeToString": [
+          "Batting -> 'batting', Pitching -> 'pitching'",
+          "consumed only by seasonStatsUrl"
+        ],
+        "generateDateRange": [
+          "iterate incrementDay startDate, takeWhile (<= endDate)",
+          "formats each Day as '%Y-%m-%d' string"
+        ],
+        "scheduleUrl": [
+          "https://statsapi.mlb.com/api/v1/schedule/games/?language=en&sportId=1&startDate=DATE&endDate=DATE"
+        ],
+        "gameStatusUrl": [
+          "https://statsapi.mlb.com//api/v1.1/game/GAMEID/feed/live (note the doubled slash)"
+        ],
+        "boxScoreUrl": [
+          "http://statsapi.mlb.com/api/v1/game/GAMEID/boxscore (http, not https)"
+        ],
+        "rosterUrl": [
+          "https://statsapi.mlb.com/api/v1/sports/1/players?activeStatus=ACTIVE&season=YEAR",
+          "sportId is hardcoded to 1 (MLB)"
+        ],
+        "seasonStatsUrl": [
+          "http://statsapi.mlb.com/api/v1/stats?stats=season&sportId=1&season=YEAR&group=batting|pitching",
+          "no consumers in the codebase"
+        ]
+      }
+    },
+
+    "Utility": {
+      "decisions": [
+        {
+          "name": "PositionStringConvertersAreSeparate",
+          "what": "Four functions convert between position naming conventions: positionTextToOfficialCode, positionCodeToText, positionCodeToOfficialText, positionCodeToDraftText",
+          "why": [
+            "Three input conventions exist: numeric scorekeeper codes ('1'-'10'), short letters ('P','C','1B','2B' etc), draft slot names ('pitcher','catcher','first','outfield').",
+            "All four use catch-all '_ -> \"Unknown\"' which silently swallows typos and new positions.",
+            "positionCodeToDraftText composes positionCodeToOfficialText with an inner officialTextToDraftText helper."
+          ],
+          "affects": ["positionTextToOfficialCode", "positionCodeToText", "positionCodeToOfficialText", "positionCodeToDraftText"]
+        }
+      ],
+      "invariants": {
+        "positionTextToOfficialCode": [
+          "P->1, C->2, 1B->3, 2B->4, 3B->5, SS->6, LF->7, CF->8, RF->9, U->10",
+          "anything else -> 'Unknown'",
+          "no consumers in the codebase"
+        ],
+        "positionCodeToText": [
+          "P->pitcher, C->catcher, 1B->first, 2B->second, 3B->third, SS->shortstop, LF/CF/RF->outfield, DH->utility",
+          "anything else -> 'Unknown'"
+        ],
+        "positionCodeToOfficialText": [
+          "1->P, 2->C, 3->1B, 4->2B, 5->3B, 6->SS, 7->LF, 8->CF, 9->RF, 10->DH, Y->DH",
+          "anything else -> 'Unknown'"
+        ],
+        "positionCodeToDraftText": [
+          "composes positionCodeToOfficialText with an inner conversion to draft slot names",
+          "P->pitcher, C->catcher, 1B->first, 2B->second, 3B->third, SS->shortstop, LF/CF/RF->outfield, DH->utility",
+          "anything else -> 'Unknown'"
+        ],
+        "mkLgManagers": [
+          "one R.LgManager per teamId in config; each with mkEmptyLineup and mkEmptyRoster",
+          "does not deduplicate teamIds"
+        ],
+        "mkSingleLgManager": [
+          "consumed by mkLgManagers and mkLgManagersWithFilter"
+        ],
+        "mkLgManagersWithFilter": [
+          "same as mkLgManagers but iterates over a provided [TeamID] subset",
+          "no consumers in the codebase"
+        ],
+        "mkEmptyRoster": [
+          "Roster with all 9 lists empty"
+        ],
+        "mkEmptyLineup": [
+          "CurrentLineup with all 9 lists empty"
+        ],
+        "createLgManager": [
+          "constructs an R.LgManager from config plus explicit teamId, lineup, roster",
+          "consumed by AutoDraft.main"
+        ],
+        "extendRankingsWithUnrankedPlayers": [
+          "appends every PlayerID not already in rankedPlayers (preserving allPlayerIds order) after the ranked ones",
+          "no consumers in the codebase"
+        ],
+        "generateRandomBytes": [
+          "Crypto.Random.getRandomBytes"
+        ],
+        "generateRandomSHA256": [
+          "32 random bytes hashed with SHA256, hex-encoded as Text"
+        ],
+        "createRandomTeamID": [
+          "C.TeamID wrapping the full hex SHA256 output (callers truncate via T.take 12 for short forms)"
+        ],
+        "randomIntGen": [
+          "= randomR; alias",
+          "no consumers in the codebase"
+        ],
+        "randomInt": [
+          "= randomR; alias",
+          "no consumers in the codebase"
+        ],
+        "shuffleList": [
+          "Fisher-Yates shuffle returning ([a], StdGen)",
+          "no consumers in the codebase outside Generators.main"
+        ],
+        "removeAt": [
+          "uses splitAt n; partial on the cons pattern when n is out of range",
+          "consumed only by shuffleList"
+        ],
+        "withEither": [
+          "runs the IO action; on Left prints to stdout (not stderr); on Right calls the handler",
+          "consumed by Scraper.printGameData and Scraper.processAndPrintGames"
+        ],
+        "eitherToMaybe": [
+          "Right b -> Just b; otherwise Nothing",
+          "no consumers in the codebase"
+        ],
+        "constructFilePath": [
+          "baseDir ++ 'finalRoster' ++ show idx ++ '.json'",
+          "no consumers in the codebase"
+        ],
+        "fetchAndDecodeJSON": [
+          "httpBS . parseRequest_ then eitherDecodeStrict",
+          "parseRequest_ is partial on malformed URLs"
+        ],
+        "readJson": [
+          "eitherDecodeStrict <$> B.readFile filePath"
+        ],
+        "loadDataFromDir": [
+          "lists JSON files via listJsonFiles, reads each with readJson",
+          "consumed by loadRankings and loadRosters"
+        ],
+        "listJsonFiles": [
+          "filters listDirectory results by takeExtension == '.json'",
+          "does not recurse"
+        ],
+        "writeJson": [
+          "BL.writeFile filePath . encode"
+        ],
+        "isPlayerInOfficialRoster": [
+          "any (playerId-equal) over [O.OfficialPlayer]",
+          "no consumers in the codebase"
+        ],
+        "filterInvalidRankings": [
+          "keeps RankingData whose teamId is in the provided [TeamID] list",
+          "no consumers in the codebase"
+        ],
+        "filterValidTeams": [
+          "keeps TeamIDs that appear in the rankings list",
+          "consumed by generateDraftOrder"
+        ],
+        "findPlayerRanking": [
+          "find the PlayerRanking by playerId, return its rank",
+          "no consumers in the codebase"
+        ],
+        "readRankings": [
+          "duplicate of loadDataFromDir specialized to [PlayerRanking]",
+          "no consumers in the codebase"
+        ],
+        "loadRankings": [
+          "= loadDataFromDir specialized to [PlayerRanking]",
+          "no consumers in the codebase"
+        ],
+        "loadRosters": [
+          "= loadDataFromDir specialized to OfficialRoster",
+          "no consumers in the codebase"
+        ],
+        "computeChecksum": [
+          "BL.toStrict then SHA256 hash, hex-encoded as Text"
+        ],
+        "getCurrentDate": [
+          "formatTime '%Y_%m_%d_%H_%M' on getCurrentTime"
+        ],
+        "getCurrentFormattedTime": [
+          "formatTime '%Y-%m-%dT%H:%M' on getCurrentTime",
+          "no consumers in the codebase"
+        ],
+        "totalPicksPerTeam": [
+          "sum of all 9 DraftRosterLmts fields",
+          "duplicates Config.sumDraftRosterLmts"
+        ],
+        "randomizeOrder": [
+          "= shuffleM via System.Random.Shuffle; uses MonadIO randomness with no seed"
+        ],
+        "generateDraftOrder": [
+          "filterValidTeams to drop teams without rankings, then randomizeOrder, then apply selectDraftOrderStrategy from config.draft_parameters.order",
+          "totalPicks = totalPicksPerTeam draftLimits * length randomizedTeams"
+        ]
+      }
+    },
+
+    "Validators": {
+      "decisions": [
+        {
+          "name": "InvertedReturnConventionForUniqueChecks",
+          "what": "hasUniqueLineupPlayers and hasUniqueRosterPlayers return Left when there are no duplicates and Right when there are",
+          "why": [
+            "Left value carries the success message string; Right value carries the duplicate PlayerID list.",
+            "Inverts the conventional Either bias used elsewhere in the module."
+          ],
+          "affects": ["hasUniqueLineupPlayers", "hasUniqueRosterPlayers", "validateRoster", "validateLineup", "validateAndPrintLineup"]
+        }
+      ],
+      "invariants": {
+        "extractNameFromPath": [
+          "reverse . takeWhile (/= '/') . reverse - returns the basename"
+        ],
+        "processConfigResults": [
+          "iterates [(FileName, FileContent)], printing extractNameFromPath fname before each testLineup call",
+          "consumed by LeagueTEST.main"
+        ],
+        "testLineup": [
+          "prints the parsed LgManager and lineup, then runs validateAndPrintLineup",
+          "Left input prints 'Failed to parse Roster JSON: <err>'"
+        ],
+        "findPlayer": [
+          "find by playerId AND playerId being in the availableIds list",
+          "consumed by Draft (transitively via Validators import)"
+        ],
+        "maxPossibleTeams": [
+          "minimum of maxPossibleTeamsForPosition over the hardcoded list ['P','C','1B','2B','3B','SS','LF','CF','RF','DH']",
+          "no consumers in the codebase"
+        ],
+        "maxPossibleTeamsForPosition": [
+          "draftLimit derivation: pitcher = dr_s_pitcher + dr_r_pitcher; outfield = dr_outfield * 3 (assumes LF/CF/RF interchangeable); others use the single matching dr_* field",
+          "playerCount filters O.people by O.primaryPosition == position",
+          "result is playerCount `div` draftLimit when draftLimit > 0, else 0"
+        ],
+        "isLineupValid": [
+          "validateLineup manager config; True iff Right",
+          "no consumers in the codebase"
+        ],
+        "getRosterValidationErrors": [
+          "validateLineup despite the name; returns the Left list or []",
+          "no consumers in the codebase"
+        ],
+        "getLineupValidationErrors": [
+          "validateLineup; returns the Left list or []",
+          "no consumers in the codebase"
+        ],
+        "hasUniqueLineupPlayers": [
+          "Left 'No duplicate players found.' when allPlayers \\\\ nub allPlayers is empty",
+          "Right [O.PlayerID] containing the duplicates otherwise"
+        ],
+        "hasUniqueRosterPlayers": [
+          "Left 'No duplicate players found in roster.' on success",
+          "Right [O.PlayerID] of duplicates otherwise"
+        ],
+        "lookupPlayerInRoster": [
+          "True if playerId appears in any of the 9 roster slots",
+          "no consumers in the codebase"
+        ],
+        "lookupPlayerInLineup": [
+          "True if playerId appears in any of the 9 lineup slots",
+          "no consumers in the codebase"
+        ],
+        "getRosterDiscrepancies": [
+          "for each of 9 positions: Just (posName, length players - limit) when length > limit, else Nothing",
+          "returns only positive-overage discrepancies"
+        ],
+        "getLineupDiscrepancies": [
+          "for each of 9 positions: Just (posName, length players - limit) when length > limit, else Nothing"
+        ],
+        "countPlayersOnRoster": [
+          "case-by-case dispatch on position Text against 9 roster slot names",
+          "catch-all returns 0 (no warning on typos)"
+        ],
+        "countPlayersInLineup": [
+          "case-by-case dispatch on position Text against 9 lineup slot names",
+          "catch-all returns 0 (no warning on typos)"
+        ],
+        "playerIDToString": [
+          "show . unPlayerID"
+        ],
+        "validateRoster": {
+          "notes": [
+            "calls getRosterDiscrepancies and hasUniqueRosterPlayers",
+            "returns Right () when discrepancies is empty AND duplicateCheck is Left (the inverted convention)",
+            "Left contains either the duplicate-IDs-as-strings list with a trailing 'Duplicate player IDs found in roster.' message, or per-position overage messages"
+          ],
+          "consumes": []
+        },
+        "validateLineup": {
+          "notes": [
+            "calls getLineupDiscrepancies and hasUniqueLineupPlayers",
+            "Right () when discrepancies is empty AND duplicateCheck is Left",
+            "same Left structure as validateRoster but with 'Duplicate player IDs found in lineup.'"
+          ],
+          "consumes": [
+            "isLineupValid",
+            "getRosterValidationErrors",
+            "getLineupValidationErrors"
+          ]
+        },
+        "validateAndPrintLineup": {
+          "notes": [
+            "IO action returning Bool",
+            "prints discrepancies to stdout; calls validatePlayerId (which prints) and hasUniqueLineupPlayers (printed via the inverted convention)",
+            "True only when validPositions AND validRosterSize AND all player IDs valid AND no duplicates"
+          ]
+        },
+        "queryLimits": [
+          "dispatches 'draft' -> queryDraftRosterLmts, 'lineup' -> queryLgLineupLmts; anything else returns 0",
+          "no consumers in the codebase"
+        ],
+        "queryDraftRosterLmts": [
+          "case-by-case dispatch on position Text against 9 dr_* fields; catch-all returns 0",
+          "consumed by Draft.addBatterToRoster, Draft.addPitcherToRoster, Utility.maxPossibleTeamsForPosition (indirectly)"
+        ],
+        "queryLgLineupLmts": [
+          "case-by-case dispatch on position Text against 9 lg_* fields; catch-all returns 0",
+          "consumed by Draft.addPlayerToLineup"
+        ],
+        "hasValidPositions": [
+          "duplicate of Input.hasValidPositions",
+          "no internal consumers in this module"
+        ],
+        "lookupPlayerInOfficialRoster": [
+          "any (playerId-equal) over O.people roster",
+          "consumed by lookupPlayerId"
+        ],
+        "lookupPlayerId": [
+          "reads testFiles/appData/rosters/activePlayers.json on every call via readJson",
+          "returns False on parse failure or on textToPlayerID returning Nothing",
+          "consumed by lookupPlayerIdConverted"
+        ],
+        "validatePlayerId": [
+          "filterM lookupPlayerIdConverted over getUniquePlayerIdsLineup",
+          "Right 'All Players are valid.' when all players exist in the on-disk active roster",
+          "Left [Text] of nonexistent playerIds otherwise"
+        ],
+        "lookupPlayerIdConverted": [
+          "lookupPlayerId . O.playerIDToText"
+        ],
+        "intToText": [
+          "T.pack . show",
+          "no consumers in the codebase"
+        ],
+        "getUniquePlayerIdsLineup": [
+          "concatenates all 9 CurrentLineup fields",
+          "name claims uniqueness but the function does NOT deduplicate (it just flattens)"
+        ],
+        "validatePositionCount": [
+          "Just (posName, overage) when length players > maxAllowed, else Nothing",
+          "no consumers in the codebase"
+        ],
+        "totalPlayersInLineup": [
+          "sum of lengths of all 9 CurrentLineup fields",
+          "no consumers in the codebase"
+        ],
+        "validateCurrentLineup": [
+          "Bool: True when getLineupDiscrepancies is empty AND hasUniqueLineupPlayers returns Left (the inverted-success case)",
+          "no consumers in the codebase"
+        ],
+        "findPlayerPosition": [
+          "checks 9 lineup slots labeled C, 1B, 2B, 3B, SS, U, OF, SP, RP",
+          "Right pos if exactly one slot contains the playerId",
+          "Left 'Player not found in current lineup.' if zero matches",
+          "Left 'Player found in multiple positions in the lineup.' if 2+ matches",
+          "no consumers in the codebase"
+        ],
+        "batterOrPitcher": {
+          "notes": [
+            "batterPositions = [cC, b1C, b2C, b3C, ssC, uC, ofC]",
+            "pitcherPositions = [spC, rpC]",
+            "Right Batting if playerName is in any batter list; Right Pitching if in any pitcher list; Left otherwise"
+          ],
+          "consumes": [
+            "PointCalc.calculatePointsForPlayer"
+          ]
+        },
+        "analyzeDraftResults": [
+          "prints 'Team 1 Draft Analysis:' and 'Team 2 Draft Analysis:' headers; calls analyzeTeamDraft for each",
+          "linesToPrint caps the per-team output via printAnalysis",
+          "consumed by AutoDraft.main"
+        ],
+        "analyzeTeamDraft": [
+          "builds rankingMap from rank to PlayerID; produces [(rank, playerId, drafted)] sorted by rank",
+          "drafted check uses getAllPlayerIdsFromTeam"
+        ],
+        "getAllPlayerIdsFromTeam": [
+          "concatenates all 9 roster fields and all 9 lineup fields"
+        ],
+        "printAnalysis": [
+          "take linesToPrint over the sorted analysis list"
+        ]
+      }
+    }
+
+  }
+}

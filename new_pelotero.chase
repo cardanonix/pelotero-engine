@@ -1,0 +1,3844 @@
+%bundle chase v1
+%generated 2026-05-04T22:49:21Z
+%roots /home/bismuth/git/pelotero-engine/lib
+%files 49 ok, 0 failed
+
+# This file is a chase bundle: structural skeletons of multiple
+# Haskell source files concatenated into one document. Each block
+# begins with === BEGIN <path> === on its own line. Blocks contain
+# the rendered .chase format: %file, %mod, %ext, %fixity, %uses,
+# %const, %topology, data decls, %pattern, type signatures with
+# attached invariants and consumers, %decision blocks, and parse
+# errors. Function bodies are deliberately omitted; the lines
+# beginning with ! after a signature are the behavioral facts you
+# would otherwise have to infer from reading the source.
+
+
+=== BEGIN Pelotero/DB/BoxscoreEntry.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/BoxscoreEntry.hs
+%mod Pelotero.DB.BoxscoreEntry
+
+%ext DataKinds, DeriveAnyClass, DeriveGeneric, DerivingStrategies, DuplicateRecordFields, OverloadedStrings, StandaloneDeriving, TypeFamilies, TypeOperators, UndecidableInstances
+
+%uses Data.Functor.Contravariant
+%uses Data.Int
+%uses Data.Time
+%uses GHC.Generics
+%uses qualified Hasql.Transaction as Tx
+%uses Rel8
+%uses qualified Rel8 as R
+%uses qualified Rel8.Expr.Time as RT
+%uses Pelotero.DB.Pool
+%uses Pelotero.DB.Rel8Instances
+%uses Pelotero.Domain.Id
+
+data BattingE f = BattingE
+  { _bGameId                 :: Column f DbGameId
+  , _bPlayerId               :: Column f DbPlayerId
+  , _bTeamId                 :: Column f (Maybe DbTeamId)
+  , _bGamesPlayed            :: Column f (Maybe Int32)
+  , _bPlateAppearances       :: Column f (Maybe Int32)
+  , _bAtBats                 :: Column f (Maybe Int32)
+  , _bRuns                   :: Column f (Maybe Int32)
+  , _bHits                   :: Column f (Maybe Int32)
+  , _bDoubles                :: Column f (Maybe Int32)
+  , _bTriples                :: Column f (Maybe Int32)
+  , _bHomeRuns               :: Column f (Maybe Int32)
+  , _bRbi                    :: Column f (Maybe Int32)
+  , _bBaseOnBalls            :: Column f (Maybe Int32)
+  , _bIntentionalWalks       :: Column f (Maybe Int32)
+  , _bStrikeOuts             :: Column f (Maybe Int32)
+  , _bStolenBases            :: Column f (Maybe Int32)
+  , _bCaughtStealing         :: Column f (Maybe Int32)
+  , _bHitByPitch             :: Column f (Maybe Int32)
+  , _bSacBunts               :: Column f (Maybe Int32)
+  , _bSacFlies               :: Column f (Maybe Int32)
+  , _bGroundIntoDoublePlay   :: Column f (Maybe Int32)
+  , _bGroundIntoTriplePlay   :: Column f (Maybe Int32)
+  , _bLeftOnBase             :: Column f (Maybe Int32)
+  , _bTotalBases             :: Column f (Maybe Int32)
+  , _bFlyOuts                :: Column f (Maybe Int32)
+  , _bGroundOuts             :: Column f (Maybe Int32)
+  , _bCatchersInterference   :: Column f (Maybe Int32)
+  , _bPickoffs               :: Column f (Maybe Int32)
+  , _bCreatedAt              :: Column f UTCTime
+  , _bUpdatedAt              :: Column f UTCTime
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+data PitchingE f = PitchingE
+  { _pGameId                  :: Column f DbGameId
+  , _pPlayerId                :: Column f DbPlayerId
+  , _pTeamId                  :: Column f (Maybe DbTeamId)
+  , _pGamesPlayed             :: Column f (Maybe Int32)
+  , _pGamesStarted            :: Column f (Maybe Int32)
+  , _pGamesFinished           :: Column f (Maybe Int32)
+  , _pCompleteGames           :: Column f (Maybe Int32)
+  , _pShutouts                :: Column f (Maybe Int32)
+  , _pWins                    :: Column f (Maybe Int32)
+  , _pLosses                  :: Column f (Maybe Int32)
+  , _pSaves                   :: Column f (Maybe Int32)
+  , _pSaveOpportunities       :: Column f (Maybe Int32)
+  , _pHolds                   :: Column f (Maybe Int32)
+  , _pBlownSaves              :: Column f (Maybe Int32)
+  , _pInningsPitchedOuts      :: Column f (Maybe Int32)
+  , _pBattersFaced            :: Column f (Maybe Int32)
+  , _pNumberOfPitches         :: Column f (Maybe Int32)
+  , _pStrikes                 :: Column f (Maybe Int32)
+  , _pBalls                   :: Column f (Maybe Int32)
+  , _pHits                    :: Column f (Maybe Int32)
+  , _pDoubles                 :: Column f (Maybe Int32)
+  , _pTriples                 :: Column f (Maybe Int32)
+  , _pHomeRuns                :: Column f (Maybe Int32)
+  , _pRuns                    :: Column f (Maybe Int32)
+  , _pEarnedRuns              :: Column f (Maybe Int32)
+  , _pStrikeOuts              :: Column f (Maybe Int32)
+  , _pBaseOnBalls             :: Column f (Maybe Int32)
+  , _pIntentionalWalks        :: Column f (Maybe Int32)
+  , _pHitBatsmen              :: Column f (Maybe Int32)
+  , _pWildPitches             :: Column f (Maybe Int32)
+  , _pBalks                   :: Column f (Maybe Int32)
+  , _pPickoffs                :: Column f (Maybe Int32)
+  , _pFlyOuts                 :: Column f (Maybe Int32)
+  , _pGroundOuts              :: Column f (Maybe Int32)
+  , _pAirOuts                 :: Column f (Maybe Int32)
+  , _pInheritedRunners        :: Column f (Maybe Int32)
+  , _pInheritedRunnersScored  :: Column f (Maybe Int32)
+  , _pStolenBases             :: Column f (Maybe Int32)
+  , _pCaughtStealing          :: Column f (Maybe Int32)
+  , _pAtBats                  :: Column f (Maybe Int32)
+  , _pRbi                     :: Column f (Maybe Int32)
+  , _pSacBunts                :: Column f (Maybe Int32)
+  , _pSacFlies                :: Column f (Maybe Int32)
+  , _pCatchersInterference    :: Column f (Maybe Int32)
+  , _pPassedBall              :: Column f (Maybe Int32)
+  , _pCreatedAt               :: Column f UTCTime
+  , _pUpdatedAt               :: Column f UTCTime
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+data BattingRow = BattingRow
+  { battingGameId                 :: !DbGameId
+  , battingPlayerId               :: !DbPlayerId
+  , battingTeamId                 :: !(Maybe DbTeamId)
+  , battingGamesPlayed            :: !(Maybe Int32)
+  , battingPlateAppearances       :: !(Maybe Int32)
+  , battingAtBats                 :: !(Maybe Int32)
+  , battingRuns                   :: !(Maybe Int32)
+  , battingHits                   :: !(Maybe Int32)
+  , battingDoubles                :: !(Maybe Int32)
+  , battingTriples                :: !(Maybe Int32)
+  , battingHomeRuns               :: !(Maybe Int32)
+  , battingRbi                    :: !(Maybe Int32)
+  , battingBaseOnBalls            :: !(Maybe Int32)
+  , battingIntentionalWalks       :: !(Maybe Int32)
+  , battingStrikeOuts             :: !(Maybe Int32)
+  , battingStolenBases            :: !(Maybe Int32)
+  , battingCaughtStealing         :: !(Maybe Int32)
+  , battingHitByPitch             :: !(Maybe Int32)
+  , battingSacBunts               :: !(Maybe Int32)
+  , battingSacFlies               :: !(Maybe Int32)
+  , battingGroundIntoDoublePlay   :: !(Maybe Int32)
+  , battingGroundIntoTriplePlay   :: !(Maybe Int32)
+  , battingLeftOnBase             :: !(Maybe Int32)
+  , battingTotalBases             :: !(Maybe Int32)
+  , battingFlyOuts                :: !(Maybe Int32)
+  , battingGroundOuts             :: !(Maybe Int32)
+  , battingCatchersInterference   :: !(Maybe Int32)
+  , battingPickoffs               :: !(Maybe Int32)
+  }
+  deriving stock (Show, Eq)
+
+data PitchingRow = PitchingRow
+  { pitchingGameId                 :: !DbGameId
+  , pitchingPlayerId               :: !DbPlayerId
+  , pitchingTeamId                 :: !(Maybe DbTeamId)
+  , pitchingGamesPlayed            :: !(Maybe Int32)
+  , pitchingGamesStarted           :: !(Maybe Int32)
+  , pitchingGamesFinished          :: !(Maybe Int32)
+  , pitchingCompleteGames          :: !(Maybe Int32)
+  , pitchingShutouts               :: !(Maybe Int32)
+  , pitchingWins                   :: !(Maybe Int32)
+  , pitchingLosses                 :: !(Maybe Int32)
+  , pitchingSaves                  :: !(Maybe Int32)
+  , pitchingSaveOpportunities      :: !(Maybe Int32)
+  , pitchingHolds                  :: !(Maybe Int32)
+  , pitchingBlownSaves             :: !(Maybe Int32)
+  , pitchingInningsPitchedOuts     :: !(Maybe Int32)
+  , pitchingBattersFaced           :: !(Maybe Int32)
+  , pitchingNumberOfPitches        :: !(Maybe Int32)
+  , pitchingStrikes                :: !(Maybe Int32)
+  , pitchingBalls                  :: !(Maybe Int32)
+  , pitchingHits                   :: !(Maybe Int32)
+  , pitchingDoubles                :: !(Maybe Int32)
+  , pitchingTriples                :: !(Maybe Int32)
+  , pitchingHomeRuns               :: !(Maybe Int32)
+  , pitchingRuns                   :: !(Maybe Int32)
+  , pitchingEarnedRuns             :: !(Maybe Int32)
+  , pitchingStrikeOuts             :: !(Maybe Int32)
+  , pitchingBaseOnBalls            :: !(Maybe Int32)
+  , pitchingIntentionalWalks       :: !(Maybe Int32)
+  , pitchingHitBatsmen             :: !(Maybe Int32)
+  , pitchingWildPitches            :: !(Maybe Int32)
+  , pitchingBalks                  :: !(Maybe Int32)
+  , pitchingPickoffs               :: !(Maybe Int32)
+  , pitchingFlyOuts                :: !(Maybe Int32)
+  , pitchingGroundOuts             :: !(Maybe Int32)
+  , pitchingAirOuts                :: !(Maybe Int32)
+  , pitchingInheritedRunners       :: !(Maybe Int32)
+  , pitchingInheritedRunnersScored :: !(Maybe Int32)
+  , pitchingStolenBases            :: !(Maybe Int32)
+  , pitchingCaughtStealing         :: !(Maybe Int32)
+  , pitchingAtBats                 :: !(Maybe Int32)
+  , pitchingRbi                    :: !(Maybe Int32)
+  , pitchingSacBunts               :: !(Maybe Int32)
+  , pitchingSacFlies               :: !(Maybe Int32)
+  , pitchingCatchersInterference   :: !(Maybe Int32)
+  , pitchingPassedBall             :: !(Maybe Int32)
+  }
+  deriving stock (Show, Eq)
+
+battingSchema :: TableSchema (BattingE Name)
+  ! table 'game_player_batting' with FK to game, FK to player, FK to team (nullable), 25 stat columns (all Maybe Int32), created_at, updated_at
+  ! natural PK: (game_id, player_id) — same player twice in the same game is impossible per MLB
+
+pitchingSchema :: TableSchema (PitchingE Name)
+  ! table 'game_player_pitching' with FK to game, FK to player, FK to team (nullable), 40+ stat columns, innings_pitched_outs as Int32, created_at, updated_at
+  ! natural PK: (game_id, player_id)
+
+fromBattingResult :: BattingE Result -> BattingRow
+  ! private; rel8 BattingE Result -> BattingRow; drops created_at and updated_at
+
+fromPitchingResult :: PitchingE Result -> PitchingRow
+  ! private; rel8 PitchingE Result -> PitchingRow; drops created_at and updated_at
+
+battingRowToExpr :: BattingRow -> BattingE Expr
+  ! private; BattingRow -> BattingE Expr for use in INSERT VALUES clause
+  ! created_at and updated_at are unsafeDefault — DB sets them on insert
+
+pitchingRowToExpr :: PitchingRow -> PitchingE Expr
+  ! private; mirror of battingRowToExpr
+
+upsertBattingT :: BattingRow -> Tx.Transaction ()
+  ! INSERT ... ON CONFLICT (game_id, player_id) DO UPDATE
+  ! set: keeps id-like columns from old, takes stats from new, preserves created_at, sets updated_at = NOW()
+  ! updateWhere = lit True (always update on conflict)
+
+getBattingForGameT :: DbGameId -> Tx.Transaction [BattingRow]
+  ! WHERE game_id; ORDER BY player_id
+
+deleteBattingForGameT :: DbGameId -> Tx.Transaction ()
+  ! DELETE WHERE game_id
+  ! useful when re-ingesting a corrected boxscore: delete then re-upsert
+
+upsertPitchingT :: PitchingRow -> Tx.Transaction ()
+  ! mirror of upsertBattingT for pitching
+
+getPitchingForGameT :: DbGameId -> Tx.Transaction [PitchingRow]
+  ! WHERE game_id; ORDER BY player_id
+
+deletePitchingForGameT :: DbGameId -> Tx.Transaction ()
+  ! DELETE WHERE game_id
+
+upsertBatting :: Pool -> BattingRow -> IO (Either DBError ())
+  ! Pool-flavored wrapper
+
+upsertPitching :: Pool -> PitchingRow -> IO (Either DBError ())
+  ! Pool-flavored wrapper
+
+getBattingForGame :: Pool -> DbGameId -> IO (Either DBError [BattingRow])
+  ! Pool-flavored read
+
+getPitchingForGame :: Pool -> DbGameId -> IO (Either DBError [PitchingRow])
+  ! Pool-flavored read
+
+deleteBattingForGame :: Pool -> DbGameId -> IO (Either DBError ())
+  ! Pool-flavored delete
+
+deletePitchingForGame :: Pool -> DbGameId -> IO (Either DBError ())
+  ! Pool-flavored delete
+
+%decision TwoTablesNotOne
+  what:    Batting and pitching are separate tables (game_player_batting and game_player_pitching), not one wide table
+  why:     Batting has ~25 stat columns, pitching has ~40. Combining gives a 65-column row that's mostly NULL for any given player. Querying 'all batting lines this week' becomes a clean SELECT from one table without WHERE filtering on column NULLness. A two-way player (pitcher who bats) gets two rows, one per table — correct because both stat lines are independently meaningful.
+  affects: battingSchema, pitchingSchema
+
+%decision InningsPitchedAsOuts
+  what:    The pitching table stores INTEGER outs (multiples of 1/3 inning), NOT the wire string '6.2'
+  why:     The wire-format string is a known footgun (see Pelotero.MLB.Wire.Boxscore decision InningsPitchedAsText). Storing as outs makes SUM, AVG, and arithmetic exact; a decimal column would lose precision. Conversion happens at write time; readers always see exact integer outs.
+  affects: pitchingSchema, upsertPitchingT
+
+%decision UpdatedAtFromSqlNow
+  what:    Upsert sets updated_at = RT.now (a SQL-side NOW()), preserving created_at from the existing row
+  why:     RT.now is rel8's Expr-level NOW() — runs at DB transaction time, not at Haskell wall-clock time. The pattern is: created_at fixed at first insert, updated_at refreshed on every upsert. Taking the timestamp client-side and passing it via R.lit would risk skew between client and DB clocks.
+  affects: upsertBattingT, upsertPitchingT
+
+
+=== BEGIN Pelotero/DB/DraftPick.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/DraftPick.hs
+%mod Pelotero.DB.DraftPick
+
+%ext DataKinds, DeriveAnyClass, DeriveGeneric, DerivingStrategies, DuplicateRecordFields, OverloadedStrings, StandaloneDeriving, TypeFamilies, TypeOperators, UndecidableInstances
+
+%uses Data.Functor.Contravariant
+%uses Data.Int
+%uses Data.Time
+%uses GHC.Generics
+%uses qualified Hasql.Transaction as Tx
+%uses Rel8
+%uses qualified Rel8 as R
+%uses Pelotero.DB.Pool
+%uses Pelotero.DB.Rel8Instances
+%uses Pelotero.Domain.Id
+
+data DraftPickE f = DraftPickE
+  { _dpId             :: Column f DbDraftPickId
+  , _dpLeagueConfigId :: Column f DbLeagueConfigId
+  , _dpPickNumber     :: Column f Int32
+  , _dpLeagueTeamId   :: Column f DbLeagueTeamId
+  , _dpPlayerId       :: Column f DbPlayerId
+  , _dpPickedAt       :: Column f UTCTime
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+data DraftPickRow = DraftPickRow
+  { dpId             :: !(Maybe DbDraftPickId)
+  , dpLeagueConfigId :: !DbLeagueConfigId
+  , dpPickNumber     :: !Int32
+  , dpLeagueTeamId   :: !DbLeagueTeamId
+  , dpPlayerId       :: !DbPlayerId
+  , dpPickedAt       :: !(Maybe UTCTime)
+  }
+  deriving stock (Show, Eq)
+
+draftPickSchema :: TableSchema (DraftPickE Name)
+  ! table 'draft_pick' with surrogate id, FK to league_config, pick_number (Int32 — 1-indexed), FK to league_team, FK to player, picked_at
+
+fromResult :: DraftPickE Result -> DraftPickRow
+  ! private; rel8 Result -> DraftPickRow
+  ! wraps id and picked_at in Just (always present after SELECT)
+
+recordPickT :: DraftPickRow -> Tx.Transaction DbDraftPickId
+  ! INSERT ... RETURNING id; Abort on conflict
+  ! _dpId and _dpPickedAt are unsafeDefault (BIGSERIAL and DEFAULT NOW())
+
+getPicksForLeagueT :: DbLeagueConfigId -> Tx.Transaction [DraftPickRow]
+  ! WHERE league_config_id; ORDER BY pick_number
+  ! pick_number ordering recovers the actual draft sequence
+
+getPickCountT :: DbLeagueConfigId -> Tx.Transaction Int64
+  ! COUNT(*) WHERE league_config_id
+  ! used to figure out 'whose pick is next?' as count + 1
+
+recordPick :: Pool -> DraftPickRow -> IO (Either DBError DbDraftPickId)
+  ! Pool-flavored insert
+
+getPicksForLeague :: Pool -> DbLeagueConfigId -> IO (Either DBError [DraftPickRow])
+  ! Pool-flavored full-league pick listing
+
+getPickCount :: Pool -> DbLeagueConfigId -> IO (Either DBError Int64)
+  ! Pool-flavored count
+
+%decision AppendOnlyDraftPicks
+  what:    Only insert (recordPick) and read (getPicksForLeague, getPickCount) operations exist; no update or delete
+  why:     Picks are historical events; once made, they don't get edited or undone. If a wrong pick needs correction, the convention is to insert a new pick at the next pick_number rather than mutating the prior row. Audit trail integrity: a query at any point in time gives the actual sequence of picks made.
+  affects: recordPickT
+
+
+=== BEGIN Pelotero/DB/FetchLog.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/FetchLog.hs
+%mod Pelotero.DB.FetchLog
+
+%ext DataKinds, DeriveAnyClass, DeriveGeneric, DerivingStrategies, DuplicateRecordFields, OverloadedStrings, StandaloneDeriving, TypeFamilies, TypeOperators, UndecidableInstances
+
+%uses Data.Functor.Contravariant
+%uses Data.Int
+%uses Data.Maybe
+%uses Data.Text
+%uses Data.Time
+%uses GHC.Generics
+%uses qualified Hasql.Transaction as Tx
+%uses Rel8
+%uses qualified Rel8 as R
+%uses Pelotero.DB.Pool
+%uses Pelotero.DB.Provider
+%uses Pelotero.DB.Rel8Instances
+
+data FetchLogE f = FetchLogE
+  { _flId            :: Column f Int64
+  , _flProvider      :: Column f Text
+  , _flResource      :: Column f Text
+  , _flScope         :: Column f Text
+  , _flFetchedAt     :: Column f UTCTime
+  , _flPayloadSha256 :: Column f Text
+  , _flRecordCount   :: Column f Int32
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+data FetchLogRow = FetchLogRow
+  { fetchLogId            :: !(Maybe Int64)
+  , fetchLogProvider      :: !ProviderName
+  , fetchLogResource      :: !Text
+  , fetchLogScope         :: !Text
+  , fetchLogFetchedAt     :: !(Maybe UTCTime)
+  , fetchLogPayloadSha256 :: !Text
+  , fetchLogRecordCount   :: !Int32
+  }
+  deriving stock (Show, Eq)
+
+fetchLogSchema :: TableSchema (FetchLogE Name)
+  ! table 'provider_fetch_log' with id (BIGSERIAL), provider (TEXT), resource, scope, fetched_at, payload_sha256, record_count (INTEGER)
+  ! no PK on (provider, resource, scope) — multiple rows per scope are expected (a 're-fetch' history)
+
+fromResult :: FetchLogE Result -> Maybe FetchLogRow
+  ! private; rel8 Result -> Maybe FetchLogRow
+  ! Returns Nothing if _flProvider doesn't parse as a known ProviderName — see decision ProviderColumnIsTextNotEnum
+  ! fetchLogId and fetchLogFetchedAt are Just because they're set by the DB on insert
+
+recordFetchT :: FetchLogRow -> Tx.Transaction ()
+  ! INSERT ... ON CONFLICT Abort; the fetch log is append-only, no upsert semantics
+  ! _flId and _flFetchedAt are unsafeDefault (BIGSERIAL and DEFAULT NOW())
+
+getLastFetchT
+  :: ProviderName -> Text -> Text -> Tx.Transaction (Maybe FetchLogRow)
+  ! ORDER BY fetched_at DESC, id DESC LIMIT 1; the id-DESC tiebreaker handles same-millisecond fetches
+  ! returns the first parseable row from the result via mapMaybe; if the most recent row is from an unknown provider, it's silently skipped
+
+getRecentFetchesT
+  :: ProviderName -> Text -> Int32 -> Tx.Transaction [FetchLogRow]
+  ! same ORDER BY pattern, LIMIT lim; returns up to `lim` parseable rows
+  ! may return fewer than `lim` if some rows have unknown providers (mapMaybe drop)
+
+recordFetch :: Pool -> FetchLogRow -> IO (Either DBError ())
+  ! Pool-flavored wrapper
+
+getLastFetch
+  :: Pool -> ProviderName -> Text -> Text -> IO (Either DBError (Maybe FetchLogRow))
+  ! Pool-flavored last-fetch lookup
+
+getRecentFetches
+  :: Pool -> ProviderName -> Text -> Int32 -> IO (Either DBError [FetchLogRow])
+  ! Pool-flavored recent-fetches lookup
+
+%decision ProviderColumnIsTextNotEnum
+  what:    _flProvider is Column f Text, NOT Column f ProviderName
+  why:     The fetch log is append-only and historical; a row written by a provider that no longer exists must remain readable. If we used the ProviderName DBType (which fails on unknown values), a single legacy row would crash every fetch-log query. fromResult does the parse and returns Nothing for unparseable rows; getLastFetchT and getRecentFetchesT use mapMaybe to drop them silently from results. Symmetry with the strict path on player/team/game external_id tables is intentional: those are write-controlled; this one is historical.
+  affects: fetchLogSchema, fromResult, getLastFetchT, getRecentFetchesT
+
+%decision RecordCountAsInt32
+  what:    fetchLogRecordCount is Int32, not Int64 or Int
+  why:     INTEGER (not BIGINT) in PostgreSQL; 2^31 ≈ 2 billion records per fetch is plenty. Using Int (machine-word) would silently widen on 64-bit platforms, then narrow at the wire boundary — easier to keep it explicit. An MLB roster fetch yields ~700 records; far from any limit.
+  affects: fetchLogSchema, recordFetchT
+
+
+=== BEGIN Pelotero/DB/Game.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/Game.hs
+%mod Pelotero.DB.Game
+
+%ext DataKinds, DeriveAnyClass, DeriveGeneric, DerivingStrategies, DuplicateRecordFields, OverloadedStrings, StandaloneDeriving, TypeFamilies, TypeOperators, UndecidableInstances
+
+%uses Data.Functor.Contravariant
+%uses Data.Text
+%uses Data.Time
+%uses GHC.Generics
+%uses qualified Hasql.Transaction as Tx
+%uses Rel8
+%uses qualified Rel8 as R
+%uses Pelotero.DB.Pool
+%uses Pelotero.DB.Provider
+%uses Pelotero.DB.Rel8Instances
+%uses Pelotero.Domain.Id
+
+data Game f = Game
+  { _gameId                 :: Column f DbGameId
+  , _gameGameDate           :: Column f Day
+  , _gameAwayTeamId         :: Column f DbTeamId
+  , _gameHomeTeamId         :: Column f DbTeamId
+  , _gameLastSyncedProvider :: Column f (Maybe ProviderName)
+  , _gameLastSyncedAt       :: Column f (Maybe UTCTime)
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+data GameExternalId f = GameExternalId
+  { _geidGameId     :: Column f DbGameId
+  , _geidProvider   :: Column f ProviderName
+  , _geidExternalId :: Column f Text
+  , _geidFetchedAt  :: Column f UTCTime
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+data GameRow = GameRow
+  { gameRowId                 :: !(Maybe DbGameId)
+  , gameRowGameDate           :: !Day
+  , gameRowAwayTeamId         :: !DbTeamId
+  , gameRowHomeTeamId         :: !DbTeamId
+  , gameRowLastSyncedProvider :: !(Maybe ProviderName)
+  , gameRowLastSyncedAt       :: !(Maybe UTCTime)
+  }
+  deriving stock (Show, Eq)
+
+gameSchema :: TableSchema (Game Name)
+  ! table 'game' with surrogate id, game_date (Day), away/home team FKs to team.id, last-synced metadata
+
+gameExternalIdSchema :: TableSchema (GameExternalId Name)
+  ! same shape as player_external_id and team_external_id
+
+fromResult :: Game Result -> GameRow
+  ! private; rel8 Result -> public GameRow
+
+insertGameT :: GameRow -> Tx.Transaction DbGameId
+  ! INSERT ... RETURNING id; Abort on conflict
+
+updateGameT :: DbGameId -> GameRow -> Tx.Transaction ()
+  ! WHERE id = gid; updates everything except id
+
+getByIdT :: DbGameId -> Tx.Transaction (Maybe GameRow)
+  ! single-row select via WHERE id
+
+getByDateT :: Day -> Tx.Transaction [GameRow]
+  ! WHERE game_date = ? ORDER BY id
+  ! id ordering is stable but not meaningful (insert order); fine for display
+
+linkExternalIdT :: DbGameId -> ProviderName -> Text -> Tx.Transaction ()
+  ! INSERT ... ON CONFLICT DO NOTHING
+
+lookupByExternalIdT :: ProviderName -> Text -> Tx.Transaction (Maybe DbGameId)
+  ! forward lookup
+
+getExternalIdT :: DbGameId -> ProviderName -> Tx.Transaction (Maybe Text)
+  ! reverse lookup
+
+upsertByExternalIdT
+  :: ProviderName -> Text -> GameRow -> Tx.Transaction DbGameId
+  ! intent: Same two-step pattern as Team and Player
+  > consumed by: Pelotero.Sync.Schedule.upsertOneGame (via the Games effect)
+
+insertGame :: Pool -> GameRow -> IO (Either DBError DbGameId)
+  ! Pool-flavored wrapper
+
+updateGame :: Pool -> DbGameId -> GameRow -> IO (Either DBError ())
+  ! Pool-flavored wrapper
+
+getById :: Pool -> DbGameId -> IO (Either DBError (Maybe GameRow))
+  ! Pool-flavored single-game read
+
+getByDate :: Pool -> Day -> IO (Either DBError [GameRow])
+  ! Pool-flavored per-date read
+
+linkExternalId :: Pool -> DbGameId -> ProviderName -> Text -> IO (Either DBError ())
+  ! Pool-flavored idempotent link
+
+lookupByExternalId :: Pool -> ProviderName -> Text -> IO (Either DBError (Maybe DbGameId))
+  ! Pool-flavored forward lookup
+
+getExternalId :: Pool -> DbGameId -> ProviderName -> IO (Either DBError (Maybe Text))
+  ! Pool-flavored reverse lookup
+
+upsertByExternalId
+  :: Pool -> ProviderName -> Text -> GameRow -> IO (Either DBError DbGameId)
+  ! Pool-flavored two-step upsert
+
+%decision GameDateAsDay
+  what:    game.game_date stores Day (no time of day), not UTCTime
+  why:     Fantasy scoring periods are defined by date in the league's local timezone; game start times within a day are irrelevant for whether the game counts. Storing as TIMESTAMPTZ would force every query to deal with timezone offset for what is fundamentally a calendar question. The wire layer parses MLB's full timestamp but the converter discards the time component intentionally.
+  affects: gameSchema, getByDateT
+
+%decision MirrorsTeamSchema
+  what:    Same surrogate-id + external_id companion + upsertByExternalIdT pattern as Team and Player
+  why:     See Pelotero.DB.Team.MirrorsPlayerSchema; the rationale extends here. Three tables with this pattern is the threshold where a generic might be worth it; we're at three and not yet refactoring.
+  affects: gameSchema, upsertByExternalIdT
+
+
+=== BEGIN Pelotero/DB/LeagueConfig.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/LeagueConfig.hs
+%mod Pelotero.DB.LeagueConfig
+
+%ext DataKinds, DeriveAnyClass, DeriveGeneric, DerivingStrategies, DuplicateRecordFields, OverloadedStrings, StandaloneDeriving, TypeFamilies, TypeOperators, UndecidableInstances
+
+%uses Data.Functor.Contravariant
+%uses Data.Text
+%uses Data.Time
+%uses GHC.Generics
+%uses qualified Hasql.Transaction as Tx
+%uses Rel8
+%uses qualified Rel8 as R
+%uses Pelotero.DB.Pool
+%uses Pelotero.DB.Rel8Instances
+%uses Pelotero.Domain.Id
+%uses Pelotero.Domain.Roster
+%uses Pelotero.Domain.Scoring
+
+data LeagueConfig f = LeagueConfig
+  { _lcId            :: Column f DbLeagueConfigId
+  , _lcLeagueId      :: Column f Text
+  , _lcCommissioner  :: Column f Text
+  , _lcStatus        :: Column f Text
+  , _lcScoring       :: Column f LeagueScoring
+  , _lcRosterLimits  :: Column f RosterLimits
+  , _lcLineupLimits  :: Column f LineupLimits
+  , _lcDraftAuto     :: Column f Bool
+  , _lcDraftStrategy :: Column f Text
+  , _lcDraftAutoAt   :: Column f (Maybe UTCTime)
+  , _lcScoringStart  :: Column f UTCTime
+  , _lcScoringEnd    :: Column f UTCTime
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+data LeagueConfigRow = LeagueConfigRow
+  { lcId            :: !(Maybe DbLeagueConfigId)
+  , lcLeagueId      :: !Text
+  , lcCommissioner  :: !Text
+  , lcStatus        :: !Text
+  , lcScoring       :: !LeagueScoring
+  , lcRosterLimits  :: !RosterLimits
+  , lcLineupLimits  :: !LineupLimits
+  , lcDraftAuto     :: !Bool
+  , lcDraftStrategy :: !Text
+  , lcDraftAutoAt   :: !(Maybe UTCTime)
+  , lcScoringStart  :: !UTCTime
+  , lcScoringEnd    :: !UTCTime
+  }
+  deriving stock (Show, Eq)
+
+leagueConfigSchema :: TableSchema (LeagueConfig Name)
+  ! table 'league_config' with surrogate id, league_id (Text — user-facing identifier, separate from the surrogate), commissioner, status, JSONB scoring/roster/lineup, draft params, scoring period bounds
+
+fromResult :: LeagueConfig Result -> LeagueConfigRow
+  ! private; rel8 Result -> public LeagueConfigRow
+
+insertLeagueConfigT :: LeagueConfigRow -> Tx.Transaction DbLeagueConfigId
+  ! INSERT ... RETURNING id; Abort on conflict
+  ! JSONB columns serialize via the JSONBEncoded DBType instance
+
+updateLeagueConfigT :: DbLeagueConfigId -> LeagueConfigRow -> Tx.Transaction ()
+  ! WHERE id = lcid; updates everything except id
+  ! concurrent updates last-write-wins (no optimistic locking)
+
+getByIdT :: DbLeagueConfigId -> Tx.Transaction (Maybe LeagueConfigRow)
+  ! single-row select via WHERE id
+
+getByLeagueIdT :: Text -> Tx.Transaction (Maybe LeagueConfigRow)
+  ! WHERE league_id = ?; the user-facing identifier
+  ! league_id should be UNIQUE in practice; not enforced at the schema level here
+
+getAllT :: Tx.Transaction [LeagueConfigRow]
+  ! ORDER BY league_id; full table
+  ! fine for tens to hundreds of leagues
+
+insertLeagueConfig :: Pool -> LeagueConfigRow -> IO (Either DBError DbLeagueConfigId)
+  ! Pool-flavored wrapper
+
+updateLeagueConfig :: Pool -> DbLeagueConfigId -> LeagueConfigRow -> IO (Either DBError ())
+  ! Pool-flavored wrapper
+
+getById :: Pool -> DbLeagueConfigId -> IO (Either DBError (Maybe LeagueConfigRow))
+  ! Pool-flavored single-row read
+
+getByLeagueId :: Pool -> Text -> IO (Either DBError (Maybe LeagueConfigRow))
+  ! Pool-flavored user-id read
+
+getAll :: Pool -> IO (Either DBError [LeagueConfigRow])
+  ! Pool-flavored full read
+
+%decision ScoringAndLimitsAsJsonbColumns
+  what:    scoring_config (LeagueScoring), roster_limits (RosterLimits), lineup_limits (LineupLimits) are JSONB columns, not separate tables
+  why:     These types are nested records that don't map cleanly to relational columns. A separate table per (scoring multiplier per league) would create a 30-row table per league for what is conceptually one record. Cost: a schema change to the inner records requires a JSONB data migration on every existing row. Encoded via JSONBEncoded deriving via in Pelotero.DB.Rel8Instances.
+  affects: leagueConfigSchema
+
+%decision StatusAsTextNotEnum
+  what:    _lcStatus is Column f Text, not the LeagueStatus domain sum
+  why:     Same rationale as ProviderName for the fetch log: tolerate legacy or unrecognised values without crashing reads. However, the layered domain type LeagueStatus exists as the canonical render/parse pair; this column being Text is the persistence-layer trade-off. An alternative would be a CHECK constraint enumerating the strings; that's worth doing if status values stabilise.
+  affects: leagueConfigSchema
+
+
+=== BEGIN Pelotero/DB/LeagueTeam.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/LeagueTeam.hs
+%mod Pelotero.DB.LeagueTeam
+
+%ext DataKinds, DeriveAnyClass, DeriveGeneric, DerivingStrategies, DuplicateRecordFields, OverloadedStrings, StandaloneDeriving, TypeFamilies, TypeOperators, UndecidableInstances
+
+%uses Data.Functor.Contravariant
+%uses Data.Text
+%uses GHC.Generics
+%uses qualified Hasql.Transaction as Tx
+%uses Rel8
+%uses qualified Rel8 as R
+%uses Pelotero.DB.Pool
+%uses Pelotero.DB.Rel8Instances
+%uses Pelotero.Domain.Id
+
+data LeagueTeam f = LeagueTeam
+  { _ltId             :: Column f DbLeagueTeamId
+  , _ltLeagueConfigId :: Column f DbLeagueConfigId
+  , _ltTeamKey        :: Column f Text
+  , _ltName           :: Column f Text
+  , _ltOwner          :: Column f Text
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+data LeagueTeamRow = LeagueTeamRow
+  { ltId             :: !(Maybe DbLeagueTeamId)
+  , ltLeagueConfigId :: !DbLeagueConfigId
+  , ltTeamKey        :: !Text
+  , ltName           :: !Text
+  , ltOwner          :: !Text
+  }
+  deriving stock (Show, Eq)
+
+leagueTeamSchema :: TableSchema (LeagueTeam Name)
+  ! table 'league_team' with surrogate id, FK to league_config, team_key (stable), name, owner
+  ! no last-synced metadata — league teams are user-managed, not externally synced
+
+fromResult :: LeagueTeam Result -> LeagueTeamRow
+  ! private; rel8 Result -> LeagueTeamRow
+
+insertLeagueTeamT :: LeagueTeamRow -> Tx.Transaction DbLeagueTeamId
+  ! INSERT ... RETURNING id; Abort on conflict
+
+updateLeagueTeamT :: DbLeagueTeamId -> LeagueTeamRow -> Tx.Transaction ()
+  ! WHERE id = ltid; updates everything except id
+  ! team_key is mutable here; in practice changing it breaks downstream rosters via FK constraints
+
+getByIdT :: DbLeagueTeamId -> Tx.Transaction (Maybe LeagueTeamRow)
+  ! single-row select via WHERE id
+
+lookupByKeyT
+  :: DbLeagueConfigId -> Text -> Tx.Transaction (Maybe LeagueTeamRow)
+  ! WHERE league_config_id AND team_key; returns the first match or Nothing
+  ! the (league_config_id, team_key) UNIQUE invariant is implicit, not enforced here
+
+getForLeagueT :: DbLeagueConfigId -> Tx.Transaction [LeagueTeamRow]
+  ! ORDER BY name; all teams in a league
+  ! name-order is stable enough for display but not for joins
+
+deleteT :: DbLeagueTeamId -> Tx.Transaction ()
+  ! DELETE WHERE id; cascading deletes on dependent rows (rosters, lineups, picks) are handled by FK ON DELETE in the schema
+
+insertLeagueTeam :: Pool -> LeagueTeamRow -> IO (Either DBError DbLeagueTeamId)
+  ! Pool-flavored wrapper
+
+updateLeagueTeam :: Pool -> DbLeagueTeamId -> LeagueTeamRow -> IO (Either DBError ())
+  ! Pool-flavored wrapper
+
+getById :: Pool -> DbLeagueTeamId -> IO (Either DBError (Maybe LeagueTeamRow))
+  ! Pool-flavored single-row read
+
+lookupByKey
+  :: Pool -> DbLeagueConfigId -> Text -> IO (Either DBError (Maybe LeagueTeamRow))
+  ! Pool-flavored compound-key lookup
+
+getForLeague :: Pool -> DbLeagueConfigId -> IO (Either DBError [LeagueTeamRow])
+  ! Pool-flavored per-league listing
+
+delete :: Pool -> DbLeagueTeamId -> IO (Either DBError ())
+  ! Pool-flavored row deletion
+
+%decision TeamKeySeparateFromName
+  what:    league_team has both team_key (stable identifier within a league) and name (mutable display name)
+  why:     Owners change team names mid-season; references from elsewhere (rosters, draft picks) must remain stable. team_key is the join key; name is the rendered string. (league_config_id, team_key) is the natural compound key; lookupByKeyT relies on it being UNIQUE in practice.
+  affects: leagueTeamSchema, lookupByKeyT
+
+
+=== BEGIN Pelotero/DB/LineupSlot.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/LineupSlot.hs
+%mod Pelotero.DB.LineupSlot
+
+%ext DataKinds, DeriveAnyClass, DeriveGeneric, DerivingStrategies, DuplicateRecordFields, OverloadedStrings, StandaloneDeriving, TypeFamilies, TypeOperators, UndecidableInstances
+
+%uses Data.Functor.Contravariant
+%uses Data.Int
+%uses Data.Text
+%uses Data.Time
+%uses GHC.Generics
+%uses qualified Hasql.Transaction as Tx
+%uses Rel8
+%uses qualified Rel8 as R
+%uses Pelotero.DB.Pool
+%uses Pelotero.DB.Rel8Instances
+%uses Pelotero.Domain.Id
+
+data LineupSlotE f = LineupSlotE
+  { _lsId           :: Column f Int64
+  , _lsLeagueTeamId :: Column f DbLeagueTeamId
+  , _lsSlot         :: Column f Text
+  , _lsPlayerId     :: Column f DbPlayerId
+  , _lsCreatedAt    :: Column f UTCTime
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+data LineupSlotRow = LineupSlotRow
+  { lsLeagueTeamId :: !DbLeagueTeamId
+  , lsSlot         :: !Text
+  , lsPlayerId     :: !DbPlayerId
+  }
+  deriving stock (Show, Eq)
+
+lineupSlotSchema :: TableSchema (LineupSlotE Name)
+  ! table 'lineup_slot' with surrogate id, FK to league_team, slot (Text), FK to player, created_at
+  ! structurally identical to roster_slot
+
+fromResult :: LineupSlotE Result -> LineupSlotRow
+  ! private; same omission of id and created_at as RosterSlot.fromResult
+
+addSlotT :: LineupSlotRow -> Tx.Transaction ()
+  ! same upsert pattern as RosterSlot.addSlotT: ON CONFLICT (league_team_id, player_id) DO UPDATE SET slot
+  ! moves a player to a new lineup slot rather than failing
+
+getSlotsForTeamT :: DbLeagueTeamId -> Tx.Transaction [LineupSlotRow]
+  ! WHERE league_team_id; ORDER BY slot, player_id
+
+removeSlotT :: DbLeagueTeamId -> DbPlayerId -> Tx.Transaction ()
+  ! DELETE WHERE league_team_id AND player_id
+
+clearTeamLineupT :: DbLeagueTeamId -> Tx.Transaction ()
+  ! DELETE WHERE league_team_id
+
+replaceTeamLineupT :: DbLeagueTeamId -> [LineupSlotRow] -> Tx.Transaction ()
+  ! clear-then-fill within the caller's transaction
+
+getSlotsForTeam :: Pool -> DbLeagueTeamId -> IO (Either DBError [LineupSlotRow])
+  ! Pool-flavored wrapper
+
+addSlot :: Pool -> LineupSlotRow -> IO (Either DBError ())
+  ! Pool-flavored upsert
+
+removeSlot :: Pool -> DbLeagueTeamId -> DbPlayerId -> IO (Either DBError ())
+  ! Pool-flavored removal
+
+clearTeamLineup :: Pool -> DbLeagueTeamId -> IO (Either DBError ())
+  ! Pool-flavored clear
+
+replaceTeamLineup :: Pool -> DbLeagueTeamId -> [LineupSlotRow] -> IO (Either DBError ())
+  ! Pool-flavored replace
+
+%decision MirrorsRosterSlotExactly
+  what:    lineup_slot is structurally identical to roster_slot: same shape, same upsert semantics, same hidden id/created_at
+  why:     Lineups and rosters are different concepts (lineup = today's actives, roster = entire owned set) but the storage shape is identical. Keeping them as parallel modules with parallel schemas avoids prematurely abstracting and lets us evolve them independently if/when they diverge. Cost: code duplication (two near-identical modules).
+  affects: lineupSlotSchema, addSlotT
+
+
+=== BEGIN Pelotero/DB/Migration.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/Migration.hs
+%mod Pelotero.DB.Migration
+
+%uses Control.Monad
+%uses Crypto.Hash.SHA256
+%uses Data.ByteString
+%uses qualified Data.ByteString as BS
+%uses qualified Data.ByteString.Base16 as B16
+%uses Data.Functor.Contravariant
+%uses Data.List
+%uses Data.Text
+%uses qualified Data.Text as T
+%uses qualified Data.Text.Encoding as TE
+%uses qualified Hasql.Decoders as D
+%uses qualified Hasql.Encoders as E
+%uses qualified Hasql.Session as Session
+%uses qualified Hasql.Statement as Stmt
+%uses qualified Hasql.Transaction as Tx
+%uses qualified Hasql.Transaction.Sessions as TxS
+%uses System.Directory
+%uses System.FilePath
+%uses Pelotero.DB.Pool
+
+data MigrationOutcome = MigrationOutcome
+  { migrationsTotalSeen  :: !Int  -- ^ files examined
+  , migrationsAppliedNow :: !Int  -- ^ first-time applies during this call
+  , migrationsAlreadyApplied :: !Int -- ^ skipped because already applied
+  }
+  deriving stock (Show, Eq)
+
+data Script = Script
+  { scriptName     :: !Text
+  , scriptContents :: !ByteString
+  , scriptChecksum :: !Text
+  }
+
+data ApplyResult = Skipped | Applied | Mismatch
+
+runMigrations :: Pool -> FilePath -> IO (Either DBError MigrationOutcome)
+  ! intent: Apply all .sql files in dir that haven't been applied; verify checksums of those that have
+  ! effects: IO (filesystem + DB)
+  ! missing directory is a hard error (MigrationError 'Migration directory not found')
+  ! SUCCESS path: returns Right MigrationOutcome with totals
+  ! MISMATCH path: returns Left MigrationError with the filename
+  ! ensures schema_migrations exists via a CREATE TABLE IF NOT EXISTS at the start of applyAll
+  ! idempotent: safe to call on every process startup
+
+loadScript :: FilePath -> FilePath -> IO Script
+  ! private; reads a file's bytes and computes its SHA-256 hex string
+  ! scriptName is the bare filename (Text), not the full path
+
+hexSha256 :: ByteString -> Text
+  ! ByteString -> Text; SHA-256 then base16 then UTF-8 decode
+  ! produces lowercase hex
+
+applyAll :: [Script] -> Session.Session (Either Text MigrationOutcome)
+  ! first runs ensureMigrationsTable in its own transaction
+  ! then folds over scripts; on the first Mismatch, stops and returns Left
+  ! Skipped/Applied counts accumulate in the MigrationOutcome
+  ! uses TxS.transaction ReadCommitted Write per migration
+
+applyOne :: Script -> Tx.Transaction ApplyResult
+  ! looks up the prior checksum for this filename; if present and matching, returns Skipped
+  ! if present and DIFFERENT, returns Mismatch (does NOT throw — the caller decides)
+  ! if absent, runs the SQL via Tx.sql then inserts the (filename, checksum) pair, both in the same transaction so a failure rolls back both
+
+ensureMigrationsTable :: Tx.Transaction ()
+  ! CREATE TABLE IF NOT EXISTS schema_migrations (filename TEXT PK, checksum TEXT NOT NULL, applied_at TIMESTAMPTZ DEFAULT NOW())
+  ! embedded SQL string; cannot be edited without bumping a migration that depends on the table existing
+
+selectChecksum :: Stmt.Statement Text (Maybe Text)
+  ! Statement Text -> Maybe Text; one row or none
+  ! uses the prepared-statement cache (True at the end of the Statement constructor)
+
+insertApplied :: Stmt.Statement (Text, Text) ()
+  ! Statement (Text, Text) -> (); the encoder uses Contravariant fst/snd to project into two separate text params
+  ! applied_at fills via the column DEFAULT NOW()
+
+%decision OwnedMigrationRunner
+  what:    Custom migration runner instead of hasql-migration
+  why:     hasql-migration is broken against current crypton (which we use for SHA-256) and is effectively unmaintained. Migrations are a couple hundred lines we can own outright; less cost than maintaining a fork. Owning the implementation also lets us encode our specific operational policy (immutable migrations, hash mismatch is a hard error) directly.
+  affects: runMigrations, applyAll, applyOne
+
+%decision ImmutableMigrationsHashChecked
+  what:    Each migration file is hashed (SHA-256) on first apply; subsequent runs verify the hash and abort with Mismatch if the file has changed
+  why:     Prevents accidental edits from silently de-syncing dev/prod schemas. Forces the convention 'create a new V0042__ file' rather than 'edit V0007__'. Whitespace-sensitive on purpose: any edit, even cosmetic, trips the alarm. False positives are a feature, not a bug.
+  affects: applyOne, loadScript
+
+%decision PerMigrationTransaction
+  what:    Each migration runs in its own transaction (not the whole batch)
+  why:     A failure rolls back exactly the offending migration, leaving the prior ones intact. Avoids the 'partially applied batch' state. Cost: a migration that includes a CREATE INDEX CONCURRENTLY (which can't run in a transaction) needs to be split or use a special path. Not yet relevant for this codebase.
+  affects: applyAll, applyOne
+
+%decision FilenameOrderIsApplyOrder
+  what:    Migration files are sorted lexicographically; apply order = filename order
+  why:     The convention V<NNNN>__<desc>.sql with zero-padded numbers makes lexicographic order match numeric order. Forgetting to zero-pad (V42__ before V9__) is caught by code review, not by the runner. An explicit manifest file would be more robust but adds maintenance overhead for marginal benefit.
+  affects: runMigrations
+
+
+=== BEGIN Pelotero/DB/Player.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/Player.hs
+%mod Pelotero.DB.Player
+
+%ext DataKinds, DeriveAnyClass, DeriveGeneric, DerivingStrategies, DuplicateRecordFields, OverloadedStrings, StandaloneDeriving, TypeFamilies, TypeOperators, UndecidableInstances
+
+%uses Data.Functor.Contravariant
+%uses Data.Text
+%uses qualified Data.Text as T
+%uses Data.Time
+%uses GHC.Generics
+%uses qualified Hasql.Transaction as Tx
+%uses Rel8
+%uses qualified Rel8 as R
+%uses Pelotero.DB.Pool
+%uses Pelotero.DB.Provider
+%uses Pelotero.DB.Rel8Instances
+%uses Pelotero.Domain.Id
+
+data Player f = Player
+  { _playerId                 :: Column f DbPlayerId
+  , _playerFirstName          :: Column f Text
+  , _playerLastName           :: Column f Text
+  , _playerNameSlug           :: Column f Text
+  , _playerPosition           :: Column f (Maybe Text)
+  , _playerBatSide            :: Column f (Maybe Text)
+  , _playerPitchHand          :: Column f (Maybe Text)
+  , _playerActive             :: Column f Bool
+  , _playerCurrentTeamId      :: Column f (Maybe DbTeamId)
+  , _playerLastSyncedProvider :: Column f (Maybe ProviderName)
+  , _playerLastSyncedAt       :: Column f (Maybe UTCTime)
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+data PlayerExternalId f = PlayerExternalId
+  { _peidPlayerId   :: Column f DbPlayerId
+  , _peidProvider   :: Column f ProviderName
+  , _peidExternalId :: Column f Text
+  , _peidFetchedAt  :: Column f UTCTime
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+data PlayerRow = PlayerRow
+  { playerRowId                 :: !(Maybe DbPlayerId)
+  , playerRowFirstName          :: !Text
+  , playerRowLastName           :: !Text
+  , playerRowNameSlug           :: !Text
+  , playerRowPosition           :: !(Maybe Text)
+  , playerRowBatSide            :: !(Maybe Char)
+  , playerRowPitchHand          :: !(Maybe Char)
+  , playerRowActive             :: !Bool
+  , playerRowCurrentTeamId      :: !(Maybe DbTeamId)
+  , playerRowLastSyncedProvider :: !(Maybe ProviderName)
+  , playerRowLastSyncedAt       :: !(Maybe UTCTime)
+  }
+  deriving stock (Show, Eq)
+
+playerSchema :: TableSchema (Player Name)
+  ! table 'player' with surrogate id, denormalised name, position, batting/pitching hand as text, active flag, FK to team, last-synced metadata
+  ! playerCurrentTeamId is Maybe DbTeamId; a player without a team (free agent, retired) has NULL
+
+playerExternalIdSchema :: TableSchema (PlayerExternalId Name)
+  ! table 'player_external_id' with (player_id, provider, external_id, fetched_at)
+  ! the natural key is (provider, external_id); not enforced as UNIQUE here but the upsert path relies on it being UNIQUE in practice
+
+charToText :: Maybe Char -> Maybe Text
+  ! Maybe Char -> Maybe Text via T.singleton; preserves None
+
+textToChar :: Maybe Text -> Maybe Char
+  ! Maybe Text -> Maybe Char via T.uncons; returns the first char if any, Nothing if empty
+  ! if the stored text has more than one character (data corruption), silently truncates to the first — see decision BatHandStoredAsText
+
+fromResult :: Player Result -> PlayerRow
+  ! private; converts the rel8 Player Result row to the public PlayerRow
+  ! playerRowId is wrapped in Just because Insert returns DbPlayerId; the inbound row can have Nothing if it's being constructed for insert
+
+insertPlayerT :: PlayerRow -> Tx.Transaction DbPlayerId
+  ! INSERT ... RETURNING id; uses Abort on conflict (calling on an existing id is a hard error, not silent)
+  ! the surrogate id is unsafeDefault (DB-assigned BIGSERIAL); all other fields come from the row
+
+updatePlayerT :: DbPlayerId -> PlayerRow -> Tx.Transaction ()
+  ! WHERE id = pid; updates everything except id
+  ! no-op if pid doesn't exist (UPDATE returns 0 rows; we don't check)
+
+getByIdT :: DbPlayerId -> Tx.Transaction (Maybe PlayerRow)
+  ! single-row select via WHERE; returns the first match or Nothing
+  ! if there are duplicates (shouldn't be possible due to PK), takes the first
+
+getAllT :: Tx.Transaction [PlayerRow]
+  ! ORDER BY last_name, first_name; returns the entire table
+  ! no pagination; fine for ~5000 MLB players
+
+getActiveT :: Tx.Transaction [PlayerRow]
+  ! ORDER BY last_name, first_name; WHERE active = TRUE
+  ! active is the canonical flag for 'currently rostered'
+
+linkExternalIdT :: DbPlayerId -> ProviderName -> Text -> Tx.Transaction ()
+  ! INSERT ... ON CONFLICT DO NOTHING; safe to call repeatedly (e.g. during a re-sync that hits the same provider+external_id)
+
+lookupByExternalIdT :: ProviderName -> Text -> Tx.Transaction (Maybe DbPlayerId)
+  ! SELECT player_id WHERE provider = ? AND external_id = ?; returns the first match or Nothing
+
+getExternalIdT :: DbPlayerId -> ProviderName -> Tx.Transaction (Maybe Text)
+  ! reverse lookup: given a DbPlayerId and provider, returns the external_id text
+  ! useful for emitting player references back to the upstream provider's namespace
+
+upsertByExternalIdT
+  :: ProviderName -> Text -> PlayerRow -> Tx.Transaction DbPlayerId
+  ! intent: Two-step upsert: lookup the player via (provider, external_id); if found, update the player row; if not, insert and link
+  ! atomic within a transaction (caller's responsibility to wrap if needed; the pool variant does)
+  ! concurrent upserts to the same (provider, external_id) can race: two concurrent inserts would both try linkExternalIdT, the second's DO NOTHING silently ignores — leaving an orphan player. Acceptable because the sync pipeline is single-writer.
+  ! returns the resulting DbPlayerId either way
+  > consumed by: Pelotero.Sync.Players.upsertAllPlayers (via the Players effect)
+
+insertPlayer :: Pool -> PlayerRow -> IO (Either DBError DbPlayerId)
+  ! Pool-flavored wrapper around insertPlayerT in a single transaction
+
+updatePlayer :: Pool -> DbPlayerId -> PlayerRow -> IO (Either DBError ())
+  ! Pool-flavored wrapper around updatePlayerT
+
+getById :: Pool -> DbPlayerId -> IO (Either DBError (Maybe PlayerRow))
+  ! Pool-flavored single-player read
+
+getAll :: Pool -> IO (Either DBError [PlayerRow])
+  ! Pool-flavored full table read
+
+getActive :: Pool -> IO (Either DBError [PlayerRow])
+  ! Pool-flavored active-only read
+
+linkExternalId :: Pool -> DbPlayerId -> ProviderName -> Text -> IO (Either DBError ())
+  ! Pool-flavored idempotent external-id link
+
+lookupByExternalId :: Pool -> ProviderName -> Text -> IO (Either DBError (Maybe DbPlayerId))
+  ! Pool-flavored external-id reverse lookup
+
+getExternalId :: Pool -> DbPlayerId -> ProviderName -> IO (Either DBError (Maybe Text))
+  ! Pool-flavored DbPlayerId -> external_id
+
+upsertByExternalId
+  :: Pool -> ProviderName -> Text -> PlayerRow -> IO (Either DBError DbPlayerId)
+  ! Pool-flavored upsertByExternalIdT, the most common path used by the sync pipeline
+
+%decision TwoTablePlayerExternalIdSplit
+  what:    player table holds the canonical row; player_external_id holds (player_id, provider, external_id) tuples
+  why:     A player can have ids from multiple providers (MLB, internal, future provider X) without schema gymnastics on the player table. If a player gets re-identified (rare but happens for minor-league call-ups), the player row stays put; only the external_id rows update. Cost: every upsert is two operations (lookup-or-insert player + insert/skip external id); upsertByExternalIdT encapsulates this.
+  affects: upsertByExternalIdT, linkExternalIdT, lookupByExternalIdT
+
+%decision BatHandStoredAsText
+  what:    DB column for bat_side / pitch_hand is Text; the API exposes Char
+  why:     PostgreSQL doesn't have a native single-character type smaller than TEXT (CHAR(1) exists but has fixed-length-padding gotchas). Char in Haskell is multi-byte (Unicode) so storing as Text is structurally correct. API uses Char because the only legal values are 'L', 'R', 'S' and a Char is the most precise way to encode 'exactly one character of these three'. charToText / textToChar bridge the two; textToChar uses safeHead so a multi-character value (data corruption) gets truncated rather than crashing.
+  affects: charToText, textToChar, fromResult, insertPlayerT, updatePlayerT
+
+
+=== BEGIN Pelotero/DB/PlayerRanking.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/PlayerRanking.hs
+%mod Pelotero.DB.PlayerRanking
+
+%ext DataKinds, DeriveAnyClass, DeriveGeneric, DerivingStrategies, DuplicateRecordFields, OverloadedStrings, StandaloneDeriving, TypeFamilies, TypeOperators, UndecidableInstances
+
+%uses Data.Functor.Contravariant
+%uses Data.Int
+%uses Data.Time
+%uses GHC.Generics
+%uses qualified Hasql.Transaction as Tx
+%uses Rel8
+%uses qualified Rel8 as R
+%uses Pelotero.DB.Pool
+%uses Pelotero.DB.Rel8Instances
+%uses Pelotero.Domain.Id
+
+data PlayerRankingE f = PlayerRankingE
+  { _prLeagueTeamId :: Column f DbLeagueTeamId
+  , _prPlayerId     :: Column f DbPlayerId
+  , _prRankSlot     :: Column f Int32
+  , _prUpdatedAt    :: Column f UTCTime
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+data PlayerRankingRow = PlayerRankingRow
+  { prLeagueTeamId :: !DbLeagueTeamId
+  , prPlayerId     :: !DbPlayerId
+  , prRankSlot     :: !Int32
+  }
+  deriving stock (Show, Eq)
+
+playerRankingSchema :: TableSchema (PlayerRankingE Name)
+  ! table 'player_ranking' with FK to league_team, FK to player, rank_slot (Int32), updated_at
+  ! PK is (league_team_id, player_id) — no surrogate id
+
+fromResult :: PlayerRankingE Result -> PlayerRankingRow
+  ! private; rel8 Result -> PlayerRankingRow; drops updated_at
+
+insertOneT :: PlayerRankingRow -> Tx.Transaction ()
+  ! private; INSERT ... ON CONFLICT Abort
+  ! concurrent inserts of the same (league_team, player) fail loudly; the replace path's clearRankingsT first avoids this
+
+getRankingsForTeamT :: DbLeagueTeamId -> Tx.Transaction [PlayerRankingRow]
+  ! WHERE league_team_id; ORDER BY rank_slot
+  ! rank_slot ordering puts higher-preference players first (assuming caller follows the convention rank=1 means top pick)
+
+clearRankingsT :: DbLeagueTeamId -> Tx.Transaction ()
+  ! DELETE WHERE league_team_id
+
+replaceRankingsT :: DbLeagueTeamId -> [PlayerRankingRow] -> Tx.Transaction ()
+  ! clearRankingsT then mapM_ insertOneT
+  ! atomic within the caller's transaction
+
+getRankingCountT :: DbLeagueTeamId -> Tx.Transaction Int64
+  ! COUNT(*) WHERE league_team_id
+
+getRankingsForTeam :: Pool -> DbLeagueTeamId -> IO (Either DBError [PlayerRankingRow])
+  ! Pool-flavored wrapper
+
+replaceRankings :: Pool -> DbLeagueTeamId -> [PlayerRankingRow] -> IO (Either DBError ())
+  ! Pool-flavored replace
+
+clearRankings :: Pool -> DbLeagueTeamId -> IO (Either DBError ())
+  ! Pool-flavored clear
+
+getRankingCount :: Pool -> DbLeagueTeamId -> IO (Either DBError Int64)
+  ! Pool-flavored count
+
+%decision NoSurrogateIdNaturalKey
+  what:    player_ranking has no surrogate id; (league_team_id, player_id) is the primary key
+  why:     Unlike roster_slot/lineup_slot where the (team, player) pair has a 'context' (the slot string), a ranking pair carries only its rank_slot integer. There's no scenario where a team has two ranking entries for the same player. Fewer columns, simpler schema.
+  affects: playerRankingSchema, insertOneT
+
+%decision AbortOnConflictForRankings
+  what:    insertOneT uses Abort, not Upsert; replaceRankingsT works by clear-then-fill
+  why:     Rankings are typically replaced wholesale (re-rank the entire pool) rather than tweaked incrementally. Abort + clear-then-fill is conceptually simpler than upsert and avoids the 'updateWhere lit True' boilerplate. Cost: one DELETE + N INSERTs vs. one INSERT ON CONFLICT per row. For ~100-row rankings, irrelevant.
+  affects: insertOneT, replaceRankingsT
+
+
+=== BEGIN Pelotero/DB/Pool.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/Pool.hs
+%mod Pelotero.DB.Pool
+
+%uses Control.Exception
+%uses Data.Text
+%uses qualified Data.Text as T
+%uses qualified Hasql.Connection.Setting as ConnSetting
+%uses qualified Hasql.Connection.Setting.Connection as ConnConnection
+%uses qualified Hasql.Connection.Setting.Connection.Param as ConnParam
+%uses Hasql.Pool
+%uses qualified Hasql.Pool as Pool
+%uses qualified Hasql.Pool.Config as PoolConfig
+%uses Hasql.Session
+%uses System.Environment
+%uses Text.Read
+%uses qualified Hasql.Transaction as Tx
+%uses qualified Hasql.Transaction.Sessions as TxS
+
+data DBConfig = DBConfig
+  { dbHost           :: !Text
+  , dbPort           :: !Int
+  , dbName           :: !Text
+  , dbUser           :: !Text
+  , dbPassword       :: !Text
+  , dbPoolSize       :: !Int
+  , dbAcquireTimeout :: !Double  -- ^ seconds
+  }
+  deriving stock (Show, Eq)
+
+data DBError
+  = PoolUsageError !Text
+  | MigrationError !Text
+  deriving stock (Show)
+
+instance Exception DBError
+
+defaultDBConfig :: DBConfig
+  ! host=localhost, port=5433, db=pelotero-engine, empty user/password, pool=10, timeout=10s
+  ! matches Nix dev shell launch script defaults
+
+loadDBConfig :: IO DBConfig
+  ! intent: Read DB config from libpq-conventional env vars + two pelotero-specific tunables
+  ! effects: IO (env reads)
+  ! PGHOST/PGPORT/PGDATABASE/PGUSER/PGPASSWORD: standard libpq names so external tools (psql, pgbouncer, sops-exec) all set them consistently
+  ! PELOTERO_DB_POOL_SIZE / PELOTERO_DB_ACQUIRE_TIMEOUT: app-specific tunables not in libpq's conventions
+  ! missing or unparseable env vars fall back to defaultDBConfig field-by-field (no all-or-nothing failure)
+
+poolConfig :: DBConfig -> PoolConfig.Config
+  ! private; constructs PoolConfig.Config from a DBConfig
+  ! uses staticConnectionSettings (single-host setup) — multi-host failover would require a different builder
+  ! realToFrac on the timeout to satisfy hasql-pool's NominalDiffTime parameter
+
+acquire :: DBConfig -> IO Pool
+  ! non-blocking; returns immediately. Pool only opens connections lazily on first runSession.
+  ! no validation that the database is reachable until first use
+
+release :: Pool -> IO ()
+  ! drains the pool; safe to call on a partially-used pool
+  ! does NOT abort in-flight transactions; finishes them then closes connections
+
+runSession :: Pool -> Session a -> IO (Either DBError a)
+  ! single-statement (or multi-statement) Session execution
+  ! wraps Pool.use; converts hasql-pool errors to DBError via show
+  ! preserves the Right value type a as-is
+
+runTransaction :: Pool -> Tx.Transaction a -> IO (Either DBError a)
+  ! convenience wrapper: ReadCommitted, Write, single Transaction
+  ! atomicity: write commits on success, rolls back on Tx error or thrown exception
+  ! isolation level (ReadCommitted) matches PostgreSQL's default; Serializable would be appropriate for cross-row invariants but isn't currently needed
+
+renderDBError :: DBError -> Text
+  ! converts to user-facing Text with a category prefix ('DB pool usage error: ', 'Migration error: ')
+  ! exhaustive over the sum
+
+%decision DefaultsAreLocalDevValues
+  what:    defaultDBConfig points at localhost:5433 / pelotero-engine with empty user/password
+  why:     These are values for the local Nix dev shell; they fail loudly if used in production (empty user can't auth). Production setups must set PG* env vars; sops-nix handles this in real deploys. An alternative was to require all values explicitly, but that breaks 'cabal run' in a dev shell where defaults are convenient.
+  affects: defaultDBConfig, loadDBConfig
+
+%decision DbErrorIsOpaqueWrapper
+  what:    PoolUsageError and MigrationError carry Text rather than the underlying hasql-pool / migration error types
+  why:     Callers shouldn't need to import hasql-pool internals to handle errors; show-of-error is sufficient for logs. Adding a new error category is a constructor + a renderDBError case. Cost: structured handling (e.g. distinguishing 'connection refused' from 'syntax error') requires re-parsing the rendered text — acceptable because we don't currently have such a need.
+  affects: renderDBError
+
+
+=== BEGIN Pelotero/DB/Provider.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/Provider.hs
+%mod Pelotero.DB.Provider
+
+%uses Data.Text
+
+data ProviderName
+  = -- | MLB Stats API. Today's primary source.
+    ProviderMLB
+  | -- | Internal records — minor-league call-ups we know about before MLB
+    -- assigns an id, retired players we score in historical leagues, etc.
+    ProviderInternal
+  deriving stock (Show, Eq, Ord, Enum, Bounded)
+
+renderProviderName :: ProviderName -> Text
+  ! exhaustive over the sum; adding a constructor without a render case is a -Wincomplete-patterns error
+  ! produces lowercase, hyphen-separated names matching the SQL convention
+
+parseProviderName :: Text -> Maybe ProviderName
+  ! returns Nothing for unknown names rather than failing — see decision TolerantParseStrictRender
+  ! case-sensitive: 'MLB' and 'mlb' are distinct, only the second matches
+  ! consumed by Pelotero.DB.Rel8Instances DBType ProviderName instance and by Pelotero.DB.FetchLog.fromResult
+
+%decision TolerantParseStrictRender
+  what:    parseProviderName returns Maybe rather than failing; renderProviderName is total over the closed sum
+  why:     Reading: an unknown provider name in the database (e.g. an old row from a discontinued provider) shouldn't crash the whole query. The reader can show 'unknown' or skip the row. Writing: the writer always uses the rendered constant from the sum, so writes are never typos. Adding a provider is a code change (new constructor + new parse case + new render case); no migration needed because the column is TEXT.
+  affects: parseProviderName, renderProviderName
+
+%decision WireFormatNamesAreStable
+  what:    renderProviderName values ('mlb', 'pelotero-internal') are stable strings that can never change without a data migration
+  why:     The text is stored in DB rows (player_external_id, team_external_id, game_external_id, provider_fetch_log). Renaming a constructor without renaming the rendered string would silently invalidate every row of that provider. Test by Show: the constructor name (ProviderMLB) is informational; the wire string ('mlb') is the contract.
+  affects: renderProviderName
+
+
+=== BEGIN Pelotero/DB/Rel8Instances.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/Rel8Instances.hs
+%mod Pelotero.DB.Rel8Instances
+
+%ext DerivingStrategies, DerivingVia, FlexibleInstances, GeneralizedNewtypeDeriving, MultiParamTypeClasses, StandaloneDeriving
+
+%uses qualified Data.Text as T
+%uses qualified Rel8 as R
+%uses Pelotero.Domain.Id
+%uses Pelotero.DB.Provider
+%uses Pelotero.Domain.Roster
+%uses Pelotero.Domain.Scoring
+
+instance R.DBType ProviderName where
+
+instance R.DBEq ProviderName
+
+%decision OrphanInstancesAreDeliberate
+  what:    DBType / DBEq / DBOrd instances for domain types live here as orphans; the {-# OPTIONS_GHC -Wno-orphans #-} pragma is intentional
+  why:     Putting them in Pelotero.Domain.Id forces the domain layer to depend on rel8, which is the wrong direction (domain must not know about its persistence library). Putting them in each Pelotero.DB.* table module produces orphan-conflict warnings as soon as two table modules reference the same domain type. This module is the lowest place that already imports both the domain types and rel8, so it's the canonical home. Importers use the empty-import idiom: 'import Pelotero.DB.Rel8Instances ()' to bring instances into scope.
+  affects: 
+
+%decision JsonBEncodedForComplexTypes
+  what:    LeagueScoring, RosterLimits, LineupLimits get DBType via JSONBEncoded deriving via
+  why:     These types are nested records that don't map cleanly to relational columns. Storing them as JSONB lets the DB index/query them via PostgreSQL's JSONB operators if needed, while keeping the Haskell code working with native records. Cost: JSON migrations are awkward; if the shape changes, all stored values need an in-place data migration. Acceptable because these change rarely. Relies on ToJSON / FromJSON instances defined in Pelotero.Domain.Scoring and Pelotero.Domain.Roster.
+  affects: 
+
+%decision ProviderNameTextEnumDb
+  what:    ProviderName decodes via parseTypeInformation, with parseProviderName as the decoder; on unknown values it returns Left, which becomes a hasql query failure
+  why:     Unlike Pelotero.DB.FetchLog.fromResult (which decodes to Maybe and filters), this DBType instance is strict: an unknown provider in the DB is a query failure. Tables that use ProviderName directly (player_external_id, team_external_id, game_external_id) must only contain known providers, OR the table must decode to Text and convert in code (the FetchLog approach). This asymmetry is per-table by design: external-id tables are write-controlled; the fetch log is append-only and historical, so it tolerates legacy values.
+  affects: 
+
+
+=== BEGIN Pelotero/DB/RosterSlot.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/RosterSlot.hs
+%mod Pelotero.DB.RosterSlot
+
+%ext DataKinds, DeriveAnyClass, DeriveGeneric, DerivingStrategies, DuplicateRecordFields, OverloadedStrings, StandaloneDeriving, TypeFamilies, TypeOperators, UndecidableInstances
+
+%uses Data.Functor.Contravariant
+%uses Data.Int
+%uses Data.Text
+%uses Data.Time
+%uses GHC.Generics
+%uses qualified Hasql.Transaction as Tx
+%uses Rel8
+%uses qualified Rel8 as R
+%uses Pelotero.DB.Pool
+%uses Pelotero.DB.Rel8Instances
+%uses Pelotero.Domain.Id
+
+data RosterSlotE f = RosterSlotE
+  { _rsId           :: Column f Int64
+  , _rsLeagueTeamId :: Column f DbLeagueTeamId
+  , _rsSlot         :: Column f Text
+  , _rsPlayerId     :: Column f DbPlayerId
+  , _rsCreatedAt    :: Column f UTCTime
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+data RosterSlotRow = RosterSlotRow
+  { rsLeagueTeamId :: !DbLeagueTeamId
+  , rsSlot         :: !Text
+  , rsPlayerId     :: !DbPlayerId
+  }
+  deriving stock (Show, Eq)
+
+rosterSlotSchema :: TableSchema (RosterSlotE Name)
+  ! table 'roster_slot' with surrogate id, FK to league_team, slot (Text), FK to player, created_at
+  ! natural unique key: (league_team_id, player_id)
+
+fromResult :: RosterSlotE Result -> RosterSlotRow
+  ! private; drops the hidden surrogate id and created_at
+  ! this is why RosterSlotRow has fewer fields than the rel8 RosterSlotE shape
+
+addSlotT :: RosterSlotRow -> Tx.Transaction ()
+  ! INSERT ... ON CONFLICT (league_team_id, player_id) DO UPDATE SET slot
+  ! Upsert.set preserves id, league_team_id, player_id, created_at from old; only slot updates
+  ! updateWhere = lit True (always update on conflict — see decision UpsertOnPlayerNotSlot)
+
+getSlotsForTeamT :: DbLeagueTeamId -> Tx.Transaction [RosterSlotRow]
+  ! WHERE league_team_id; ORDER BY slot, player_id
+  ! slot ordering is alphabetical Text; player_id ordering as a tiebreaker for stable display
+
+removeSlotT :: DbLeagueTeamId -> DbPlayerId -> Tx.Transaction ()
+  ! DELETE WHERE league_team_id AND player_id
+  ! removes from any slot — the player is uniquely identified by league_team + player_id (not slot)
+
+removePlayerFromTeamT :: DbLeagueTeamId -> DbPlayerId -> Tx.Transaction ()
+  ! alias for removeSlotT; same semantics
+  ! kept for API readability where the caller's intent is 'remove from team' vs. 'remove from this slot specifically'
+
+clearTeamRosterT :: DbLeagueTeamId -> Tx.Transaction ()
+  ! DELETE WHERE league_team_id
+  ! wipes the team's entire roster
+
+replaceTeamRosterT :: DbLeagueTeamId -> [RosterSlotRow] -> Tx.Transaction ()
+  ! transaction-internal sequence: clearTeamRosterT then mapM_ addSlotT
+  ! entirely within the caller's transaction; either everything replaces or nothing does
+  ! concurrent calls would race on the same team — caller's responsibility to serialise
+
+countBySlotT :: DbLeagueTeamId -> Text -> Tx.Transaction Int64
+  ! COUNT(*) WHERE league_team_id AND slot; used for limit-checking before adds
+  ! returns 0 on empty (countStar returns a singleton list with 0)
+
+getSlotsForTeam :: Pool -> DbLeagueTeamId -> IO (Either DBError [RosterSlotRow])
+  ! Pool-flavored wrapper
+
+addSlot :: Pool -> RosterSlotRow -> IO (Either DBError ())
+  ! Pool-flavored upsert
+
+removeSlot :: Pool -> DbLeagueTeamId -> DbPlayerId -> IO (Either DBError ())
+  ! Pool-flavored single removal
+
+removePlayerFromTeam :: Pool -> DbLeagueTeamId -> DbPlayerId -> IO (Either DBError ())
+  ! Pool-flavored alias for removeSlot
+
+clearTeamRoster :: Pool -> DbLeagueTeamId -> IO (Either DBError ())
+  ! Pool-flavored full clear
+
+replaceTeamRoster :: Pool -> DbLeagueTeamId -> [RosterSlotRow] -> IO (Either DBError ())
+  ! Pool-flavored clear-then-fill
+
+countBySlot :: Pool -> DbLeagueTeamId -> Text -> IO (Either DBError Int64)
+  ! Pool-flavored count
+
+%decision UpsertOnPlayerNotSlot
+  what:    addSlotT does ON CONFLICT (league_team_id, player_id) DO UPDATE SET slot, NOT (league_team_id, slot)
+  why:     The natural-feeling 'a slot can hold one player' is wrong for fantasy; multiple OF/UTIL slots per team is normal. The actual invariant is 'a player is in at most one slot per team'. Adding a player who's already on the roster moves them to the new slot rather than failing or duplicating. This matches the legacy hasql module's semantics, preserving a UI behaviour that owners depend on.
+  affects: addSlotT
+
+%decision SurrogateIdAndCreatedAtHidden
+  what:    The public RosterSlotRow type omits surrogate id and created_at; the rel8 schema includes them
+  why:     rel8's TableSchema needs to know about every column to do SELECT *. The public API doesn't need them — id is BIGSERIAL, created_at is server-managed. Hiding them keeps callers from accidentally relying on ordering by created_at or constructing rows with synthetic ids.
+  affects: fromResult, addSlotT
+
+
+=== BEGIN Pelotero/DB/Team.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/Team.hs
+%mod Pelotero.DB.Team
+
+%ext DataKinds, DeriveAnyClass, DeriveGeneric, DerivingStrategies, DuplicateRecordFields, OverloadedStrings, StandaloneDeriving, TypeFamilies, TypeOperators, UndecidableInstances
+
+%uses Data.Functor.Contravariant
+%uses Data.Text
+%uses Data.Time
+%uses GHC.Generics
+%uses qualified Hasql.Transaction as Tx
+%uses Rel8
+%uses qualified Rel8 as R
+%uses Pelotero.DB.Pool
+%uses Pelotero.DB.Provider
+%uses Pelotero.DB.Rel8Instances
+%uses Pelotero.Domain.Id
+
+data Team f = Team
+  { _teamId                 :: Column f DbTeamId
+  , _teamName               :: Column f Text
+  , _teamAbbreviation       :: Column f Text
+  , _teamLocationName       :: Column f Text
+  , _teamLastSyncedProvider :: Column f (Maybe ProviderName)
+  , _teamLastSyncedAt       :: Column f (Maybe UTCTime)
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+data TeamExternalId f = TeamExternalId
+  { _teidTeamId     :: Column f DbTeamId
+  , _teidProvider   :: Column f ProviderName
+  , _teidExternalId :: Column f Text
+  , _teidFetchedAt  :: Column f UTCTime
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+data TeamRow = TeamRow
+  { teamRowId                 :: !(Maybe DbTeamId)
+  , teamRowName               :: !Text
+  , teamRowAbbreviation       :: !Text
+  , teamRowLocationName       :: !Text
+  , teamRowLastSyncedProvider :: !(Maybe ProviderName)
+  , teamRowLastSyncedAt       :: !(Maybe UTCTime)
+  }
+  deriving stock (Show, Eq)
+
+teamSchema :: TableSchema (Team Name)
+  ! table 'team' with surrogate id, name, abbreviation, location_name (city), and last-synced metadata
+  ! no FK out — teams are leaves in the FK graph (players and games reference team_id)
+
+teamExternalIdSchema :: TableSchema (TeamExternalId Name)
+  ! same shape as player_external_id: (team_id, provider, external_id, fetched_at)
+
+fromResult :: Team Result -> TeamRow
+  ! private; rel8 Result -> public TeamRow
+  ! teamRowId is Just _teamId (always present after a SELECT)
+
+insertTeamT :: TeamRow -> Tx.Transaction DbTeamId
+  ! INSERT ... RETURNING id; Abort on conflict
+  ! all fields except id are from the row; id is unsafeDefault
+
+updateTeamT :: DbTeamId -> TeamRow -> Tx.Transaction ()
+  ! WHERE id = tid; updates everything except id
+
+getByIdT :: DbTeamId -> Tx.Transaction (Maybe TeamRow)
+  ! single-row select via WHERE id
+
+getAllT :: Tx.Transaction [TeamRow]
+  ! ORDER BY name; no pagination
+  ! 30 MLB teams; trivially small
+
+linkExternalIdT :: DbTeamId -> ProviderName -> Text -> Tx.Transaction ()
+  ! INSERT ... ON CONFLICT DO NOTHING; idempotent
+
+lookupByExternalIdT :: ProviderName -> Text -> Tx.Transaction (Maybe DbTeamId)
+  ! SELECT team_id WHERE provider AND external_id
+
+getExternalIdT :: DbTeamId -> ProviderName -> Tx.Transaction (Maybe Text)
+  ! reverse lookup; given a DbTeamId and provider, returns the upstream external id
+
+upsertByExternalIdT
+  :: ProviderName -> Text -> TeamRow -> Tx.Transaction DbTeamId
+  ! intent: Same two-step pattern as Player.upsertByExternalIdT
+  ! lookup via (provider, external_id); if found, update; if not, insert + link
+  ! returns DbTeamId either way
+  > consumed by: Pelotero.Sync.Players.upsertAllTeams (via the Teams effect)
+
+insertTeam :: Pool -> TeamRow -> IO (Either DBError DbTeamId)
+  ! Pool-flavored wrapper
+
+updateTeam :: Pool -> DbTeamId -> TeamRow -> IO (Either DBError ())
+  ! Pool-flavored wrapper
+
+getById :: Pool -> DbTeamId -> IO (Either DBError (Maybe TeamRow))
+  ! Pool-flavored single-team read
+
+getAll :: Pool -> IO (Either DBError [TeamRow])
+  ! Pool-flavored full table read
+
+linkExternalId :: Pool -> DbTeamId -> ProviderName -> Text -> IO (Either DBError ())
+  ! Pool-flavored idempotent link
+
+lookupByExternalId :: Pool -> ProviderName -> Text -> IO (Either DBError (Maybe DbTeamId))
+  ! Pool-flavored reverse lookup
+
+getExternalId :: Pool -> DbTeamId -> ProviderName -> IO (Either DBError (Maybe Text))
+  ! Pool-flavored forward lookup
+
+upsertByExternalId
+  :: Pool -> ProviderName -> Text -> TeamRow -> IO (Either DBError DbTeamId)
+  ! Pool-flavored upsertByExternalIdT; consumed by the sync pipeline as the primary write path
+
+%decision MirrorsPlayerSchema
+  what:    Team table follows the same shape as Player: surrogate id + external_id companion table + same upsertByExternalIdT pattern
+  why:     Conceptual consistency: identical concerns (multi-provider identity, sync metadata) get identical solutions. Cost: code duplication. A Functor over the table schema would deduplicate this but adds abstraction overhead with little payoff at four tables. If we add a fifth table with the same pattern, this should be revisited.
+  affects: teamSchema, upsertByExternalIdT
+
+
+=== BEGIN Pelotero/Domain/Draft.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Domain/Draft.hs
+%mod Pelotero.Domain.Draft
+
+%uses Data.Text
+%uses Data.Time.Clock
+%uses Pelotero.Domain.Id
+
+data DraftOrderStrategy
+  = -- | Snake/serpentine: round 1 forward, round 2 reverse, round 3 forward...
+    SerpentineOrder
+  | -- | Forward, mid-shifted, reverse, mid-shifted-reverse, repeating.
+    -- (The legacy code's "experimental_snake".)
+    ExperimentalSnakeOrder
+  deriving stock (Show, Eq, Ord, Enum, Bounded)
+
+data DraftPick = DraftPick
+  { pickNumber :: !DraftPickNumber
+  , pickTeam   :: !FantasyTeamId
+  , pickPlayer :: !PlayerId
+  , pickedAt   :: !UTCTime
+  }
+  deriving stock (Show, Eq)
+
+data Ranking = Ranking
+  { rankingTeam       :: !FantasyTeamId
+  , rankingChecksum   :: !Text
+  , rankingUpdatedAt  :: !UTCTime
+  , rankingEntries    :: ![PlayerRanking]
+  }
+  deriving stock (Show, Eq)
+
+data PlayerRanking = PlayerRanking
+  { prPlayer :: !PlayerId
+  , prRank   :: !RankSlot
+  }
+  deriving stock (Show, Eq)
+
+parseDraftOrderStrategy :: Text -> Maybe DraftOrderStrategy
+  ! case-sensitive; accepts 'serpentine' or 'experimental_snake'
+
+renderDraftOrderStrategy :: DraftOrderStrategy -> Text
+  ! exhaustive over the sum
+
+generateDraftOrder
+  :: DraftOrderStrategy
+  -> Int                       -- ^ total picks across the entire draft
+  -> [FantasyTeamId]           -- ^ teams in initial order
+  -> [(FantasyTeamId, DraftPickNumber)]
+  ! intent: Produce the full pick-by-pick order as (team, pickNumber)
+  ! empty teams returns []; preserves total integrity
+  ! rounds = totalPicks `div` length teams; trailing partial round is truncated (see decision)
+  ! pick numbers are 1-indexed
+  ! pure: no randomness, no IO
+
+serpentine :: Int -> [a] -> [a]
+  ! private; rounds copies of [teams, reverse teams] alternating
+  ! round 1 picks in input order; round 2 in reverse; round 3 in input order; etc.
+
+experimentalSnake :: Int -> [a] -> [a]
+  ! private; rounds copies of [teams, mid-shifted, reverse, mid-shifted-reverse] alternating
+  ! mid-shift = rotation by half the team count
+  ! reproduces the legacy 'experimental_snake' algorithm; matches whatever the prior system did
+
+rankingPlayerIds :: Ranking -> [PlayerId]
+  ! extracts just the PlayerIds from a Ranking, in rank order
+  ! assumes Ranking.rankingEntries was constructed in rank order — does NOT sort
+
+extendRankingsWithUnranked
+  :: [PlayerId]   -- ^ ranked, in rank order
+  -> [PlayerId]   -- ^ universe of all draftable players
+  -> [PlayerId]
+  ! appends unranked players (those in universe but not in ranked) to the end of ranked, preserving universe order for the unranked
+  ! used by the auto-drafter when a team's ranking is shorter than the player pool
+
+%decision PureOrderGenerator
+  what:    generateDraftOrder is pure (no IO, no Random); randomness is supplied by the caller as the order of the input team list
+  why:     Pure functions are testable without any randomness effect. If the caller wants random ordering (a coin flip for first pick), they shuffle the team list outside this module and pass it in. Keeps this module free of effects; the same ordering algorithm runs identically in production, in tests, and in CLI 'preview' commands.
+  affects: generateDraftOrder, serpentine, experimentalSnake
+
+%decision TruncateTrailingPartialRound
+  what:    If totalPicks is not a multiple of length teams, the trailing partial round is dropped, NOT half-completed
+  why:     A draft with N teams should always have a multiple-of-N pick count; non-multiples imply a configuration error. Half-completing a round would create an asymmetry — some teams pick more times than others — which is unfair. Truncating loudly preserves the 'teams are equal' invariant; the caller can detect the truncation by length-checking the output.
+  affects: generateDraftOrder
+
+%decision NoActiveDraftStateMachineHere
+  what:    This module has DraftPick (a record of a made pick) but NO state machine for running a draft
+  why:     A live draft needs database writes per pick (depending on the effects layer). Putting the state machine here would force this module to depend on the effects layer, which it currently doesn't. Phase 5 work; designed but not yet implemented.
+  affects: 
+
+
+=== BEGIN Pelotero/Domain/Game.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Domain/Game.hs
+%mod Pelotero.Domain.Game
+
+%uses Data.Time.Calendar
+%uses Pelotero.Domain.Id
+
+data Game = Game
+  { gameId       :: GameId
+  , gameDate     :: Day
+  , gameAwayTeam :: TeamId
+  , gameHomeTeam :: TeamId
+  }
+  deriving stock (Show, Eq)
+
+newtype GameSchedule = GameSchedule
+  { unGameSchedule :: [Game] }
+  deriving stock (Show, Eq)
+
+%decision ModuleStructureNotes
+  what:    Module exports only data declarations; no functions
+  why:     Game has: GameId, gameDate (Day, NOT UTCTime — see Pelotero.DB.Game decision GameDateAsDay), away/home team ids. No game state (scheduled/final) at this layer; that comes from a separate fetch path (Pelotero.MLB.Urls.gameStatusUrl, currently unused). GameSchedule wraps a flat [Game]; an off-day or all-star break is represented as an empty list, NOT a Maybe. Callers needing to distinguish 'no schedule fetched' from 'no games on this day' must do so at a higher layer.
+  affects: 
+
+
+=== BEGIN Pelotero/Domain/Id.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Domain/Id.hs
+%mod Pelotero.Domain.Id
+
+%uses Data.Int
+%uses Data.Text
+
+newtype PlayerId = PlayerId { unPlayerId :: Int }
+  deriving stock (Show, Eq, Ord)
+
+newtype TeamId = TeamId { unTeamId :: Int }
+  deriving stock (Show, Eq, Ord)
+
+newtype GameId = GameId { unGameId :: Int }
+  deriving stock (Show, Eq, Ord)
+
+newtype SeasonYear = SeasonYear { unSeasonYear :: Int }
+  deriving stock (Show, Eq, Ord)
+
+newtype LeagueId = LeagueId { unLeagueId :: Text }
+  deriving stock (Show, Eq, Ord)
+
+newtype FantasyTeamId = FantasyTeamId { unFantasyTeamId :: Text }
+  deriving stock (Show, Eq, Ord)
+
+newtype DraftPickNumber = DraftPickNumber { unDraftPickNumber :: Int }
+  deriving stock (Show, Eq, Ord)
+
+newtype RankSlot = RankSlot { unRankSlot :: Int }
+  deriving stock (Show, Eq, Ord)
+
+newtype DbPlayerId = DbPlayerId { unDbPlayerId :: Int64 }
+  deriving stock (Show, Eq, Ord)
+
+newtype DbTeamId = DbTeamId { unDbTeamId :: Int64 }
+  deriving stock (Show, Eq, Ord)
+
+newtype DbGameId = DbGameId { unDbGameId :: Int64 }
+  deriving stock (Show, Eq, Ord)
+
+newtype DbLeagueConfigId = DbLeagueConfigId { unDbLeagueConfigId :: Int64 }
+  deriving stock (Show, Eq, Ord)
+
+newtype DbLeagueTeamId = DbLeagueTeamId { unDbLeagueTeamId :: Int64 }
+  deriving stock (Show, Eq, Ord)
+
+newtype DbDraftPickId = DbDraftPickId { unDbDraftPickId :: Int64 }
+  deriving stock (Show, Eq, Ord)
+
+%decision UpstreamAndSurrogateAreDistinctTypes
+  what:    PlayerId / TeamId / GameId (upstream MLB ids) and DbPlayerId / DbTeamId / DbGameId (surrogate DB BIGSERIAL ids) are different newtypes
+  why:     Conflating them led to bugs: a function expecting an MLB id received a DB surrogate, the SQL succeeded with the wrong row, and nothing complained. Newtype distinctness forces the conversion to be explicit (a lookup against player_external_id) rather than a coerce. The cost is more wrappers; the win is the type system catching crossings of the layer boundary.
+  affects: 
+
+%decision TextIdsForUserSpaces
+  what:    LeagueId and FantasyTeamId wrap Text, not Int
+  why:     Leagues and fantasy teams have user-chosen identifiers (e.g. 'east-coast-2025', 'rocketeers'), not auto-incremented numbers. Storing them as Text keeps the surface API matching how owners refer to their teams. Database surrogate keys (DbLeagueConfigId, DbLeagueTeamId) are still Int64 for indexing efficiency; user-facing stays Text.
+  affects: 
+
+%decision NoSmartConstructorsHere
+  what:    All newtypes have public constructors and accessors; no smart-constructor validation
+  why:     Validation (rejecting nonsense like PlayerId 0) happens at the wire boundary in Pelotero.MLB.Convert.convertPlayer. Forcing a smart constructor here means every test has to import it instead of just typing PlayerId 1. The wire layer is the single source of truth for what counts as a valid id; this module is structural only.
+  affects: 
+
+%decision ModuleStructureNotes
+  what:    What this module exports (chase has no signatures here, only newtypes)
+  why:     MLB identifiers (Int-wrapped): PlayerId, TeamId, GameId, SeasonYear. Fantasy identifiers (Text-wrapped): LeagueId, FantasyTeamId. Draft identifiers (Int-wrapped): DraftPickNumber (1-indexed pick ordinal), RankSlot (preference order within a team's ranking). Database surrogate identifiers (Int64-wrapped, BIGSERIAL): DbPlayerId, DbTeamId, DbGameId, DbLeagueConfigId, DbLeagueTeamId, DbDraftPickId. All newtypes derive Show, Eq, Ord stock; no other instances at this layer (rel8 instances live in Pelotero.DB.Rel8Instances).
+  affects: 
+
+
+=== BEGIN Pelotero/Domain/League.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Domain/League.hs
+%mod Pelotero.Domain.League
+
+%uses Data.Text
+%uses Data.Time
+%uses Pelotero.Domain.Draft
+%uses Pelotero.Domain.Id
+%uses Pelotero.Domain.Roster
+%uses Pelotero.Domain.Scoring
+
+data LeagueStatus
+  = LeagueDraft       -- ^ pre-draft / drafting
+  | LeagueActive      -- ^ regular play
+  | LeagueClosed      -- ^ scoring period ended
+  deriving stock (Show, Eq, Ord, Enum, Bounded)
+
+data League = League
+  { leagueId           :: !LeagueId
+  , leagueCommissioner :: !Text
+  , leagueStatus       :: !LeagueStatus
+  , leagueScoring      :: !LeagueScoring
+  , leagueRosterLimits :: !RosterLimits
+  , leagueLineupLimits :: !LineupLimits
+  , leagueDraftParams  :: !DraftParameters
+  , leagueScoringPeriod :: !ScoringPeriod
+  , leagueTeams        :: ![FantasyTeamId]
+  }
+  deriving stock (Show, Eq)
+
+data FantasyTeam = FantasyTeam
+  { ftId      :: !FantasyTeamId
+  , ftLeague  :: !LeagueId
+  , ftName    :: !Text
+  , ftOwner   :: !Text
+  , ftRoster  :: !Roster
+  , ftLineup  :: !Lineup
+  }
+  deriving stock (Show, Eq)
+
+data ScoringPeriod = ScoringPeriod
+  { spStart :: !UTCTime
+  , spEnd   :: !UTCTime
+  }
+  deriving stock (Show, Eq)
+
+data DraftParameters = DraftParameters
+  { dpAutoDraft   :: !Bool
+  , dpStrategy    :: !DraftOrderStrategy
+  , dpAutoDraftAt :: !UTCTime
+  }
+  deriving stock (Show, Eq)
+
+parseLeagueStatus :: Text -> Maybe LeagueStatus
+  ! case-sensitive; accepts 'draft', 'active', 'closed'
+
+renderLeagueStatus :: LeagueStatus -> Text
+  ! exhaustive over the sum
+
+%decision LeagueStatusOnlyMutableField
+  what:    League's only field that changes after creation is leagueStatus; everything else is the immutable league definition
+  why:     Scoring rules, roster limits, and draft params shouldn't change mid-season; allowing them to would invalidate prior scoring. Status moves through draft -> active -> closed in the lifecycle. Per-team rosters and lineups live in FantasyTeam, not in League — keeping League immutable keeps it cacheable.
+  affects: parseLeagueStatus, renderLeagueStatus
+
+%decision ScoringPeriodAsUtcTime
+  what:    ScoringPeriod uses UTCTime, not Day
+  why:     Real leagues have lineup-lock cutoffs at specific game start times in specific timezones. Day would be ambiguous: does the period end at midnight local? Midnight UTC? UTCTime forces an explicit instant. The wire layer already gives us instants for game starts.
+  affects: 
+
+%decision ModuleStructureNotes
+  what:    Module exports the data declarations that make a complete league configuration
+  why:     League: top-level config with id, commissioner, status, scoring, roster/lineup limits, draft params, scoring period, and a list of FantasyTeamIds. FantasyTeam: a single team within a league with id, league reference, name, owner, current Roster, current Lineup. ScoringPeriod: UTCTime start/end window during which boxscore stats count. DraftParameters: auto-draft flag, strategy (DraftOrderStrategy), and auto-draft trigger time. LeagueStatus sum: LeagueDraft | LeagueActive | LeagueClosed.
+  affects: 
+
+
+=== BEGIN Pelotero/Domain/Player.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Domain/Player.hs
+%mod Pelotero.Domain.Player
+
+%uses Data.Text
+%uses Pelotero.Domain.Id
+%uses Pelotero.Domain.Position
+
+data Player = Player
+  { playerId        :: PlayerId
+  , playerFirstName :: Text       -- ^ MLB's "useName"
+  , playerLastName  :: Text       -- ^ MLB's "useLastName"
+  , playerNameSlug  :: Text       -- ^ URL-safe identifier
+  , playerTeamId    :: Maybe TeamId
+  , playerPosition  :: Maybe Position
+  , playerBatSide   :: Maybe Handedness
+  , playerPitchHand :: Maybe Handedness
+  , playerActive    :: Bool
+  }
+  deriving stock (Show, Eq)
+
+data Handedness = LeftHanded | RightHanded | Switch
+  deriving stock (Show, Eq, Ord, Enum, Bounded)
+
+parseHandedness :: Text -> Maybe Handedness
+  ! accepts only 'L', 'R', 'S' (case-sensitive)
+  ! consumed by Pelotero.MLB.Convert.convertHand to convert a wire code to Handedness
+
+renderHandedness :: Handedness -> Text
+  ! exhaustive: LeftHanded -> 'L', RightHanded -> 'R', Switch -> 'S'
+  ! consumed by Pelotero.Sync.Players.upsertAllPlayers via T.head to convert to single-character DB representation
+
+%decision ModuleStructureNotes
+  what:    What this module exports (only parse/render functions have signatures; the Player record is a data declaration)
+  why:     Player record holds: PlayerId, denormalised first/last/slug names, Maybe TeamId, Maybe Position, Maybe Handedness for batting and pitching, and a non-Maybe active flag. Handedness sum: LeftHanded | RightHanded | Switch. MLB encodes these as 'L', 'R', 'S' and we track this exactly. playerActive is non-Maybe; absence at the wire layer is a parse error. Field-level documentation lives in the source comments and is preserved verbatim by chase's data decl rendering.
+  affects: 
+
+
+=== BEGIN Pelotero/Domain/Position.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Domain/Position.hs
+%mod Pelotero.Domain.Position
+
+%uses Data.Text
+
+data Position
+  = Pitcher        -- ^ MLB code "1"  / scorer "P"
+  | Catcher        -- ^ MLB code "2"  / scorer "C"
+  | FirstBase      -- ^ MLB code "3"  / scorer "1B"
+  | SecondBase     -- ^ MLB code "4"  / scorer "2B"
+  | ThirdBase      -- ^ MLB code "5"  / scorer "3B"
+  | Shortstop      -- ^ MLB code "6"  / scorer "SS"
+  | LeftField      -- ^ MLB code "7"  / scorer "LF"
+  | CenterField    -- ^ MLB code "8"  / scorer "CF"
+  | RightField     -- ^ MLB code "9"  / scorer "RF"
+  | DesignatedHitter -- ^ MLB code "10" / scorer "DH"
+  deriving stock (Show, Eq, Ord, Enum, Bounded)
+
+parsePosition :: Text -> Maybe Position
+  ! accepts BOTH MLB numeric codes ('1','2',...,'10') AND scorer abbreviations ('P','C','1B','2B','3B','SS','LF','CF','RF','DH')
+  ! case-sensitive: '1b' would not match
+  ! returns Nothing for 'TWP' (intentional — see decision TwoWayPlayerNotModelled)
+
+renderPosition :: Position -> Text
+  ! returns the scorer form (the more human-readable of the two parse options)
+  ! exhaustive over the sum
+
+isPitcher :: Position -> Bool
+  ! True for Pitcher only; False for everything else including DH
+
+isInfielder :: Position -> Bool
+  ! True for FirstBase, SecondBase, ThirdBase, Shortstop, AND Catcher
+  ! Catcher being an infielder is conventional for fantasy classification; some literature treats Catcher separately
+
+isOutfielder :: Position -> Bool
+  ! True for LeftField, CenterField, RightField; False for everything else
+  ! DH is not an outfielder despite the position number 10 being adjacent to the OF positions
+
+%decision ExhaustiveSumNoCatchAll
+  what:    The Position type is an exhaustive sum of MLB's ten positions; parsePosition returns Nothing on anything else
+  why:     Positions are a small, stable set defined by MLB rules. An 'Other Text' fallback constructor would make the type infectious — every consumer would have to handle 'this might be a string'. Errors at the wire boundary surface as warnings, not silent fallbacks.
+  affects: parsePosition
+
+%decision TwoWayPlayerNotModelled
+  what:    MLB's 'TWP' (two-way player, e.g. Ohtani) is intentionally not parsed
+  why:     TWP requires a richer domain model (a player has multiple primary positions with separate stat lines). Treating it as a plain Position would produce wrong-shaped scoring (a TWP would either bat or pitch in a stat line, not both). Out of scope for Phase 1 of the engine. When implemented, expect a separate two-way-player concept rather than a Position constructor.
+  affects: parsePosition
+
+
+=== BEGIN Pelotero/Domain/Roster.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Domain/Roster.hs
+%mod Pelotero.Domain.Roster
+
+%uses Data.Aeson
+%uses qualified Data.Aeson.Types as Aeson
+%uses Data.Foldable
+%uses Data.List
+%uses Data.Map.Strict
+%uses qualified Data.Map.Strict as Map
+%uses Data.Maybe
+%uses Data.Sequence
+%uses qualified Data.Sequence as Seq
+%uses Data.Text
+%uses qualified Data.Text as T
+%uses Pelotero.Domain.Id
+
+data RosterSlot
+  = SlotCatcher
+  | SlotFirstBase
+  | SlotSecondBase
+  | SlotThirdBase
+  | SlotShortstop
+  | SlotOutfield
+  | SlotUtility
+  | SlotStartingPitcher
+  | SlotReliefPitcher
+  deriving stock (Show, Eq, Ord, Enum, Bounded)
+
+newtype Roster = Roster { unRoster :: Map RosterSlot (Seq PlayerId) }
+  deriving stock (Show, Eq)
+
+newtype Lineup = Lineup { unLineup :: Map RosterSlot (Seq PlayerId) }
+  deriving stock (Show, Eq)
+
+newtype RosterLimits = RosterLimits { unRosterLimits :: Map RosterSlot Int }
+  deriving stock (Show, Eq)
+
+newtype LineupLimits = LineupLimits { unLineupLimits :: Map RosterSlot Int }
+  deriving stock (Show, Eq)
+
+data RosterError
+  = RosterTooManyAt !RosterSlot !Int !Int
+  | RosterDuplicatePlayer !PlayerId
+  deriving stock (Show, Eq)
+
+data LineupError
+  = LineupTooManyAt !RosterSlot !Int !Int
+  | LineupDuplicatePlayer !PlayerId
+  deriving stock (Show, Eq)
+
+instance ToJSON RosterLimits where
+
+instance FromJSON RosterLimits where
+
+instance ToJSON LineupLimits where
+
+instance FromJSON LineupLimits where
+
+allRosterSlots :: [RosterSlot]
+  ! [minBound .. maxBound]; the canonical traversal order is the constructor order in RosterSlot
+  ! consumed by emptyRoster, emptyLineup, validateRoster, validateLineup
+
+parseRosterSlot :: Text -> Maybe RosterSlot
+  ! case-sensitive; accepts 'catcher', 'first', 'second', 'third', 'shortstop', 'outfield', 'utility', 's_pitcher', 'r_pitcher'
+  ! the s_pitcher / r_pitcher names match legacy DB schema; not 'starter' / 'reliever'
+
+renderRosterSlot :: RosterSlot -> Text
+  ! exhaustive; produces the parse-target strings
+
+isPitcherSlot :: RosterSlot -> Bool
+  ! True for SlotStartingPitcher and SlotReliefPitcher; False for everything else
+
+isBatterSlot :: RosterSlot -> Bool
+  ! = not . isPitcherSlot; SlotUtility is a batter slot
+
+emptyRoster :: Roster
+  ! every slot present with empty Seq; ensures countAt and validation don't have to special-case missing slots
+
+emptyLineup :: Lineup
+  ! mirror of emptyRoster
+
+rosterAt :: RosterSlot -> Roster -> Seq PlayerId
+  ! returns Seq.empty if the slot is somehow missing from the map (defensive — shouldn't happen with emptyRoster)
+
+lineupAt :: RosterSlot -> Lineup -> Seq PlayerId
+  ! mirror of rosterAt
+
+addToRoster :: RosterSlot -> PlayerId -> Roster -> Roster
+  ! appends to the slot's Seq using the Map.insertWith trick: if slot exists, Seq |> pid; if not, single Seq
+  ! no validation against limits at this point — call validateRoster after to detect
+
+addToLineup :: RosterSlot -> PlayerId -> Lineup -> Lineup
+  ! mirror of addToRoster
+
+removeFromRoster :: RosterSlot -> PlayerId -> Roster -> Roster
+  ! removes the FIRST occurrence of pid from the slot's Seq; subsequent occurrences (which shouldn't exist after dedup, but might during transitional states) remain
+  ! does nothing if the slot or pid is absent
+
+removeFromLineup :: RosterSlot -> PlayerId -> Lineup -> Lineup
+  ! mirror of removeFromRoster
+
+seqRemoveFirst :: Eq a => a -> Seq a -> Seq a
+  ! private; uses Seq.breakl + Seq.viewl to split-and-rejoin
+  ! O(log n) for a balanced Seq
+
+rosterPlayers :: Roster -> [PlayerId]
+  ! concatMap toList over slot Seqs; ordering is slot-order (Map.elems) then within-slot order
+
+lineupPlayers :: Lineup -> [PlayerId]
+  ! mirror of rosterPlayers
+
+rosterContains :: PlayerId -> Roster -> Bool
+  ! linear scan via elem; O(total roster size)
+
+lineupContains :: PlayerId -> Lineup -> Bool
+  ! mirror of rosterContains
+
+countAt :: RosterSlot -> Roster -> Int
+  ! Seq.length on the slot; O(1) since Seq tracks its size
+
+countAtLineup :: RosterSlot -> Lineup -> Int
+  ! mirror of countAt
+
+rosterLimitFor :: RosterSlot -> RosterLimits -> Int
+  ! Map lookup; defaults to 0 if the slot has no entry in the limits
+
+lineupLimitFor :: RosterSlot -> LineupLimits -> Int
+  ! mirror of rosterLimitFor
+
+totalRosterSize :: RosterLimits -> Int
+  ! sum of all slot limits
+
+totalLineupSize :: LineupLimits -> Int
+  ! mirror of totalRosterSize
+
+validateRoster :: RosterLimits -> Roster -> [RosterError]
+  ! produces all over-limit errors then all duplicate errors
+  ! duplicates are detected via group . sort, so the resulting list is in PlayerId order, not insertion order
+
+validateLineup :: LineupLimits -> Lineup -> [LineupError]
+  ! mirror of validateRoster but with LineupError variants
+
+duplicates :: Ord a => [a] -> [a]
+  ! private; group . sort then take first of each group of size >= 2
+
+%decision SeqForOrderedSlotMembers
+  what:    Roster and Lineup both use Map RosterSlot (Seq PlayerId) — Seq, not List or Set
+  why:     Order matters within a slot (e.g. batting order in a lineup, depth chart in a roster). Set would lose ordering and require a separate ordering scheme. List has O(n) appends; Seq has O(log n). The slot order itself doesn't matter (Map handles that), but the order within a slot does.
+  affects: addToRoster, addToLineup
+
+%decision ValidationProducesAllErrorsNotJustFirst
+  what:    validateRoster and validateLineup return [RosterError] / [LineupError] — all problems, not just the first
+  why:     When showing errors in a UI, displaying 'too many at OF (3 vs 2)' AND 'duplicate player X' is more useful than 'too many at OF, retry'. The cost is a slightly less efficient validator; the ergonomic win is large. Order is: all size problems then all duplicate problems.
+  affects: validateRoster, validateLineup
+
+%decision JsonSerialisationViaMap
+  what:    RosterLimits / LineupLimits ToJSON encodes via Map.mapKeys renderRosterSlot; FromJSON parses with parseRosterSlot
+  why:     JSONB storage in league_config requires round-trippable encodings. Using the slot's Text representation (renderRosterSlot) keeps the JSON readable to humans (PostgreSQL pgAdmin views, etc.). Unknown slot keys at parse time fail loudly with the offending key in the message. Storing as a Text-keyed JSON object rather than an array of [slot, count] pairs aligns with PostgreSQL JSONB indexing patterns.
+  affects: parseRosterSlot, renderRosterSlot
+
+
+=== BEGIN Pelotero/Domain/Scoring.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Domain/Scoring.hs
+%mod Pelotero.Domain.Scoring
+
+%uses Data.Maybe
+%uses Pelotero.Domain.Stats
+%uses Data.Aeson
+
+newtype Points = Points { unPoints :: Rational }
+  deriving stock (Show)
+  deriving newtype (Eq, Ord)
+
+data BattingMultipliers = BattingMultipliers
+  { bmSingle         :: !Rational
+  , bmDouble         :: !Rational
+  , bmTriple         :: !Rational
+  , bmHomeRun        :: !Rational
+  , bmRbi            :: !Rational
+  , bmRun            :: !Rational
+  , bmBaseOnBalls    :: !Rational
+  , bmStolenBase     :: !Rational
+  , bmHitByPitch     :: !Rational
+  , bmStrikeOut      :: !Rational
+  , bmCaughtStealing :: !Rational
+  }
+  deriving stock (Show, Eq)
+
+data PitchingMultipliers = PitchingMultipliers
+  { pmWin           :: !Rational
+  , pmSave          :: !Rational
+  , pmQualityStart  :: !Rational
+  , pmInningPitched :: !Rational  -- per inning (one inning = 3 outs)
+  , pmStrikeOut     :: !Rational
+  , pmCompleteGame  :: !Rational
+  , pmShutout       :: !Rational
+  , pmBaseOnBalls   :: !Rational
+  , pmHitsAllowed   :: !Rational
+  , pmEarnedRun     :: !Rational
+  , pmHitBatsman    :: !Rational
+  , pmLoss          :: !Rational
+  }
+  deriving stock (Show, Eq)
+
+data LeagueScoring = LeagueScoring
+  { lsBatting  :: !BattingMultipliers
+  , lsPitching :: !PitchingMultipliers
+  }
+  deriving stock (Show, Eq)
+
+instance ToJSON BattingMultipliers where
+
+instance FromJSON BattingMultipliers where
+
+instance ToJSON PitchingMultipliers where
+
+instance FromJSON PitchingMultipliers where
+
+instance ToJSON LeagueScoring where
+
+instance FromJSON LeagueScoring where
+
+zeroPoints :: Points
+  ! Points 0; identity for addPoints
+
+addPoints :: Points -> Points -> Points
+  ! pointwise Rational addition
+
+subPoints :: Points -> Points -> Points
+  ! pointwise Rational subtraction; can produce negative Points (e.g. for penalty stats like strikeouts)
+  ! currently has no in-tree caller; effectively dead code retained for symmetry with addPoints
+
+scalePoints :: Rational -> Points -> Points
+  ! multiplies Points by a Rational; preserves exactness
+  ! consumed throughout scoreBatting / scorePitching
+
+sumPoints :: Foldable t => t Points -> Points
+  ! left-fold over a Foldable; uses zeroPoints as the seed
+
+scoreBatting :: BattingMultipliers -> BattingStats -> Points
+  ! sums per-stat contributions; each contribution is multiplier * count
+  ! singles are derived: max 0 of (hits - doubles - triples - homeRuns) — clamped to zero in case of inconsistent input
+  ! missing stats default to 0 via fromMaybe; an empty BattingStats produces zeroPoints
+
+scorePitching :: PitchingMultipliers -> PitchingStats -> Points
+  ! outs come from parseInningsPitched . pitInningsPitched (NOT pitOuts directly — see Pelotero.Domain.Stats decision)
+  ! qualityStarts is 1 if outs >= 18 (6 innings) AND earnedRuns <= 3, else 0
+  ! innings-pitched contribution uses Rational (outs/3) for exactness
+
+rationalPts :: Int -> Points
+  ! private; Int -> Points via toRational
+
+%decision PointsAsRationalNotDouble
+  what:    The Points newtype wraps Rational, not Double
+  why:     Sums of fantasy points across many games accumulate; floating drift is observable when a season total visibly disagrees with the sum of game lines. Owners notice this and lose trust in the system. Cost: marginally slower arithmetic; for the size of fantasy datasets (hundreds of players, ~150 games each), irrelevant. Scaling by Rational multipliers (e.g. 1/3 for innings) stays exact end-to-end.
+  affects: scalePoints, scoreBatting, scorePitching
+
+%decision MultiplierFieldsAsExplicitRecord
+  what:    The batting and pitching multiplier records list every scored stat as a named field
+  why:     A Map String Rational would defer typo detection to runtime. Adding a stat is a structural change on purpose: the compiler tells you about every league config that needs an updated value, every JSON encoder/decoder that needs the new field. The cost is verbose Aeson instances, accepted because they're write-once.
+  affects: scoreBatting, scorePitching
+
+%decision DerivedStatsInScoringNotData
+  what:    Singles (batting) and quality starts (pitching) are derived inside scoreBatting / scorePitching, not stored as fields
+  why:     Singles = hits - (doubles + triples + homeRuns); the wire layer doesn't ship singles separately. Quality start = IP >= 6 AND ER <= 3; not a stat the boxscore reports. Computing inside the scorer keeps the Stats data type close to what the wire format gives, with derivation as a presentation concern.
+  affects: scoreBatting, scorePitching
+
+%decision InningsPitchedExactRationalArithmetic
+  what:    scorePitching computes 'pmInningPitched * (outs / 3)' as Rational, not as a Double or pre-rounded decimal
+  why:     Per-inning multipliers are typically integers or simple fractions; fractional outs (e.g. 20 outs = 20/3 innings) need exact division. Pre-rounding to e.g. 2 decimal places loses ~0.05 points per fractional inning, which compounds over 150 starts.
+  affects: scorePitching
+
+
+=== BEGIN Pelotero/Domain/Stats.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Domain/Stats.hs
+%mod Pelotero.Domain.Stats
+
+%uses Data.Text
+%uses qualified Data.Text as T
+%uses qualified Data.Text.Read as TR
+
+data BattingStats = BattingStats
+  { batGamesPlayed          :: Maybe Int
+  , batPlateAppearances     :: Maybe Int
+  , batAtBats               :: Maybe Int
+  , batRuns                 :: Maybe Int
+  , batHits                 :: Maybe Int
+  , batDoubles              :: Maybe Int
+  , batTriples              :: Maybe Int
+  , batHomeRuns             :: Maybe Int
+  , batRbi                  :: Maybe Int
+  , batBaseOnBalls          :: Maybe Int
+  , batIntentionalWalks     :: Maybe Int
+  , batStrikeOuts           :: Maybe Int
+  , batStolenBases          :: Maybe Int
+  , batCaughtStealing       :: Maybe Int
+  , batHitByPitch           :: Maybe Int
+  , batSacBunts             :: Maybe Int
+  , batSacFlies             :: Maybe Int
+  , batGroundIntoDoublePlay :: Maybe Int
+  , batGroundIntoTriplePlay :: Maybe Int
+  , batLeftOnBase           :: Maybe Int
+  , batTotalBases           :: Maybe Int
+  , batFlyOuts              :: Maybe Int
+  , batGroundOuts           :: Maybe Int
+  , batCatchersInterference :: Maybe Int
+  , batPickoffs             :: Maybe Int
+  }
+  deriving stock (Show, Eq)
+
+data PitchingStats = PitchingStats
+  { pitGamesPlayed             :: Maybe Int
+  , pitGamesStarted            :: Maybe Int
+  , pitGamesFinished           :: Maybe Int
+  , pitCompleteGames           :: Maybe Int
+  , pitShutouts                :: Maybe Int
+  , pitWins                    :: Maybe Int
+  , pitLosses                  :: Maybe Int
+  , pitSaves                   :: Maybe Int
+  , pitSaveOpportunities       :: Maybe Int
+  , pitHolds                   :: Maybe Int
+  , pitBlownSaves              :: Maybe Int
+  , pitInningsPitched          :: Maybe Text  -- e.g. "6.2"
+  , pitOuts                    :: Maybe Int
+  , pitBattersFaced            :: Maybe Int
+  , pitNumberOfPitches         :: Maybe Int
+  , pitStrikes                 :: Maybe Int
+  , pitBalls                   :: Maybe Int
+  , pitHits                    :: Maybe Int
+  , pitDoubles                 :: Maybe Int
+  , pitTriples                 :: Maybe Int
+  , pitHomeRuns                :: Maybe Int
+  , pitRuns                    :: Maybe Int
+  , pitEarnedRuns              :: Maybe Int
+  , pitStrikeOuts              :: Maybe Int
+  , pitBaseOnBalls             :: Maybe Int
+  , pitIntentionalWalks        :: Maybe Int
+  , pitHitBatsmen              :: Maybe Int
+  , pitWildPitches             :: Maybe Int
+  , pitBalks                   :: Maybe Int
+  , pitPickoffs                :: Maybe Int
+  , pitFlyOuts                 :: Maybe Int
+  , pitGroundOuts              :: Maybe Int
+  , pitAirOuts                 :: Maybe Int
+  , pitInheritedRunners        :: Maybe Int
+  , pitInheritedRunnersScored  :: Maybe Int
+  , pitStolenBases             :: Maybe Int
+  , pitCaughtStealing          :: Maybe Int
+  , pitAtBats                  :: Maybe Int
+  , pitRbi                     :: Maybe Int
+  , pitSacBunts                :: Maybe Int
+  , pitSacFlies                :: Maybe Int
+  , pitCatchersInterference    :: Maybe Int
+  , pitPassedBall              :: Maybe Int
+  }
+  deriving stock (Show, Eq)
+
+emptyBatting :: BattingStats
+  ! all-Nothing default for every BattingStats field; useful for parser fallbacks (a player with no batting stats becomes emptyBatting, not a partial record with some Nothings)
+  ! BattingStats has 25 Maybe Int fields; all wire-derived; no derived stats at this layer (singles, batting average) — those are computed at scoring time
+
+emptyPitching :: PitchingStats
+  ! mirror of emptyBatting for pitching
+  ! PitchingStats has ~40 Maybe Int fields plus pitInningsPitched as Maybe Text and pitOuts as Maybe Int
+  ! having both inningsPitched AND outs is redundant by design — the wire ships both, we keep both, and the scoring layer prefers outs derived from parseInningsPitched (more reliable)
+
+parseInningsPitched :: Text -> Maybe Int
+  ! input: '6.2' or '6' or '6.0'; output: outs (Int)
+  ! '6.2' = 6 innings + 2 outs = 20 outs (NOT 6.2 doubles)
+  ! the fractional part must be 0, 1, or 2; '6.3' returns Nothing (not a valid IP)
+  ! negative whole or fractional parts return Nothing
+  ! non-numeric input returns Nothing
+
+renderInningsPitched :: Int -> Text
+  ! inverse of parseInningsPitched; outs -> Text
+  ! 20 -> '6.2'
+  ! negative input -> '0.0' (defensive — should never receive negative input)
+
+%decision MaybeIntPerField
+  what:    Every stat field in the per-game stats records is Maybe Int rather than Int with a default of 0
+  why:     Distinguishes 'didn't bat' from 'batted, went 0-for-0'. A pitcher's batting line in the AL legitimately has Nothing for atBats, not 0 — a 0 would falsely imply a plate appearance. Scoring layer applies fromMaybe 0 at the point of multiplication; presence/absence info is preserved up to that point.
+  affects: emptyBatting, emptyPitching
+
+%decision InningsPitchedAsTextThenOuts
+  what:    pitInningsPitched is Maybe Text (the wire string, e.g. '6.2'); parseInningsPitched converts to outs (Int)
+  why:     Storing the wire string preserves the source-of-truth representation through the domain layer. Conversion to outs is the FIRST thing the scoring layer does; treating 6.2 as a Double silently corrupts data (legacy bug). Outs (multiples of 1/3 inning) make arithmetic exact; a database column stores them as INTEGER (Pelotero.DB.BoxscoreEntry _pInningsPitchedOuts).
+  affects: parseInningsPitched, renderInningsPitched
+
+
+=== BEGIN Pelotero/Domain/Team.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Domain/Team.hs
+%mod Pelotero.Domain.Team
+
+%uses Data.Text
+%uses Pelotero.Domain.Id
+
+data Team = Team
+  { teamId           :: TeamId
+  , teamName         :: Text  -- ^ "Houston Astros"
+  , teamAbbreviation :: Text  -- ^ "HOU"
+  , teamLocationName :: Text  -- ^ "Houston"
+  }
+  deriving stock (Show, Eq)
+
+%decision ModuleStructureNotes
+  what:    Module exports only the Team data declaration; no functions
+  why:     Team has: TeamId (upstream MLB id), full name (e.g. 'Houston Astros'), abbreviation ('HOU'), and location name (the city, e.g. 'Houston'). No division/league/venue at this layer — see Pelotero.MLB.Wire.Team decision WireTeamMinimalFields. No constructor or smart-constructor; tests build with record syntax directly.
+  affects: 
+
+
+=== BEGIN Pelotero/Effects/BoxscoreEntry.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Effects/BoxscoreEntry.hs
+%mod Pelotero.Effects.BoxscoreEntry
+
+%ext TypeFamilies, DataKinds, TypeOperators, FlexibleContexts, GADTs, LambdaCase
+
+%uses Effectful
+%uses qualified Effectful as E
+%uses Effectful.Dispatch.Dynamic
+%uses qualified Pelotero.DB.BoxscoreEntry as BoxRepo
+%uses Pelotero.DB.BoxscoreEntry
+%uses Pelotero.Domain.Id
+%uses Pelotero.Effects.Database
+
+data BoxscoreEntry :: Effect where
+  UpsertBatting          :: BattingRow  -> BoxscoreEntry m ()
+  UpsertPitching         :: PitchingRow -> BoxscoreEntry m ()
+  GetBattingForGame      :: DbGameId    -> BoxscoreEntry m [BattingRow]
+  GetPitchingForGame     :: DbGameId    -> BoxscoreEntry m [PitchingRow]
+  DeleteBattingForGame   :: DbGameId    -> BoxscoreEntry m ()
+  DeletePitchingForGame  :: DbGameId    -> BoxscoreEntry m ()
+
+upsertBatting :: BoxscoreEntry E.:> es => BattingRow -> E.Eff es ()
+  ! BoxscoreEntry send-only
+
+upsertPitching :: BoxscoreEntry E.:> es => PitchingRow -> E.Eff es ()
+  ! BoxscoreEntry send-only
+
+getBattingForGame :: BoxscoreEntry E.:> es => DbGameId -> E.Eff es [BattingRow]
+  ! BoxscoreEntry send-only
+
+getPitchingForGame :: BoxscoreEntry E.:> es => DbGameId -> E.Eff es [PitchingRow]
+  ! BoxscoreEntry send-only
+
+deleteBattingForGame :: BoxscoreEntry E.:> es => DbGameId -> E.Eff es ()
+  ! BoxscoreEntry send-only
+
+deletePitchingForGame :: BoxscoreEntry E.:> es => DbGameId -> E.Eff es ()
+  ! BoxscoreEntry send-only
+
+runBoxscoreEntryDB
+  :: Database E.:> es
+  => E.Eff (BoxscoreEntry : es) a
+  -> E.Eff es a
+  ! Database-backed interpreter; delegates to Pelotero.DB.BoxscoreEntry
+
+
+=== BEGIN Pelotero/Effects/Clock.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Effects/Clock.hs
+%mod Pelotero.Effects.Clock
+
+%ext TypeFamilies, DataKinds, TypeOperators, GADTs, LambdaCase, FlexibleContexts
+
+%uses Data.Time
+%uses Effectful
+%uses qualified Effectful as E
+%uses Effectful.Dispatch.Dynamic
+
+data Clock :: Effect where
+  Now :: Clock m UTCTime
+
+now :: Clock E.:> es => E.Eff es UTCTime
+  ! the only operation; returns the current time per the active interpreter
+
+runClockIO :: IOE E.:> es => E.Eff (Clock : es) a -> E.Eff es a
+  ! IO interpreter; calls Data.Time.getCurrentTime per call
+
+runClockFixed :: UTCTime -> E.Eff (Clock : es) a -> E.Eff es a
+  ! fixed-time interpreter; every call returns the same UTCTime
+  ! useful for deterministic tests
+
+%decision FixedTimeForTests
+  what:    runClockFixed is the test interpreter; every now call returns the same fixed UTCTime
+  why:     Sync code uses Clock.now to stamp synced_at on rows; tests need the same value to compare against. An incrementing-on-each-call interpreter would test more edge cases but adds complexity. If a test needs different timestamps across calls, it can stack multiple Clock interpreters (run a fixed time, perform some work, swap interpreters).
+  affects: runClockFixed
+
+
+=== BEGIN Pelotero/Effects/Database.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Effects/Database.hs
+%mod Pelotero.Effects.Database
+
+%ext TypeFamilies, DataKinds, TypeOperators, FlexibleContexts, GADTs, LambdaCase
+
+%uses qualified Hasql.Transaction as Tx
+%uses Effectful
+%uses qualified Effectful as E
+%uses Effectful.Dispatch.Dynamic
+%uses Pelotero.DB.Pool
+%uses qualified Pelotero.DB.Pool as Pool
+
+data Database :: Effect where
+  RunTx :: Tx.Transaction a -> Database m a
+
+runTx :: Database E.:> es => Tx.Transaction a -> E.Eff es a
+  ! the only public operation; takes a Tx.Transaction a and returns Eff es a
+  ! each call is one independent transaction; no nesting, no batching
+  ! writes commit on success, roll back on exception
+
+runDatabasePool
+  :: IOE E.:> es
+  => Pool
+  -> E.Eff (Database : es) a
+  -> E.Eff es a
+  ! intent: Production interpreter: runs each runTx via Pool.runTransaction and unwraps the DBError
+  ! effects: IOE
+  ! throws userError on Left DBError; never returns Left to the caller
+  ! rationale for throwing rather than wrapping in a custom error monad is captured in DbErrorBecomesIoError
+
+runOrThrow :: IOE E.:> es' => IO (Either DBError a) -> E.Eff es' a
+  ! private; lifts IO (Either DBError a) to Eff es a, throwing userError on Left
+  ! show-of-DBError loses structure but preserves the rendered category prefix from renderDBError
+
+%decision OneOperationOneTransaction
+  what:    Database has a single operation, runTx, which acquires a connection and runs the transaction in isolation
+  why:     Each runTx is its own atomic unit; no need for callers to manage connection scope. Trade-off: composing multiple runTx calls is NOT one transaction — they're independent. If you need a multi-step atomic operation, build a single Transaction and pass it to one runTx. This matches Pool.runTransaction's contract; the Database effect is a thin wrapper to make it dispatchable through the effectful machinery.
+  affects: runTx, runDatabasePool
+
+%decision DbErrorBecomesIoError
+  what:    runOrThrow converts Either DBError to IO via ioError when the result is Left
+  why:     The effect interface is total (returns a, not Either DBError a) so callers don't have to plumb error handling through every Database call. DB errors at the effect layer are exceptional, not expected; treating them as IO exceptions is consistent with how unexpected DB failures behave in mainstream Haskell. userError gives a structured message but loses the DBError constructor — fine for logs, lossy for programmatic handling. If we needed structured handling, we'd wrap in a custom exception type.
+  affects: runOrThrow, runDatabasePool
+
+
+=== BEGIN Pelotero/Effects/DraftPick.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Effects/DraftPick.hs
+%mod Pelotero.Effects.DraftPick
+
+%ext TypeFamilies, DataKinds, TypeOperators, FlexibleContexts, GADTs, LambdaCase
+
+%uses Data.Int
+%uses Effectful
+%uses qualified Effectful as E
+%uses Effectful.Dispatch.Dynamic
+%uses qualified Pelotero.DB.DraftPick as DPRepo
+%uses Pelotero.DB.DraftPick
+%uses Pelotero.Domain.Id
+%uses Pelotero.Effects.Database
+
+data DraftPick :: Effect where
+  RecordPick        :: DraftPickRow      -> DraftPick m DbDraftPickId
+  GetPicksForLeague :: DbLeagueConfigId  -> DraftPick m [DraftPickRow]
+  GetPickCount      :: DbLeagueConfigId  -> DraftPick m Int64
+
+recordPick :: DraftPick E.:> es => DraftPickRow -> E.Eff es DbDraftPickId
+  ! DraftPick send-only
+
+getPicksForLeague
+  :: DraftPick E.:> es
+  => DbLeagueConfigId -> E.Eff es [DraftPickRow]
+  ! DraftPick send-only
+
+getPickCount
+  :: DraftPick E.:> es
+  => DbLeagueConfigId -> E.Eff es Int64
+  ! DraftPick send-only
+
+runDraftPickDB
+  :: Database E.:> es
+  => E.Eff (DraftPick : es) a
+  -> E.Eff es a
+  ! Database-backed interpreter; delegates to Pelotero.DB.DraftPick
+  ! no in-memory interpreter — draft picks are append-only and the in-memory equivalent would be a list, identical to FetchLog's pattern
+
+
+=== BEGIN Pelotero/Effects/FetchLog.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Effects/FetchLog.hs
+%mod Pelotero.Effects.FetchLog
+
+%ext TypeFamilies, DataKinds, TypeOperators, FlexibleContexts, LambdaCase, GADTs
+
+%uses Data.IORef
+%uses Data.Text
+%uses Effectful
+%uses qualified Effectful as E
+%uses Effectful.Dispatch.Dynamic
+%uses Pelotero.DB.FetchLog
+%uses qualified Pelotero.DB.FetchLog as FetchLogRepo
+%uses Pelotero.DB.Provider
+%uses Pelotero.Effects.Database
+
+data FetchLog :: Effect where
+  RecordFetch  :: FetchLogRow -> FetchLog m ()
+  GetLastFetch :: ProviderName -> Text -> Text -> FetchLog m (Maybe FetchLogRow)
+
+recordFetch :: FetchLog E.:> es => FetchLogRow -> E.Eff es ()
+  ! FetchLog send-only; records a new fetch row
+
+getLastFetch
+  :: FetchLog E.:> es
+  => ProviderName
+  -> Text
+  -> Text
+  -> E.Eff es (Maybe FetchLogRow)
+  ! FetchLog send-only; given (provider, resource, scope), returns the most recent fetch or Nothing
+
+runFetchLogDB
+  :: Database E.:> es
+  => E.Eff (FetchLog : es) a
+  -> E.Eff es a
+  ! Database-backed interpreter; delegates to Pelotero.DB.FetchLog
+  ! GetLastFetch via getLastFetchT (already does ORDER BY fetched_at DESC LIMIT 1 in SQL)
+
+runFetchLogInMemory
+  :: IOE E.:> es
+  => E.Eff (FetchLog : es) a
+  -> E.Eff es a
+  ! IO-backed test interpreter using an IORef [FetchLogRow]
+  ! GetLastFetch filters by exact provider/resource/scope match and returns the head (most recent due to cons-prepend)
+  ! matching predicate: provider AND resource AND scope all equal — note the AND, NOT a partial match
+
+%decision InMemoryFetchLogIsList
+  what:    runFetchLogInMemory uses an IORef [FetchLogRow] (cons-prepended), not a Map
+  why:     Tests typically write a few rows and read the most recent; a list is fine. Cons-prepending makes 'most recent first' free — getLastFetch's filter then takes head. If a test needs to assert a specific fetch order (insertion order forward), the Map alternative would force a separate counter.
+  affects: runFetchLogInMemory
+
+
+=== BEGIN Pelotero/Effects/Games.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Effects/Games.hs
+%mod Pelotero.Effects.Games
+
+%ext TypeFamilies, DataKinds, TypeOperators, FlexibleContexts, GADTs, LambdaCase
+
+%uses Data.IORef
+%uses qualified Data.Map.Strict as Map
+%uses Data.Text
+%uses Data.Time.Calendar
+%uses Effectful
+%uses qualified Effectful as E
+%uses Effectful.Dispatch.Dynamic
+%uses Pelotero.DB.Game
+%uses qualified Pelotero.DB.Game as GameRepo
+%uses Pelotero.DB.Provider
+%uses Pelotero.Domain.Id
+%uses Pelotero.Effects.Database
+
+data Games :: Effect where
+  UpsertGameByExternalId :: ProviderName -> Text -> GameRow -> Games m DbGameId
+  LookupGameByExternalId :: ProviderName -> Text -> Games m (Maybe DbGameId)
+  GetGameExternalId      :: DbGameId -> ProviderName -> Games m (Maybe Text)
+  GetGameById            :: DbGameId -> Games m (Maybe GameRow)
+  GetGamesByDate         :: Day -> Games m [GameRow]
+
+data GameStore = GameStore
+  { gameExternalIdToDb :: !(Map.Map (ProviderName, Text) DbGameId)
+  , gameDbToExternalId :: !(Map.Map (DbGameId, ProviderName) Text)
+  , gameRowsByDb       :: !(Map.Map DbGameId GameRow)
+  , gameNextId         :: !Int
+  }
+
+upsertGameByExternalId
+  :: Games E.:> es => ProviderName -> Text -> GameRow -> E.Eff es DbGameId
+  ! Games send-only
+
+lookupGameByExternalId
+  :: Games E.:> es => ProviderName -> Text -> E.Eff es (Maybe DbGameId)
+  ! Games send-only
+
+getGameExternalId
+  :: Games E.:> es => DbGameId -> ProviderName -> E.Eff es (Maybe Text)
+  ! Games send-only; reverse lookup
+
+getGameById :: Games E.:> es => DbGameId -> E.Eff es (Maybe GameRow)
+  ! Games send-only
+
+getGamesByDate :: Games E.:> es => Day -> E.Eff es [GameRow]
+  ! Games send-only; per-date listing
+
+runGamesDB
+  :: Database E.:> es
+  => E.Eff (Games : es) a
+  -> E.Eff es a
+  ! Database-backed interpreter; delegates to Pelotero.DB.Game
+
+emptyGameStore :: GameStore
+  ! private; three empty Maps + nextId=1
+  ! three maps because of the reverse-lookup decision
+
+runGamesInMemory
+  :: IOE E.:> es
+  => E.Eff (Games : es) a
+  -> E.Eff es a
+  ! IORef-based test interpreter
+  ! UpsertGameByExternalId maintains both forward and reverse maps consistently
+  ! GetGamesByDate iterates all rows and filters by gameRowGameDate — O(n)
+
+%decision GameStoreHasReverseLookupMap
+  what:    The in-memory game store maintains both an external-id->db-id map AND a db-id->external-id map
+  why:     GetGameExternalId requires reverse lookup; iterating the forward map with elem-on-value would be O(n) per call. Two maps cost twice the memory but make every lookup O(log n). The pattern isn't repeated in Players/Teams because GetPlayerExternalId / GetTeamExternalId aren't part of those effects (those effects don't surface reverse lookup at the moment).
+  affects: runGamesInMemory, emptyGameStore
+
+
+=== BEGIN Pelotero/Effects/LeagueConfig.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Effects/LeagueConfig.hs
+%mod Pelotero.Effects.LeagueConfig
+
+%ext TypeFamilies, DataKinds, TypeOperators, FlexibleContexts, GADTs, LambdaCase
+
+%uses Data.Text
+%uses Effectful
+%uses qualified Effectful as E
+%uses Effectful.Dispatch.Dynamic
+%uses qualified Pelotero.DB.LeagueConfig as LCRepo
+%uses Pelotero.DB.LeagueConfig
+%uses Pelotero.Domain.Id
+%uses Pelotero.Effects.Database
+
+data LeagueConfig :: Effect where
+  InsertLeagueConfig :: LeagueConfigRow                       -> LeagueConfig m DbLeagueConfigId
+  UpdateLeagueConfig :: DbLeagueConfigId -> LeagueConfigRow   -> LeagueConfig m ()
+  GetById            :: DbLeagueConfigId                      -> LeagueConfig m (Maybe LeagueConfigRow)
+  GetByLeagueId      :: Text                                  -> LeagueConfig m (Maybe LeagueConfigRow)
+
+insertLeagueConfig :: LeagueConfig E.:> es => LeagueConfigRow -> E.Eff es DbLeagueConfigId
+  ! LeagueConfig send-only
+
+updateLeagueConfig :: LeagueConfig E.:> es => DbLeagueConfigId -> LeagueConfigRow -> E.Eff es ()
+  ! LeagueConfig send-only
+
+getById :: LeagueConfig E.:> es => DbLeagueConfigId -> E.Eff es (Maybe LeagueConfigRow)
+  ! LeagueConfig send-only
+
+getByLeagueId :: LeagueConfig E.:> es => Text -> E.Eff es (Maybe LeagueConfigRow)
+  ! LeagueConfig send-only
+
+runLeagueConfigDB
+  :: Database E.:> es
+  => E.Eff (LeagueConfig : es) a
+  -> E.Eff es a
+  ! Database-backed interpreter; delegates to Pelotero.DB.LeagueConfig
+  ! no in-memory interpreter — league configs are heavyweight (JSONB-encoded scoring/limits) and tests for league config logic prefer round-tripping through the actual DB or constructing rows directly
+
+
+=== BEGIN Pelotero/Effects/LeagueTeam.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Effects/LeagueTeam.hs
+%mod Pelotero.Effects.LeagueTeam
+
+%ext TypeFamilies, DataKinds, TypeOperators, FlexibleContexts, GADTs, LambdaCase
+
+%uses Data.Text
+%uses Effectful
+%uses qualified Effectful as E
+%uses Effectful.Dispatch.Dynamic
+%uses qualified Pelotero.DB.LeagueTeam as LTRepo
+%uses Pelotero.DB.LeagueTeam
+%uses Pelotero.Domain.Id
+%uses Pelotero.Effects.Database
+
+data LeagueTeam :: Effect where
+  InsertLeagueTeam :: LeagueTeamRow                      -> LeagueTeam m DbLeagueTeamId
+  UpdateLeagueTeam :: DbLeagueTeamId -> LeagueTeamRow    -> LeagueTeam m ()
+  GetById          :: DbLeagueTeamId                     -> LeagueTeam m (Maybe LeagueTeamRow)
+  LookupByKey      :: DbLeagueConfigId -> Text           -> LeagueTeam m (Maybe LeagueTeamRow)
+  GetForLeague     :: DbLeagueConfigId                   -> LeagueTeam m [LeagueTeamRow]
+  Delete           :: DbLeagueTeamId                     -> LeagueTeam m ()
+
+insertLeagueTeam :: LeagueTeam E.:> es => LeagueTeamRow -> E.Eff es DbLeagueTeamId
+  ! LeagueTeam send-only
+
+updateLeagueTeam :: LeagueTeam E.:> es => DbLeagueTeamId -> LeagueTeamRow -> E.Eff es ()
+  ! LeagueTeam send-only
+
+getById :: LeagueTeam E.:> es => DbLeagueTeamId -> E.Eff es (Maybe LeagueTeamRow)
+  ! LeagueTeam send-only
+
+lookupByKey
+  :: LeagueTeam E.:> es
+  => DbLeagueConfigId -> Text -> E.Eff es (Maybe LeagueTeamRow)
+  ! LeagueTeam send-only; (league_config_id, team_key) lookup
+
+getForLeague :: LeagueTeam E.:> es => DbLeagueConfigId -> E.Eff es [LeagueTeamRow]
+  ! LeagueTeam send-only; per-league listing
+
+delete :: LeagueTeam E.:> es => DbLeagueTeamId -> E.Eff es ()
+  ! LeagueTeam send-only
+
+runLeagueTeamDB
+  :: Database E.:> es
+  => E.Eff (LeagueTeam : es) a
+  -> E.Eff es a
+  ! Database-backed interpreter; delegates to Pelotero.DB.LeagueTeam
+  ! no in-memory interpreter; league teams are tested through the DB layer or directly via repository functions
+
+
+=== BEGIN Pelotero/Effects/LineupSlot.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Effects/LineupSlot.hs
+%mod Pelotero.Effects.LineupSlot
+
+%ext TypeFamilies, DataKinds, TypeOperators, FlexibleContexts, GADTs, LambdaCase
+
+%uses Effectful
+%uses qualified Effectful as E
+%uses Effectful.Dispatch.Dynamic
+%uses qualified Pelotero.DB.LineupSlot as LSRepo
+%uses Pelotero.DB.LineupSlot
+%uses Pelotero.Domain.Id
+%uses Pelotero.Effects.Database
+
+data LineupSlot :: Effect where
+  AddSlot           :: LineupSlotRow                         -> LineupSlot m ()
+  RemoveSlot        :: DbLeagueTeamId -> DbPlayerId          -> LineupSlot m ()
+  ClearTeamLineup   :: DbLeagueTeamId                        -> LineupSlot m ()
+  ReplaceTeamLineup :: DbLeagueTeamId -> [LineupSlotRow]     -> LineupSlot m ()
+  GetSlotsForTeam   :: DbLeagueTeamId                        -> LineupSlot m [LineupSlotRow]
+
+addSlot :: LineupSlot E.:> es => LineupSlotRow -> E.Eff es ()
+  ! LineupSlot send-only; semantically an upsert
+
+removeSlot
+  :: LineupSlot E.:> es
+  => DbLeagueTeamId -> DbPlayerId -> E.Eff es ()
+  ! LineupSlot send-only
+
+clearTeamLineup :: LineupSlot E.:> es => DbLeagueTeamId -> E.Eff es ()
+  ! LineupSlot send-only
+
+replaceTeamLineup
+  :: LineupSlot E.:> es
+  => DbLeagueTeamId -> [LineupSlotRow] -> E.Eff es ()
+  ! LineupSlot send-only
+
+getSlotsForTeam :: LineupSlot E.:> es => DbLeagueTeamId -> E.Eff es [LineupSlotRow]
+  ! LineupSlot send-only
+
+runLineupSlotDB
+  :: Database E.:> es
+  => E.Eff (LineupSlot : es) a
+  -> E.Eff es a
+  ! Database-backed interpreter; delegates to Pelotero.DB.LineupSlot
+  ! no in-memory interpreter; mirrors RosterSlot in this respect
+
+
+=== BEGIN Pelotero/Effects/MLBClient.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Effects/MLBClient.hs
+%mod Pelotero.Effects.MLBClient
+
+%ext TypeFamilies, DataKinds, TypeOperators, FlexibleContexts, LambdaCase, GADTs
+
+%uses Control.Exception
+%uses qualified Crypto.Hash.SHA256 as SHA256
+%uses qualified Data.Aeson as Aeson
+%uses qualified Data.ByteString as BS
+%uses qualified Data.ByteString.Base16 as B16
+%uses Data.Map.Strict
+%uses qualified Data.Map.Strict as Map
+%uses qualified Data.Text as T
+%uses qualified Data.Text.Encoding as TE
+%uses System.FilePath
+%uses Effectful
+%uses qualified Effectful as E
+%uses Effectful.Dispatch.Dynamic
+%uses Pelotero.Domain.Id
+%uses qualified Pelotero.Domain.Game as DGame
+%uses qualified Pelotero.Domain.Team as DTeam
+%uses qualified Pelotero.MLB.Convert as Convert
+%uses qualified Pelotero.MLB.Fetch as Fetch
+%uses Pelotero.MLB.Fetch
+%uses qualified Pelotero.MLB.Wire.Team as WT
+
+data MLBClient :: Effect where
+  FetchRosters     :: Int              -> MLBClient m (Either String FetchedRosters)
+  FetchSchedule    :: String -> String -> MLBClient m (Either String FetchedSchedule)
+  FetchBoxscoreRaw :: Int              -> MLBClient m (Either String BS.ByteString)
+
+data MLBFixture = MLBFixture
+  { fixturesDir      :: !FilePath
+    -- ^ Default lookup directory. Expected layout:
+    --   teams-<season>.json
+    --   players-<season>.json
+    --   schedule-<startDate>-<endDate>.json
+    --   boxscore-<gamePk>.json
+  , fixtureBoxscores :: !(Map Int FilePath)
+    -- ^ Optional per-game overrides for boxscore lookups. When a gamePk
+    --   is not in this map, FetchBoxscoreRaw falls back to
+    --   <fixturesDir>/boxscore-<gamePk>.json.
+  }
+
+fetchRosters
+  :: MLBClient E.:> es
+  => Int -> E.Eff es (Either String FetchedRosters)
+  ! MLBClient send-only API for rosters
+  ! returns the same Either String FetchedRosters as Pelotero.MLB.Fetch.fetchRosters
+
+fetchSchedule
+  :: MLBClient E.:> es
+  => String -> String -> E.Eff es (Either String FetchedSchedule)
+  ! MLBClient send-only API for schedule
+  ! matches Pelotero.MLB.Fetch.fetchSchedule's return type
+
+fetchBoxscoreRaw
+  :: MLBClient E.:> es
+  => Int -> E.Eff es (Either String BS.ByteString)
+  ! MLBClient send-only API for boxscore raw bytes
+  ! matches Pelotero.MLB.Fetch.fetchBoxscoreRaw's return type
+
+runMLBClientHTTP
+  :: IOE E.:> es
+  => E.Eff (MLBClient : es) a
+  -> E.Eff es a
+  ! intent: Production interpreter; delegates each operation to Pelotero.MLB.Fetch via liftIO
+  ! effects: IOE
+  ! no caching, no retries, no rate limiting at this layer
+
+defaultFixture :: FilePath -> MLBFixture
+  ! constructs an MLBFixture with empty fixtureBoxscores; all boxscore paths default to the conventional layout
+
+runMLBClientFixture
+  :: IOE E.:> es
+  => MLBFixture
+  -> E.Eff (MLBClient : es) a
+  -> E.Eff es a
+  ! intent: Test interpreter; reads fixture files from disk and runs them through the same Convert pipeline as production
+  ! effects: IOE
+  ! FetchRosters: reads teams-<season>.json and players-<season>.json from fixturesDir, parses both, computes SHA over their concatenation (same order as production fetch)
+  ! FetchSchedule: reads schedule-<startDate>-<endDate>.json from fixturesDir
+  ! FetchBoxscoreRaw: looks up the gamePk in fixtureBoxscores; falls back to fixturesDir/boxscore-<gamePk>.json
+  ! missing files become Left with a path-prefixed error, matching production error shape
+
+%decision TwoInterpretersHttpAndFixture
+  what:    MLBClient has runMLBClientHTTP (production) and runMLBClientFixture (offline tests reading JSON files from disk)
+  why:     The fixture interpreter exercises the same wire-to-domain conversion path (Pelotero.MLB.Convert) as production, just with file reads instead of HTTP. Fixture tests don't depend on network, MLB API uptime, or rate limits. The fixture path manually computes the SHA over teams+players bytes (same order as fetchRosters), so test-mode SHAs match production semantics.
+  affects: runMLBClientHTTP, runMLBClientFixture
+
+%decision FixtureBoxscoresOverride
+  what:    MLBFixture has fixtureBoxscores :: Map Int FilePath for per-game path overrides, falling back to fixturesDir/boxscore-<gamePk>.json
+  why:     Most tests use the conventional path; the override exists for tests that need to point a specific gamePk at a corrupted/edge-case fixture file. Map.findWithDefault is the right primitive — common case is one path-pattern, edge case is per-id. Avoids forcing every test to lay out its own complete fixture directory.
+  affects: runMLBClientFixture, defaultFixture
+
+%decision WireToDomainTeamCopiedFromFetch
+  what:    runMLBClientFixture inlines its own copy of wireToDomainTeam rather than importing from Pelotero.MLB.Fetch
+  why:     wireToDomainTeam is private to Fetch; exporting it for one test caller felt heavier than four lines of duplication. If a third caller appears, this should move to a shared Convert helper. See Pelotero.MLB.Fetch decision WireToDomainTeamPrivate for the symmetric reasoning.
+  affects: runMLBClientFixture
+
+
+=== BEGIN Pelotero/Effects/PlayerRanking.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Effects/PlayerRanking.hs
+%mod Pelotero.Effects.PlayerRanking
+
+%ext TypeFamilies, DataKinds, TypeOperators, FlexibleContexts, GADTs, LambdaCase
+
+%uses Data.Int
+%uses Effectful
+%uses qualified Effectful as E
+%uses Effectful.Dispatch.Dynamic
+%uses qualified Pelotero.DB.PlayerRanking as PRRepo
+%uses Pelotero.DB.PlayerRanking
+%uses Pelotero.Domain.Id
+%uses Pelotero.Effects.Database
+
+data PlayerRanking :: Effect where
+  GetRankingsForTeam :: DbLeagueTeamId                          -> PlayerRanking m [PlayerRankingRow]
+  ReplaceRankings    :: DbLeagueTeamId -> [PlayerRankingRow]    -> PlayerRanking m ()
+  ClearRankings      :: DbLeagueTeamId                          -> PlayerRanking m ()
+  GetRankingCount    :: DbLeagueTeamId                          -> PlayerRanking m Int64
+
+getRankingsForTeam
+  :: PlayerRanking E.:> es
+  => DbLeagueTeamId -> E.Eff es [PlayerRankingRow]
+  ! PlayerRanking send-only
+
+replaceRankings
+  :: PlayerRanking E.:> es
+  => DbLeagueTeamId -> [PlayerRankingRow] -> E.Eff es ()
+  ! PlayerRanking send-only
+
+clearRankings :: PlayerRanking E.:> es => DbLeagueTeamId -> E.Eff es ()
+  ! PlayerRanking send-only
+
+getRankingCount
+  :: PlayerRanking E.:> es
+  => DbLeagueTeamId -> E.Eff es Int64
+  ! PlayerRanking send-only
+
+runPlayerRankingDB
+  :: Database E.:> es
+  => E.Eff (PlayerRanking : es) a
+  -> E.Eff es a
+  ! Database-backed interpreter; delegates to Pelotero.DB.PlayerRanking
+
+
+=== BEGIN Pelotero/Effects/Players.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Effects/Players.hs
+%mod Pelotero.Effects.Players
+
+%ext TypeFamilies, DataKinds, TypeOperators, FlexibleContexts, GADTs, LambdaCase
+
+%uses Data.IORef
+%uses qualified Data.Map.Strict as Map
+%uses Data.Text
+%uses Effectful
+%uses qualified Effectful as E
+%uses Effectful.Dispatch.Dynamic
+%uses Pelotero.DB.Player
+%uses qualified Pelotero.DB.Player as PlayerRepo
+%uses Pelotero.DB.Provider
+%uses Pelotero.Domain.Id
+%uses Pelotero.Effects.Database
+
+data Players :: Effect where
+  UpsertPlayerByExternalId :: ProviderName -> Text -> PlayerRow -> Players m DbPlayerId
+  LookupPlayerByExternalId :: ProviderName -> Text -> Players m (Maybe DbPlayerId)
+  GetPlayerById            :: DbPlayerId -> Players m (Maybe PlayerRow)
+  GetActivePlayers         :: Players m [PlayerRow]
+
+data PlayerStore = PlayerStore
+  { externalIdToDb :: !(Map.Map (ProviderName, Text) DbPlayerId)
+  , rowsByDb       :: !(Map.Map DbPlayerId PlayerRow)
+  , nextId         :: !Int
+  }
+
+upsertPlayerByExternalId
+  :: Players E.:> es
+  => ProviderName -> Text -> PlayerRow -> E.Eff es DbPlayerId
+  ! Players send-only; same semantics as DB upsertByExternalId
+
+lookupPlayerByExternalId
+  :: Players E.:> es
+  => ProviderName -> Text -> E.Eff es (Maybe DbPlayerId)
+  ! Players send-only; (provider, externalId) -> Maybe DbPlayerId
+
+getPlayerById :: Players E.:> es => DbPlayerId -> E.Eff es (Maybe PlayerRow)
+  ! Players send-only; DbPlayerId -> Maybe PlayerRow
+
+getActivePlayers :: Players E.:> es => E.Eff es [PlayerRow]
+  ! Players send-only; all players where active=True
+
+runPlayersDB
+  :: Database E.:> es
+  => E.Eff (Players : es) a
+  -> E.Eff es a
+  ! Database-backed interpreter; delegates to Pelotero.DB.Player
+
+emptyStore :: PlayerStore
+  ! private; PlayerStore Map.empty Map.empty 1 (note: nextId starts at 1, NOT 0)
+
+runPlayersInMemory
+  :: IOE E.:> es
+  => E.Eff (Players : es) a
+  -> E.Eff es a
+  ! IORef-based test interpreter
+  ! UpsertPlayerByExternalId: if (provider, externalId) found, update rowsByDb keeping the existing id; else assign nextId and insert into both maps
+  ! atomicModifyIORef ensures concurrent calls within one test don't corrupt the store
+  ! GetActivePlayers iterates all rows and filters by playerRowActive — no index, O(n)
+
+%decision InMemoryAssignsAutoIncrementId
+  what:    runPlayersInMemory's UpsertPlayerByExternalId uses an internal nextId counter (Int starting at 1), wrapping in DbPlayerId
+  why:     Mirrors the DB's BIGSERIAL behaviour without needing an actual sequence. Counter is per-IORef (per-runner-instance), so two concurrent test runs don't share ids — each test gets a fresh PlayerStore. The id only matters for joins within the same test; production semantics aren't tested here.
+  affects: runPlayersInMemory, emptyStore
+
+
+=== BEGIN Pelotero/Effects/RosterSlot.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Effects/RosterSlot.hs
+%mod Pelotero.Effects.RosterSlot
+
+%ext TypeFamilies, DataKinds, TypeOperators, FlexibleContexts, GADTs, LambdaCase
+
+%uses Data.Int
+%uses Data.Text
+%uses Effectful
+%uses qualified Effectful as E
+%uses Effectful.Dispatch.Dynamic
+%uses qualified Pelotero.DB.RosterSlot as RSRepo
+%uses Pelotero.DB.RosterSlot
+%uses Pelotero.Domain.Id
+%uses Pelotero.Effects.Database
+
+data RosterSlot :: Effect where
+  AddSlot           :: RosterSlotRow                         -> RosterSlot m ()
+  RemoveSlot        :: DbLeagueTeamId -> DbPlayerId          -> RosterSlot m ()
+  ClearTeamRoster   :: DbLeagueTeamId                        -> RosterSlot m ()
+  ReplaceTeamRoster :: DbLeagueTeamId -> [RosterSlotRow]     -> RosterSlot m ()
+  GetSlotsForTeam   :: DbLeagueTeamId                        -> RosterSlot m [RosterSlotRow]
+  CountBySlot       :: DbLeagueTeamId -> Text                -> RosterSlot m Int64
+
+addSlot :: RosterSlot E.:> es => RosterSlotRow -> E.Eff es ()
+  ! RosterSlot send-only; semantically an upsert
+
+removeSlot
+  :: RosterSlot E.:> es
+  => DbLeagueTeamId -> DbPlayerId -> E.Eff es ()
+  ! RosterSlot send-only
+
+clearTeamRoster :: RosterSlot E.:> es => DbLeagueTeamId -> E.Eff es ()
+  ! RosterSlot send-only
+
+replaceTeamRoster
+  :: RosterSlot E.:> es
+  => DbLeagueTeamId -> [RosterSlotRow] -> E.Eff es ()
+  ! RosterSlot send-only
+
+getSlotsForTeam :: RosterSlot E.:> es => DbLeagueTeamId -> E.Eff es [RosterSlotRow]
+  ! RosterSlot send-only
+
+countBySlot
+  :: RosterSlot E.:> es
+  => DbLeagueTeamId -> Text -> E.Eff es Int64
+  ! RosterSlot send-only
+
+runRosterSlotDB
+  :: Database E.:> es
+  => E.Eff (RosterSlot : es) a
+  -> E.Eff es a
+  ! Database-backed interpreter; delegates to Pelotero.DB.RosterSlot
+  ! no in-memory interpreter; roster manipulation logic is tested via the DB layer
+
+
+=== BEGIN Pelotero/Effects/Teams.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Effects/Teams.hs
+%mod Pelotero.Effects.Teams
+
+%ext TypeFamilies, DataKinds, TypeOperators, FlexibleContexts, GADTs, LambdaCase
+
+%uses Data.IORef
+%uses qualified Data.Map.Strict as Map
+%uses Data.Text
+%uses Effectful
+%uses qualified Effectful as E
+%uses Effectful.Dispatch.Dynamic
+%uses Pelotero.DB.Team
+%uses qualified Pelotero.DB.Team as TeamRepo
+%uses Pelotero.DB.Provider
+%uses Pelotero.Domain.Id
+%uses Pelotero.Effects.Database
+
+data Teams :: Effect where
+  UpsertTeamByExternalId :: ProviderName -> Text -> TeamRow -> Teams m DbTeamId
+  LookupTeamByExternalId :: ProviderName -> Text -> Teams m (Maybe DbTeamId)
+  GetTeamById            :: DbTeamId -> Teams m (Maybe TeamRow)
+  GetAllTeams            :: Teams m [TeamRow]
+
+data TeamStore = TeamStore
+  { teamExternalIdToDb :: !(Map.Map (ProviderName, Text) DbTeamId)
+  , teamRowsByDb       :: !(Map.Map DbTeamId TeamRow)
+  , teamNextId         :: !Int
+  }
+
+upsertTeamByExternalId
+  :: Teams E.:> es => ProviderName -> Text -> TeamRow -> E.Eff es DbTeamId
+  ! Teams send-only
+
+lookupTeamByExternalId
+  :: Teams E.:> es => ProviderName -> Text -> E.Eff es (Maybe DbTeamId)
+  ! Teams send-only
+
+getTeamById :: Teams E.:> es => DbTeamId -> E.Eff es (Maybe TeamRow)
+  ! Teams send-only
+
+getAllTeams :: Teams E.:> es => E.Eff es [TeamRow]
+  ! Teams send-only
+
+runTeamsDB
+  :: Database E.:> es
+  => E.Eff (Teams : es) a
+  -> E.Eff es a
+  ! Database-backed interpreter; delegates to Pelotero.DB.Team
+
+emptyTeamStore :: TeamStore
+  ! private; TeamStore Map.empty Map.empty 1
+
+runTeamsInMemory
+  :: IOE E.:> es
+  => E.Eff (Teams : es) a
+  -> E.Eff es a
+  ! IORef-based test interpreter; same upsert/lookup/get semantics as runPlayersInMemory
+  ! GetAllTeams returns Map.toList values; order is Map's internal Ord on DbTeamId
+
+%decision MirrorsPlayersInMemoryShape
+  what:    TeamStore has the same external-id-map + db-rows-map + nextId-counter shape as PlayerStore
+  why:     Same trade-offs as Players: per-runner counter mimicking BIGSERIAL, no FK enforcement. Code duplication is acceptable at two test interpreters; would be reconsidered at four.
+  affects: runTeamsInMemory, emptyTeamStore
+
+
+=== BEGIN Pelotero/MLB/Convert.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/MLB/Convert.hs
+%mod Pelotero.MLB.Convert
+
+%uses Control.Monad
+%uses qualified Data.Map.Strict as Map
+%uses Data.Maybe
+%uses Data.Text
+%uses qualified Data.Text as T
+%uses Data.Time.Calendar
+%uses Data.Time.Format
+%uses System.IO
+%uses Pelotero.Domain.Game
+%uses Pelotero.Domain.Id
+%uses Pelotero.Domain.Player
+%uses Pelotero.Domain.Position
+%uses Pelotero.Domain.Stats
+%uses qualified Pelotero.MLB.Wire.Boxscore as WB
+%uses qualified Pelotero.MLB.Wire.Player as WP
+%uses qualified Pelotero.MLB.Wire.Schedule as WS
+
+data ConvertWarning
+  = InvalidPlayerId !Int
+  | UnknownPosition !Int !Text
+  | UnknownHandedness !Int !Text
+  | InvalidGameDate !Int !Text
+  | MissingTeamRef !Int
+  deriving stock (Show, Eq)
+
+data BoxscoreEntry = BoxscoreEntry
+  { boxGameId   :: !GameId
+  , boxPlayerId :: !PlayerId
+  , boxTeamId   :: !(Maybe TeamId)
+  , boxBatting  :: !BattingStats
+  , boxPitching :: !PitchingStats
+  }
+  deriving stock (Show, Eq)
+
+renderWarning :: ConvertWarning -> Text
+  ! renders each ConvertWarning constructor as a single line of stable text
+  ! format is conventional: 'convert: <subject> <id> <verb> <detail>'; downstream log scrapers can rely on the leading 'convert: ' prefix
+  ! tshow uses Show on the int id, so player ids appear without quotes
+
+logWarnings :: [ConvertWarning] -> IO ()
+  ! writes each warning as a separate stderr line; suppresses output entirely when the list is empty (Control.Monad.unless on null)
+  ! logWarnings = logWarningsTo stderr; the Handle-parameterised version exists but is not exported
+
+logWarningsTo :: Handle -> [ConvertWarning] -> IO ()
+  ! private helper; targets a specific Handle. Currently only stderr is used in production but the indirection is what makes warning behaviour testable
+
+convertPlayer :: WP.WirePlayer -> ([ConvertWarning], Maybe Player)
+  ! returns ([InvalidPlayerId], Nothing) for ids <= 0; the empty-warning case never produces Nothing here
+  ! useName / useLastName / nameSlug all default to T.empty when absent (orEmpty); the DB schema requires NOT NULL, so empty is the safe default
+  ! playerActive is non-optional in the wire shape; if MLB ever drops it, parsing breaks at Aeson level, not here
+  ! currentTeam is decoded as Maybe; teamless players (free agents, just-released) get Nothing for playerTeamId
+
+convertPlayers :: WP.WirePlayerEnvelope -> ([ConvertWarning], [Player])
+  ! concats per-player warnings; the resulting list is in input order (well-defined because the envelope's player list is a list)
+  ! uses mapMaybe to filter out the Nothing cases (invalid ids); does NOT preserve a placeholder for them
+
+convertPosition
+  :: Int
+  -> Maybe WP.WirePositionRef
+  -> ([ConvertWarning], Maybe Position)
+  ! tries abbreviation first, then code; if both are present and one parses while the other is unknown, prefers the parsed one without warning (intentional: MLB sometimes ships an obsolete code with a current abbreviation)
+  ! if NEITHER parses but at least one is present, emits UnknownPosition with the abbreviation if available else the code
+  ! if both are Nothing, returns ([], Nothing) silently — the position field is genuinely optional for some records (managers/coaches mistakenly returned in the people endpoint)
+
+convertHand
+  :: Int
+  -> Maybe WP.WireHandRef
+  -> ([ConvertWarning], Maybe Handedness)
+  ! WireHandRef wraps a Maybe Text; this function handles WireHandRef Nothing (silent), WireHandRef (Just code) parseable (silent), and WireHandRef (Just code) unknown (warning)
+  ! no validation that batSide and pitchHand are consistent for switch-hitters; they are independent fields
+
+convertSchedule :: WS.WireScheduleEnvelope -> ([ConvertWarning], GameSchedule)
+  ! folds over wseDates building (warnings, games) in date order; warnings are reversed relative to date entry order due to the foldr accumulation pattern (newWs <> ws)
+  ! produces GameSchedule wrapping a flat [Game]; the per-date grouping in the wire format is discarded
+  ! off-days and missing date entries simply produce no games and no warnings
+
+convertDateEntry :: WS.WireDateEntry -> ([ConvertWarning], [Game])
+  ! if the date string fails parseDate the WHOLE date entry is dropped silently — see decision DateParseFailureSilentlyDropsEntireDate
+  ! wdeGames Nothing means 'no games scheduled'; treated as []
+  ! delegates per-game conversion to convertGame which then attaches its own warnings
+
+convertGame :: Day -> WS.WireGame -> ([ConvertWarning], Maybe Game)
+  ! extracts away/home team ids from the wire's nested teams.away.team.id and teams.home.team.id
+  ! if either is missing, emits MissingTeamRef with the gamePk and returns Nothing for the game
+  ! preserves the gameDate by carrying the parsed Day in from convertDateEntry
+
+parseDate :: Text -> Maybe Day
+  ! returns Nothing for any unparseable input; never throws
+  ! uses %-m/%-d for MLB's loose padding (see decision MLBLooseDateFormat)
+
+convertBoxscore :: GameId -> WB.WireBoxscore -> ([ConvertWarning], [BoxscoreEntry])
+  ! returns ([], entries) — never emits warnings (see decision BoxscoreNeverWarns)
+  ! concatenates away-side then home-side entries; team identification on each entry uses wbpParentTeamId from the wire, NOT the away/home position
+  ! the GameId comes from the caller (Convert doesn't see the URL the boxscore was fetched from)
+
+boxsideEntries :: GameId -> WB.WireBoxTeam -> [BoxscoreEntry]
+  ! iterates Map.elems of the players map; the wire keys ('ID660271') are discarded — the player id inside the value is authoritative
+  ! missing batting or pitching stats default to emptyBatting / emptyPitching; the scoring layer must NOT scale those zeroes (handled by respecting Maybe Int)
+
+convertBatting :: WB.WireBoxBatting -> BattingStats
+  ! mechanical field-by-field copy from WireBoxBatting to BattingStats; no derivation, parsing, or fallback
+  ! any divergence between the two record shapes is a compile error here
+
+convertPitching :: WB.WireBoxPitching -> PitchingStats
+  ! same mechanical copy as convertBatting; pitInningsPitched preserves the wire's Text representation ('6.2'), NOT a parsed out count — see Pelotero.Domain.Stats.parseInningsPitched
+
+orEmpty :: Maybe Text -> Text
+  ! Maybe Text -> Text helper, falling back to T.empty
+  ! used to avoid scattering 'fromMaybe T.empty' through the conversion code
+
+tshow :: Show a => a -> Text
+  ! Show -> Text helper, T.pack . show
+  ! used in renderWarning to embed numeric ids in messages
+
+%decision WarningsBesideValuesNotInsteadOf
+  what:    Conversion functions return ([ConvertWarning], Maybe a) or ([ConvertWarning], a) so warnings accumulate without halting the batch
+  why:     MLB ships partial records during spring training; halting on the first one means losing the other 700 valid players. Treating malformed records as exceptions would conflate parse errors (caught upstream by Aeson) with data-quality warnings (this layer's job). The caller decides whether to log warnings, ignore them, or fail loudly.
+  affects: convertPlayer, convertPlayers, convertSchedule, convertDateEntry, convertGame, convertPosition, convertHand
+
+%decision MLBLooseDateFormat
+  what:    parseDate uses '%Y-%-m-%-d' instead of '%Y-%m-%d'
+  why:     MLB's schedule endpoint occasionally returns dates without zero-padding ('2024-3-5' instead of '2024-03-05'). The %-m / %-d directives accept both padded and unpadded forms. Strict %m/%d would silently drop ~5% of pre-season games.
+  affects: parseDate
+
+%decision InvalidPlayerIdDropsRecord
+  what:    convertPlayer drops players with id <= 0 entirely (returns Nothing) and emits an InvalidPlayerId warning
+  why:     An id of 0 or negative is structurally meaningless; the surrogate-key lookup would fail and the rest of the row would be junk anyway. Position and handedness warnings, in contrast, downgrade to Nothing for that field while keeping the rest of the player; the player is still useful as a name + team reference. An invalid id removes the only stable identity the record has, so there is nothing left worth keeping.
+  affects: convertPlayer
+
+%decision BoxscoreNeverWarns
+  what:    convertBoxscore returns an empty warning list, even though the wire shape has many optional fields
+  why:     Boxscore stats are EXPECTED to be partial (a position player has no pitching stats, and vice versa). Treating absence as a warning would flood the logs. Genuine boxscore parse errors are caught upstream by Aeson. If invariant warnings (e.g. negative counts) become useful, this is the place to add them.
+  affects: convertBoxscore, boxsideEntries
+
+%decision DateParseFailureSilentlyDropsEntireDate
+  what:    convertDateEntry returns ([], []) on date parse failure without emitting an InvalidGameDate warning
+  why:     InvalidGameDate is a defined ConvertWarning constructor but no current code path produces one — it exists for the rendering pass and as an extension point. Real MLB dates parse via the loose-padding format; failure here would indicate a structural feed change, not a data-quality issue worth surfacing per game. Known gap: a date corruption in one entry silently loses an entire day's games. Documented as a known limitation.
+  affects: convertDateEntry, renderWarning
+
+
+=== BEGIN Pelotero/MLB/Fetch.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/MLB/Fetch.hs
+%mod Pelotero.MLB.Fetch
+
+%ext TypeOperators
+
+%uses qualified Crypto.Hash.SHA256 as SHA256
+%uses qualified Data.Aeson as Aeson
+%uses qualified Data.ByteString as BS
+%uses qualified Data.ByteString.Base16 as B16
+%uses qualified Data.ByteString.Lazy as LBS
+%uses qualified Data.Text as T
+%uses qualified Data.Text.Encoding as TE
+%uses qualified Network.HTTP.Client as HTTP
+%uses qualified Network.HTTP.Simple as Simple
+%uses qualified Network.HTTP.Types.Status as Status
+%uses qualified Pelotero.Domain.Game as DGame
+%uses qualified Pelotero.Domain.Player as DPlayer
+%uses qualified Pelotero.Domain.Team as DTeam
+%uses Pelotero.Domain.Id
+%uses qualified Pelotero.MLB.Convert as Convert
+%uses qualified Pelotero.MLB.Urls as Urls
+%uses qualified Pelotero.MLB.Wire.Team as WT
+
+data FetchedRosters = FetchedRosters
+  { frTeams      :: ![DTeam.Team]
+  , frPlayers    :: ![DPlayer.Player]
+  , frWarnings   :: ![Convert.ConvertWarning]
+  , frPayloadSha :: !T.Text
+  }
+
+data FetchedSchedule = FetchedSchedule
+  { fsGames    :: ![DGame.Game]
+  , fsWarnings :: ![Convert.ConvertWarning]
+  }
+
+fetchRosters :: Int -> IO (Either String FetchedRosters)
+  ! intent: Real-HTTP roster fetcher: pulls teams and players, parses both, converts to domain, returns FetchedRosters with payload SHA
+  ! effects: IO (HTTP, network)
+  ! two HTTP calls happen sequentially, not concurrently; latency is teams + players, not max(teams, players)
+  ! if either fetch errors at HTTP level, returns Left with the URL in the message
+  ! if either body fails to parse (Aeson), returns Left with 'Teams parse failure: ...' or 'Players parse failure: ...' prefix
+  ! warnings from convertPlayers are surfaced in frWarnings; team conversion does not produce warnings (mechanical record build)
+  ! frPayloadSha is over the concatenation of raw response bodies (see decision PayloadShaIsTeamsBytesThenPlayersBytes)
+  > consumed by: Pelotero.Effects.MLBClient.runMLBClientHTTP (production interpreter)
+
+wireToDomainTeam :: WT.WireTeam -> DTeam.Team
+  ! private; converts WireTeam to DTeam.Team
+  ! wtLocationName is Maybe Text in the wire; defaults to T.empty (NOT 'Nothing' lifted somewhere) because Team.teamLocationName is non-Maybe
+  ! duplicated by hand in Pelotero.Effects.MLBClient.runMLBClientFixture
+
+fetchSchedule :: String -> String -> IO (Either String FetchedSchedule)
+  ! intent: Real-HTTP schedule fetcher for a date range
+  ! effects: IO
+  ! single HTTP call; parses through Pelotero.MLB.Wire.Schedule then converts via Convert.convertSchedule
+  ! warnings are passed through as fsWarnings
+  ! returns Left on HTTP error or parse failure
+  > consumed by: Pelotero.Effects.MLBClient.runMLBClientHTTP
+
+fetchBoxscoreRaw :: Int -> IO (Either String BS.ByteString)
+  ! returns the raw response body as ByteString without parsing
+  ! the caller (typically a stat-collection loop) parses with Pelotero.MLB.Wire.Boxscore + Pelotero.MLB.Convert.convertBoxscore at the point of use
+  ! this asymmetry vs. fetchRosters/fetchSchedule is deliberate: boxscore fetches are sometimes archived raw before processing
+
+fetchUrl :: String -> IO (Either String LBS.ByteString)
+  ! private helper; one HTTP GET, returns the body or an HTTP error message
+  ! uses Network.HTTP.Simple.httpLBS so request setup is implicit in parseRequest
+  ! non-2xx responses are returned as Left, not thrown
+
+computeSha :: BS.ByteString -> T.Text
+  ! SHA-256 of the input bytes, hex-encoded as Text
+  ! uses Crypto.Hash.SHA256; matches what Aeson's strict decode sees byte-for-byte
+
+%decision WireToDomainTeamPrivate
+  what:    wireToDomainTeam is not exported; it is duplicated by hand in Pelotero.Effects.MLBClient
+  why:     Exporting it would create a circular concern: Fetch shouldn't be a public utility module, it's the production HTTP path. The conversion is one record literal with four fields; duplicating it is cheaper than the import discipline of having both Fetch and MLBClient depend on a shared private module. If a third caller appears, this should move to a Convert-level helper.
+  affects: wireToDomainTeam
+
+%decision PayloadShaIsTeamsBytesThenPlayersBytes
+  what:    computeSha hashes the concatenation of teamsBody (raw bytes) followed by playersBody (raw bytes), in that order
+  why:     Order matters for stability: if a future fetch reorders the calls, a re-fetch with identical content would produce a different SHA, breaking change-detection. Using the lazy-then-strict transform inside fetchRosters is a one-place implementation detail and not part of the SHA's semantics. Teams-then-players matches the order they're parsed and converted in the same function.
+  affects: fetchRosters, computeSha
+
+
+=== BEGIN Pelotero/MLB/Urls.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/MLB/Urls.hs
+%mod Pelotero.MLB.Urls
+
+rosterUrl :: Int -> String
+  ! pre-filters to activeStatus=ACTIVE on the server side; inactive players are not returned
+  ! uses /sports/1/players (sport id 1 = MLB), not /people, because /people requires explicit ID lists
+
+teamsUrl :: Int -> String
+  ! uses sportId=1 (MLB) only; minor-league teams are not returned
+
+scheduleUrl :: String -> String -> String
+  ! language=en is hardcoded; the MLB API supports other locales but the engine doesn't model them
+  ! startDate and endDate are passed as raw String; caller is responsible for the YYYY-MM-DD format MLB expects
+
+scheduleDateUrl :: String -> String
+  ! convenience wrapper for single-day queries; the MLB API does not have a separate per-day endpoint, so we issue a range query with start==end
+
+boxscoreUrl :: Int -> String
+  ! v1 endpoint; returns the boxscore object whose shape is parsed by Pelotero.MLB.Wire.Boxscore
+
+gameStatusUrl :: Int -> String
+  ! v1.1 endpoint (note the version difference from boxscoreUrl); /feed/live carries scheduled-vs-final status that the boxscore endpoint does not surface cleanly
+  ! currently UNUSED in the sync pipeline; reserved for the future 'is this game final yet?' check before scoring. Effectively dead code at present.
+
+%decision UrlsIsolatedAsSwapPoint
+  what:    All MLB Stats API URLs live in this single module with no other logic; the only way to talk to the upstream service is via this module's exports
+  why:     If MLB changes the API base or moves an endpoint, this is the only file that needs editing. If a future provider replaces MLB entirely, this module is the natural delete-and-rewrite boundary. Side effect: discourages ad-hoc URL construction scattered through fetch code.
+  affects: rosterUrl, teamsUrl, scheduleUrl, scheduleDateUrl, boxscoreUrl, gameStatusUrl
+
+
+=== BEGIN Pelotero/MLB/Wire/Boxscore.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/MLB/Wire/Boxscore.hs
+%mod Pelotero.MLB.Wire.Boxscore
+
+%uses Data.Aeson
+%uses Data.Map.Strict
+%uses Data.Text
+
+newtype WireBoxscore = WireBoxscore
+  { wbsTeams :: WireBoxTeams }
+  deriving stock (Show, Eq)
+
+instance FromJSON WireBoxscore where
+
+data WireBoxTeams = WireBoxTeams
+  { wbtAway :: WireBoxTeam
+  , wbtHome :: WireBoxTeam
+  }
+  deriving stock (Show, Eq)
+
+instance FromJSON WireBoxTeams where
+
+newtype WireBoxTeam = WireBoxTeam
+  { wbtPlayers :: Map Text WireBoxPlayer }
+  deriving stock (Show, Eq)
+
+instance FromJSON WireBoxTeam where
+
+data WireBoxPlayer = WireBoxPlayer
+  { wbpPerson       :: WireBoxPerson
+  , wbpParentTeamId :: Maybe Int
+  , wbpStats        :: Maybe WireBoxStats
+  }
+  deriving stock (Show, Eq)
+
+instance FromJSON WireBoxPlayer where
+
+data WireBoxPerson = WireBoxPerson
+  { wbpPersonId :: Int
+  , wbpFullName :: Maybe Text
+  }
+  deriving stock (Show, Eq)
+
+instance FromJSON WireBoxPerson where
+
+data WireBoxStats = WireBoxStats
+  { wbsBatting  :: Maybe WireBoxBatting
+  , wbsPitching :: Maybe WireBoxPitching
+  }
+  deriving stock (Show, Eq)
+
+instance FromJSON WireBoxStats where
+
+data WireBoxBatting = WireBoxBatting
+  { wbbGamesPlayed          :: Maybe Int
+  , wbbPlateAppearances     :: Maybe Int
+  , wbbAtBats               :: Maybe Int
+  , wbbRuns                 :: Maybe Int
+  , wbbHits                 :: Maybe Int
+  , wbbDoubles              :: Maybe Int
+  , wbbTriples              :: Maybe Int
+  , wbbHomeRuns             :: Maybe Int
+  , wbbRbi                  :: Maybe Int
+  , wbbBaseOnBalls          :: Maybe Int
+  , wbbIntentionalWalks     :: Maybe Int
+  , wbbStrikeOuts           :: Maybe Int
+  , wbbStolenBases          :: Maybe Int
+  , wbbCaughtStealing       :: Maybe Int
+  , wbbHitByPitch           :: Maybe Int
+  , wbbSacBunts             :: Maybe Int
+  , wbbSacFlies             :: Maybe Int
+  , wbbGroundIntoDoublePlay :: Maybe Int
+  , wbbGroundIntoTriplePlay :: Maybe Int
+  , wbbLeftOnBase           :: Maybe Int
+  , wbbTotalBases           :: Maybe Int
+  , wbbFlyOuts              :: Maybe Int
+  , wbbGroundOuts           :: Maybe Int
+  , wbbCatchersInterference :: Maybe Int
+  , wbbPickoffs             :: Maybe Int
+  }
+  deriving stock (Show, Eq)
+
+instance FromJSON WireBoxBatting where
+
+data WireBoxPitching = WireBoxPitching
+  { wbpGamesPlayed             :: Maybe Int
+  , wbpGamesStarted            :: Maybe Int
+  , wbpGamesFinished           :: Maybe Int
+  , wbpCompleteGames           :: Maybe Int
+  , wbpShutouts                :: Maybe Int
+  , wbpWins                    :: Maybe Int
+  , wbpLosses                  :: Maybe Int
+  , wbpSaves                   :: Maybe Int
+  , wbpSaveOpportunities       :: Maybe Int
+  , wbpHolds                   :: Maybe Int
+  , wbpBlownSaves              :: Maybe Int
+  , wbpInningsPitched          :: Maybe Text
+  , wbpOuts                    :: Maybe Int
+  , wbpBattersFaced            :: Maybe Int
+  , wbpNumberOfPitches         :: Maybe Int
+  , wbpStrikes                 :: Maybe Int
+  , wbpBalls                   :: Maybe Int
+  , wbpHits                    :: Maybe Int
+  , wbpDoubles                 :: Maybe Int
+  , wbpTriples                 :: Maybe Int
+  , wbpHomeRuns                :: Maybe Int
+  , wbpRuns                    :: Maybe Int
+  , wbpEarnedRuns              :: Maybe Int
+  , wbpStrikeOuts              :: Maybe Int
+  , wbpBaseOnBalls             :: Maybe Int
+  , wbpIntentionalWalks        :: Maybe Int
+  , wbpHitBatsmen              :: Maybe Int
+  , wbpWildPitches             :: Maybe Int
+  , wbpBalks                   :: Maybe Int
+  , wbpPickoffs                :: Maybe Int
+  , wbpFlyOuts                 :: Maybe Int
+  , wbpGroundOuts              :: Maybe Int
+  , wbpAirOuts                 :: Maybe Int
+  , wbpInheritedRunners        :: Maybe Int
+  , wbpInheritedRunnersScored  :: Maybe Int
+  , wbpStolenBases             :: Maybe Int
+  , wbpCaughtStealing          :: Maybe Int
+  , wbpAtBats                  :: Maybe Int
+  , wbpRbi                     :: Maybe Int
+  , wbpSacBunts                :: Maybe Int
+  , wbpSacFlies                :: Maybe Int
+  , wbpCatchersInterference    :: Maybe Int
+  , wbpPassedBall              :: Maybe Int
+  }
+  deriving stock (Show, Eq)
+
+instance FromJSON WireBoxPitching where
+
+%decision FlatRecordPerStatsCategory
+  what:    The batting and pitching wire records list every Maybe Int field individually rather than using a Map Text Int
+  why:     Named fields make the conversion to BattingStats / PitchingStats a mechanical record-to-record copy that the compiler verifies. A Map-based representation would defer typo-detection to runtime: a missing key would silently be Nothing instead of failing at compile time when added to BattingStats. The cost is verbose Aeson FromJSON instances, but those are write-once.
+  affects: 
+
+%decision InningsPitchedAsText
+  what:    wbpInningsPitched is decoded as Maybe Text rather than Maybe Double
+  why:     MLB sends '6.2' meaning six and two-thirds innings; decoding as Double gives 6.2 the floating-point number, which is wrong by 6.667 - 6.2 = 0.467. Keeping it as Text propagates the raw string to the scoring layer where Pelotero.Domain.Stats.parseInningsPitched converts it to an exact out count. This is a known historical bug in legacy fantasy systems; preserving the string is the simplest defense.
+  affects: 
+
+%decision ModuleLevelFieldNotes
+  what:    Field-level meaning notes for this wire module (chase has no signatures here, only data + instances)
+  why:     wbsTeams is the only top-level field of WireBoxscore; the boxscore JSON has many more (ratings, officials, info), all deliberately ignored. WireBoxTeams.wbtAway / wbtHome are required Aeson fields (.: not .:?) — a boxscore without both sides is a parse failure. WireBoxTeam.wbtPlayers is Map Text WireBoxPlayer keyed by 'ID<playerId>' strings (e.g. 'ID660271'); the prefix is ignored at the converter (the playerId inside the value is authoritative). WireBoxPlayer.wbpPersonId is the only stable identity; wbpFullName is preserved for debugging but unused in conversion. WireBoxPlayer.wbpParentTeamId is nullable to accommodate occasional MLB feed glitches; if missing, BoxscoreEntry.boxTeamId is Nothing and the entry is harder to join later. WireBoxPlayer.wbpStats is Maybe; players who didn't play (DNP) have Nothing here. WireBoxStats holds either or both of batting / pitching; a position player has batting but no pitching, a relief pitcher has pitching but no batting (typically), a two-way player has both. Every batting/pitching field is Maybe Int; absence means 'not reported', forwarded to BattingStats / PitchingStats unchanged. Fields are NOT validated against each other; e.g. atBats < hits is structurally possible but never seen from MLB. wbpInningsPitched is Maybe Text on purpose; '6.2' = 20 outs, NOT 6.2 innings. wbpOuts coexists with wbpInningsPitched; both are Maybe and either could be present alone.
+  affects: 
+
+
+=== BEGIN Pelotero/MLB/Wire/Player.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/MLB/Wire/Player.hs
+%mod Pelotero.MLB.Wire.Player
+
+%uses Data.Aeson
+%uses Data.Text
+
+newtype WirePlayerEnvelope = WirePlayerEnvelope
+  { wirePlayers :: [WirePlayer] }
+  deriving stock (Show, Eq)
+
+instance FromJSON WirePlayerEnvelope where
+
+data WirePlayer = WirePlayer
+  { wpId              :: Int
+  , wpUseName         :: Maybe Text
+  , wpUseLastName     :: Maybe Text
+  , wpNameSlug        :: Maybe Text
+  , wpCurrentTeam     :: Maybe WireTeamRef
+  , wpPrimaryPosition :: Maybe WirePositionRef
+  , wpBatSide         :: Maybe WireHandRef
+  , wpPitchHand       :: Maybe WireHandRef
+  , wpActive          :: Bool
+  }
+  deriving stock (Show, Eq)
+
+instance FromJSON WirePlayer where
+
+data WireTeamRef = WireTeamRef
+  { wtrId   :: Int
+  , wtrName :: Maybe Text
+  }
+  deriving stock (Show, Eq)
+
+instance FromJSON WireTeamRef where
+
+data WirePositionRef = WirePositionRef
+  { wprCode         :: Maybe Text
+  , wprAbbreviation :: Maybe Text
+  }
+  deriving stock (Show, Eq)
+
+instance FromJSON WirePositionRef where
+
+newtype WireHandRef = WireHandRef
+  { whrCode :: Maybe Text }
+  deriving stock (Show, Eq)
+
+instance FromJSON WireHandRef where
+
+%decision ModuleLevelFieldNotes
+  what:    Field-level meaning notes for this wire module (no top-level signatures, only data + FromJSON instances)
+  why:     WirePlayerEnvelope unwraps the top-level 'people' key (NOT 'players' — the MLB endpoint name is misleading). WirePlayer.wpId is required (.:); always present in real responses. wpActive is also required; spring training partial records still include this. Every other field is .:? optional because MLB ships partial records during pre-season. useName / useLastName are MLB's preferred display names; nameSlug is URL-safe. WireTeamRef carries id (required) and name (optional); name is decorative, the id is the join key. WireTeamRef is the embedded team reference inside WirePlayer.wpCurrentTeam, NOT the standalone /teams endpoint shape (WireTeam in Wire.Team). WirePositionRef has both code ('1','2',...,'10') and abbreviation ('P','C','1B'); convertPosition tries abbreviation first then code. Both code and abbreviation are Maybe because MLB sometimes ships only one. WireHandRef is a single-field newtype around a Maybe Text code ('L','R','S'); the wire JSON object also has 'description' but we ignore it.
+  affects: 
+
+
+=== BEGIN Pelotero/MLB/Wire/Schedule.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/MLB/Wire/Schedule.hs
+%mod Pelotero.MLB.Wire.Schedule
+
+%uses Data.Aeson
+%uses Data.Text
+
+newtype WireScheduleEnvelope = WireScheduleEnvelope
+  { wseDates :: [WireDateEntry] }
+  deriving stock (Show, Eq)
+
+instance FromJSON WireScheduleEnvelope where
+
+data WireDateEntry = WireDateEntry
+  { wdeDate  :: Text          -- "YYYY-MM-DD"
+  , wdeGames :: Maybe [WireGame]
+  }
+  deriving stock (Show, Eq)
+
+instance FromJSON WireDateEntry where
+
+data WireGame = WireGame
+  { wgGamePk :: Int
+  , wgTeams  :: Maybe WireGameTeams
+  }
+  deriving stock (Show, Eq)
+
+instance FromJSON WireGame where
+
+data WireGameTeams = WireGameTeams
+  { wgtAway :: Maybe WireGameTeam
+  , wgtHome :: Maybe WireGameTeam
+  }
+  deriving stock (Show, Eq)
+
+instance FromJSON WireGameTeams where
+
+newtype WireGameTeam = WireGameTeam
+  { wgtTeamId :: Maybe Int }
+  deriving stock (Show, Eq)
+
+instance FromJSON WireGameTeam where
+
+%decision InlineWireGameTeamParser
+  what:    WireGameTeam's FromJSON instance manually extracts team.id rather than reusing WireTeamRef from Wire.Player
+  why:     Schedule context only needs the id; pulling in WireTeamRef would either re-export it from Player.hs or duplicate the type. Inlining the parse keeps the Schedule wire module self-contained. If schedule entries ever need team names (e.g. for TBD games), this is the place to swap in WireTeamRef.
+  affects: 
+
+%decision ModuleLevelFieldNotes
+  what:    Field-level meaning notes for this wire module
+  why:     WireScheduleEnvelope unwraps the top-level 'dates' array; the envelope's other fields (totalGames, totalEvents, copyright) are ignored. WireDateEntry.wdeDate is Text in YYYY-MM-DD format, but MLB sometimes drops zero-padding; parseDate in Convert handles both forms. wdeGames is Maybe [WireGame]; off-days have games absent, NOT empty array (varies by endpoint version). WireGame.wgGamePk is required; the upstream MLB game id used as GameId in the domain layer. wgTeams is Maybe; rare partial records (TBD games) lack the teams object entirely. WireGameTeams.wgtAway / wgtHome are individually Maybe; either side could be missing on TBD opponents (e.g. wildcard placeholder games). WireGameTeam.wgtTeamId parser drills into the 'team' object then extracts 'id', returning Nothing if either is missing.
+  affects: 
+
+
+=== BEGIN Pelotero/MLB/Wire/Team.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/MLB/Wire/Team.hs
+%mod Pelotero.MLB.Wire.Team
+
+%uses Data.Aeson
+%uses Data.Text
+
+newtype WireTeamEnvelope = WireTeamEnvelope
+  { wireTeams :: [WireTeam] }
+  deriving stock (Show, Eq)
+
+instance FromJSON WireTeamEnvelope where
+
+data WireTeam = WireTeam
+  { wtId           :: Int
+  , wtName         :: Text
+  , wtAbbreviation :: Text
+  , wtLocationName :: Maybe Text
+    -- ^ Sometimes absent for short-season or international teams; we
+    -- default to empty string at conversion time.
+  }
+  deriving stock (Show, Eq)
+
+instance FromJSON WireTeam where
+
+%decision WireTeamMinimalFields
+  what:    WireTeam parses only id, name, abbreviation, and locationName; ignores division, league, venue, founded year, etc.
+  why:     The DB stores only what we display in lineup/box rendering; ignoring the rest is the simplest way to avoid schema bloat. If a future feature needs division or league info, we re-parse here without any data migration. Aeson silently ignores unknown JSON keys, so this is forward-compatible against MLB adding fields.
+  affects: 
+
+%decision ModuleLevelFieldNotes
+  what:    Field-level meaning notes for this wire module
+  why:     WireTeamEnvelope.wireTeams is the only field; envelope wraps the array under the JSON key 'teams'. WireTeam.wtId is required; the upstream MLB team id used as TeamId in the domain layer. wtName and wtAbbreviation are required (.:); a team without either is a parse failure. wtLocationName is optional (.:?) and defaults to T.empty at conversion time.
+  affects: 
+
+
+=== BEGIN Pelotero/Prelude.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Prelude.hs
+%mod Pelotero.Prelude
+
+%ext OverloadedStrings
+
+%uses Data.Text
+
+appName :: Text
+  ! compile-time constant; canonical application name used in logging and any place that needs to identify this binary as the producer of a record
+  ! OverloadedStrings is enabled solely so the string literal types as Text without explicit pack
+
+appVersion :: Text
+  ! hand-maintained version string; not derived from cabal's PackageInfo_pelotero_engine, so it can drift from the .cabal file unless updated by hand
+  ! intended to be embedded wherever the engine identifies itself (audit fields, future fetch-log enrichment)
+
+%decision HandMaintainedVersionString
+  what:    appVersion is a hand-edited Text constant rather than read from cabal-generated Paths_pelotero_engine.version
+  why:     Reading from Paths_* requires plumbing the autogen module into the import graph and pulls Data.Version handling into every site that logs the version. The risk is drift: bumping the .cabal version without bumping this constant produces a binary that lies about itself in the fetch log. Mitigation is process: a release checklist item, not a code-level guarantee.
+  affects: appVersion
+
+
+=== BEGIN Pelotero/Sync/Players.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Sync/Players.hs
+%mod Pelotero.Sync.Players
+
+%ext TypeOperators, FlexibleContexts
+
+%uses qualified Data.Map.Strict as Map
+%uses qualified Data.Text as T
+%uses Data.Time.Clock
+%uses Effectful
+%uses Pelotero.DB.FetchLog
+%uses Pelotero.DB.Player
+%uses Pelotero.DB.Provider
+%uses Pelotero.DB.Team
+%uses Pelotero.Domain.Id
+%uses qualified Pelotero.Domain.Player as DPlayer
+%uses qualified Pelotero.Domain.Position as DPos
+%uses qualified Pelotero.Domain.Team as DTeam
+%uses Pelotero.Effects.Clock
+%uses Pelotero.Effects.FetchLog
+%uses Pelotero.Effects.Players
+%uses Pelotero.Effects.Teams
+
+data SyncResult = SyncResult
+  { syncTeamsUpserted   :: !Int
+  , syncPlayersUpserted :: !Int
+  , syncFetchSha256     :: !T.Text
+  }
+  deriving stock (Show, Eq)
+
+syncRosters
+  :: ( Players  :> es
+     , Teams    :> es
+     , FetchLog :> es
+     , Clock    :> es
+     )
+  => ProviderName
+  -> T.Text              -- ^ scope (e.g. "2025" for season)
+  -> T.Text              -- ^ SHA-256 of raw payload, computed by caller
+  -> [DTeam.Team]        -- ^ teams, already converted from wire format
+  -> [DPlayer.Player]    -- ^ players, already converted from wire format
+  -> Eff es SyncResult
+  ! intent: Provider-agnostic upsert pipeline: teams, then players, then fetch-log entry, returning a small summary
+  ! effects: Players, Teams, FetchLog, Clock
+  ! single Clock.now call shared by both team and player upserts; both rows get identical last_synced_at
+  ! fetchLogResource hardcoded to 'active-rosters'; scope is supplied by the caller (typically the season as Text)
+  ! fetchLogRecordCount is the player count, NOT the team count; teams are bookkeeping
+  ! fetchLogId and fetchLogFetchedAt are Nothing on the inbound row; the DB layer fills them via DEFAULT
+  ! syncTeamsUpserted / syncPlayersUpserted are simply length of the input lists, not a count of how many rows actually changed (an upsert that hit an existing row still counts)
+  > consumed by: CLI sync command (process startup or scheduled run)
+
+upsertAllTeams
+  :: Teams :> es
+  => ProviderName
+  -> UTCTime
+  -> [DTeam.Team]
+  -> Eff es (Map.Map TeamId DbTeamId)
+  ! produces Map TeamId DbTeamId where the key is the upstream MLB id and the value is the surrogate DB id, in the order traverse visits the input list
+  ! extId is the show-of-Int rendering of unTeamId; the DB stores it as Text per the team_external_id schema
+  ! teamRowId is Nothing on insert; the DB layer assigns the surrogate id
+
+upsertAllPlayers
+  :: Players :> es
+  => ProviderName
+  -> UTCTime
+  -> Map.Map TeamId DbTeamId
+  -> [DPlayer.Player]
+  -> Eff es ()
+  ! uses the team map from upsertAllTeams to resolve playerRowCurrentTeamId; players whose upstream team isn't in the map (unknown / minor league call-up) get Nothing for current_team_id
+  ! extId mirrors the upsertAllTeams convention: show-of-Int from unPlayerId
+  ! discards the DbPlayerId returned by upsertPlayerByExternalId; the caller doesn't need it (sync pipeline writes player rows but doesn't link them further here)
+  ! handToChar takes T.head of renderHandedness ('L', 'R', 'S'); the DB schema stores handedness as a single character per legacy convention
+
+%decision TeamsBeforePlayersOrdering
+  what:    syncRosters upserts all teams first, builds a TeamId -> DbTeamId map, then upserts players using that map to resolve playerRowCurrentTeamId
+  why:     Players carry a foreign key to team via current_team_id; if the team doesn't exist in the DB at insert time, the FK either fails (with constraint enforcement) or installs a dangling reference (without). Building the map in memory between the two phases avoids a second round-trip per player to look up the DB team id. The two phases share one syncedAt timestamp from the Clock effect, so last_synced_at on team and player rows match exactly for a given sync run, useful when reasoning about staleness.
+  affects: syncRosters, upsertAllTeams, upsertAllPlayers
+
+%decision ProviderAgnosticEntryPoint
+  what:    syncRosters takes already-converted [Team] and [Player] domain values plus a precomputed SHA-256, never touches wire types or HTTP
+  why:     Keeps the sync pipeline testable in isolation: tests construct domain values directly and run against in-memory effect interpreters. Allows alternative providers (a future non-MLB feed, manual data import) to reuse this exact code path by doing their own wire->domain conversion upstream. The SHA is computed by the caller because only the caller has the raw bytes; passing it in here keeps this module from depending on Crypto.Hash.
+  affects: syncRosters
+
+%decision ResourceLiteralActiveRosters
+  what:    syncRosters writes fetchLogResource = 'active-rosters' as a literal rather than parameterising it
+  why:     The MLB roster endpoint queried (rosterUrl) filters to activeStatus=ACTIVE on the server side, so this resource name is the literal truth of what was fetched. If a future scope adds inactive/40-man/minor-league fetches, that becomes a new resource name passed in by the caller, not a flag here.
+  affects: syncRosters
+
+
+=== BEGIN Pelotero/Sync/Schedule.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Sync/Schedule.hs
+%mod Pelotero.Sync.Schedule
+
+%ext TypeOperators, FlexibleContexts
+
+%uses qualified Data.Text as T
+%uses Data.Time.Clock
+%uses Effectful
+%uses Pelotero.DB.Game
+%uses Pelotero.DB.Provider
+%uses Pelotero.Domain.Game
+%uses Pelotero.Domain.Id
+%uses Pelotero.Effects.Clock
+%uses Pelotero.Effects.Games
+%uses Pelotero.Effects.Teams
+
+data ScheduleSyncResult = ScheduleSyncResult
+  { schedGamesUpserted :: !Int
+  , schedGamesSkipped  :: !Int
+  }
+  deriving stock (Show, Eq)
+
+syncSchedule
+  :: ( Games :> es
+     , Teams :> es
+     , Clock :> es
+     )
+  => ProviderName
+  -> [Game]
+  -> Eff es ScheduleSyncResult
+  ! intent: Provider-agnostic upsert pipeline for already-converted [Game] domain values
+  ! effects: Games, Teams, Clock
+  ! no FetchLog write here; schedule sync is currently considered ephemeral fetch-log-wise (could be added if needed)
+  ! single Clock.now call shared across all game upserts in this run
+  ! iteration order is the input list order; not stable across runs because the upstream wire conversion preserves API order
+
+upsertOneGame
+  :: (Games :> es, Teams :> es)
+  => ProviderName
+  -> UTCTime
+  -> Game
+  -> Eff es Bool
+  ! returns True on successful upsert, False on skip (either team unresolved)
+  ! extId is show-of-Int from unGameId, matching the convention in Pelotero.Sync.Players
+  ! discards the DbGameId returned by upsertGameByExternalId; downstream boxscore upserts re-resolve via lookupGameByExternalId at scoring time
+
+resolveTeam :: Teams :> es => ProviderName -> TeamId -> Eff es (Maybe DbTeamId)
+  ! wraps lookupTeamByExternalId, converting TeamId -> Text -> Maybe DbTeamId
+  ! the show-of-Int convention here MUST match upsertAllTeams in Pelotero.Sync.Players or every game gets skipped
+  ! implicit cross-module contract: anywhere a TeamId becomes an external id Text, the encoding is exactly T.pack . show . unTeamId
+
+%decision SkipGamesWithUnknownTeams
+  what:    syncSchedule resolves both away and home teams via lookupTeamByExternalId; if either is missing, the entire game is skipped and counted in schedGamesSkipped
+  why:     The schedule endpoint can include teams that haven't been ingested yet (spring training affiliates, all-star game rosters, exhibition opponents). Inserting a game with a NULL or fabricated team_id violates the foreign-key contract and silently corrupts later joins. Skipping is recoverable: re-run after a roster sync and the game shows up. Failing the whole batch on one missing reference is not. The skip count is surfaced in ScheduleSyncResult so operators can detect when this is happening at scale.
+  affects: syncSchedule, upsertOneGame
+
