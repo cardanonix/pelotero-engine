@@ -1,7 +1,7 @@
 %bundle chase v1
-%generated 2026-05-04T22:49:21Z
+%generated 2026-05-05T05:12:43Z
 %roots /home/bismuth/git/pelotero-engine/lib
-%files 49 ok, 0 failed
+%files 51 ok, 0 failed
 
 # This file is a chase bundle: structural skeletons of multiple
 # Haskell source files concatenated into one document. Each block
@@ -509,6 +509,11 @@ getByDateT :: Day -> Tx.Transaction [GameRow]
   ! WHERE game_date = ? ORDER BY id
   ! id ordering is stable but not meaningful (insert order); fine for display
 
+getByDateRangeT :: Day -> Day -> Tx.Transaction [GameRow]
+  ! WHERE game_date BETWEEN startDay AND endDay (inclusive both ends)
+  ! ORDER BY game_date ASC, id ASC for stable cross-day display
+  ! consumed by Pelotero.Score.buildPlayerMaps via the Games effect
+
 linkExternalIdT :: DbGameId -> ProviderName -> Text -> Tx.Transaction ()
   ! INSERT ... ON CONFLICT DO NOTHING
 
@@ -534,6 +539,9 @@ getById :: Pool -> DbGameId -> IO (Either DBError (Maybe GameRow))
 
 getByDate :: Pool -> Day -> IO (Either DBError [GameRow])
   ! Pool-flavored per-date read
+
+getByDateRange :: Pool -> Day -> Day -> IO (Either DBError [GameRow])
+  ! Pool-flavored wrapper; inclusive on both ends
 
 linkExternalId :: Pool -> DbGameId -> ProviderName -> Text -> IO (Either DBError ())
   ! Pool-flavored idempotent link
@@ -2572,6 +2580,7 @@ data Games :: Effect where
   GetGameExternalId      :: DbGameId -> ProviderName -> Games m (Maybe Text)
   GetGameById            :: DbGameId -> Games m (Maybe GameRow)
   GetGamesByDate         :: Day -> Games m [GameRow]
+  GetGamesByDateRange    :: Day -> Day -> Games m [GameRow]
 
 data GameStore = GameStore
   { gameExternalIdToDb :: !(Map.Map (ProviderName, Text) DbGameId)
@@ -2598,6 +2607,10 @@ getGameById :: Games E.:> es => DbGameId -> E.Eff es (Maybe GameRow)
 getGamesByDate :: Games E.:> es => Day -> E.Eff es [GameRow]
   ! Games send-only; per-date listing
 
+getGamesByDateRange :: Games E.:> es => Day -> Day -> E.Eff es [GameRow]
+  ! Games send-only; range listing inclusive on both ends
+  ! consumed by Pelotero.Score.buildPlayerMaps to enumerate games in a scoring period
+
 runGamesDB
   :: Database E.:> es
   => E.Eff (Games : es) a
@@ -2615,6 +2628,7 @@ runGamesInMemory
   ! IORef-based test interpreter
   ! UpsertGameByExternalId maintains both forward and reverse maps consistently
   ! GetGamesByDate iterates all rows and filters by gameRowGameDate — O(n)
+  ! GetGamesByDateRange iterates all rows and filters with two predicates — O(n)
 
 %decision GameStoreHasReverseLookupMap
   what:    The in-memory game store maintains both an external-id->db-id map AND a db-id->external-id map
@@ -3144,8 +3158,8 @@ data BoxscoreEntry = BoxscoreEntry
   { boxGameId   :: !GameId
   , boxPlayerId :: !PlayerId
   , boxTeamId   :: !(Maybe TeamId)
-  , boxBatting  :: !BattingStats
-  , boxPitching :: !PitchingStats
+  , boxBatting  :: !(Maybe BattingStats)
+  , boxPitching :: !(Maybe PitchingStats)
   }
   deriving stock (Show, Eq)
 
@@ -3288,8 +3302,9 @@ data FetchedRosters = FetchedRosters
   }
 
 data FetchedSchedule = FetchedSchedule
-  { fsGames    :: ![DGame.Game]
-  , fsWarnings :: ![Convert.ConvertWarning]
+  { fsGames      :: ![DGame.Game]
+  , fsWarnings   :: ![Convert.ConvertWarning]
+  , fsPayloadSha :: !T.Text
   }
 
 fetchRosters :: Int -> IO (Either String FetchedRosters)
@@ -3694,6 +3709,315 @@ appVersion :: Text
   affects: appVersion
 
 
+=== BEGIN Pelotero/Score.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Score.hs
+%mod Pelotero.Score
+
+%ext TypeOperators, FlexibleContexts
+
+%uses qualified Data.Map.Strict as Map
+%uses Data.Maybe
+%uses Data.Time.Calendar
+%uses Data.Time.Clock
+%uses Effectful
+%uses Pelotero.DB.BoxscoreEntry
+%uses Pelotero.DB.Game
+%uses Pelotero.DB.LeagueConfig
+%uses Pelotero.DB.LeagueTeam
+%uses Pelotero.DB.LineupSlot
+%uses Pelotero.Domain.Id
+%uses Pelotero.Domain.Scoring
+%uses Pelotero.Domain.Stats
+%uses Pelotero.Effects.BoxscoreEntry
+%uses qualified Pelotero.Effects.BoxscoreEntry as Box
+%uses Pelotero.Effects.Games
+%uses qualified Pelotero.Effects.Games as G
+%uses Pelotero.Effects.LeagueConfig
+%uses qualified Pelotero.Effects.LeagueConfig as LC
+%uses Pelotero.Effects.LeagueTeam
+%uses qualified Pelotero.Effects.LeagueTeam as LT
+%uses Pelotero.Effects.LineupSlot
+%uses qualified Pelotero.Effects.LineupSlot as LS
+
+data PlayerScore = PlayerScore
+  { psPlayer         :: !DbPlayerId
+  , psBattingPoints  :: !Points
+  , psPitchingPoints :: !Points
+  , psTotalPoints    :: !Points
+  }
+  deriving stock (Show, Eq)
+
+data TeamScore = TeamScore
+  { tsTeam        :: !DbLeagueTeamId
+  , tsPlayers     :: ![PlayerScore]
+  , tsTotalPoints :: !Points
+  }
+  deriving stock (Show, Eq)
+
+data LeagueScore = LeagueScore
+  { lscLeague      :: !DbLeagueConfigId
+  , lscPeriodStart :: !Day
+  , lscPeriodEnd   :: !Day
+  , lscTeams       :: ![TeamScore]
+  }
+  deriving stock (Show, Eq)
+
+rowToBattingStats :: BattingRow -> BattingStats
+  ! mechanical Int32 → Int widening on every Maybe field; lossless
+
+rowToPitchingStats :: PitchingRow -> PitchingStats
+  ! Int32 → Int widening on every Maybe field
+  ! pitInningsPitched is reconstructed via renderInningsPitched <$> pitchingInningsPitchedOuts; pitOuts is preserved from the row directly so callers that prefer it still get an exact value
+
+sumBattingPoints :: BattingMultipliers -> [BattingRow] -> Points
+  ! sumPoints over (scoreBatting m . rowToBattingStats) — a fold; empty list yields zeroPoints
+
+sumPitchingPoints :: PitchingMultipliers -> [PitchingRow] -> Points
+  ! mirror of sumBattingPoints for pitching
+
+scorePlayerPure
+  :: LeagueScoring
+  -> [BattingRow]
+  -> [PitchingRow]
+  -> DbPlayerId
+  -> PlayerScore
+  ! produces a PlayerScore with batting + pitching subtotals and their sum
+  ! pure: same inputs → same output, no IO or randomness
+  ! the canonical hedgehog target for scoring property tests (when those exist)
+
+scoreLeague
+  :: ( LeagueConfig  :> es
+     , LeagueTeam    :> es
+     , LineupSlot    :> es
+     , Games         :> es
+     , BoxscoreEntry :> es
+     )
+  => DbLeagueConfigId
+  -> Eff es (Maybe LeagueScore)
+  ! intent: Score every team in a league across the league's configured scoring period
+  ! effects: LeagueConfig, LeagueTeam, LineupSlot, Games, BoxscoreEntry
+  ! returns Nothing if the league config row is absent
+  ! empty lineups produce zero-point TeamScores rather than being dropped
+  ! uses the team's CURRENT lineup_slot rows against historical boxscores — see openIssues
+
+scoreTeam
+  :: ( LeagueConfig  :> es
+     , LeagueTeam    :> es
+     , LineupSlot    :> es
+     , Games         :> es
+     , BoxscoreEntry :> es
+     )
+  => DbLeagueConfigId
+  -> DbLeagueTeamId
+  -> Eff es (Maybe TeamScore)
+  ! scores a single team using the league's period
+  ! returns Nothing if either the league config or the team is absent
+  ! does NOT validate that the team belongs to the league
+
+buildPlayerMaps
+  :: ( Games         :> es
+     , BoxscoreEntry :> es
+     )
+  => Day
+  -> Day
+  -> Eff es ( Map.Map DbPlayerId [BattingRow]
+            , Map.Map DbPlayerId [PitchingRow]
+            )
+  ! fetches all games in [startDay, endDay] then partitions batting and pitching rows by player
+  ! endpoints inclusive on both sides
+
+buildBattingMap
+  :: BoxscoreEntry :> es
+  => [DbGameId] -> Eff es (Map.Map DbPlayerId [BattingRow])
+  ! Map.insertWith (++) per row; per-player order within the resulting list is reverse insertion order
+
+buildPitchingMap
+  :: BoxscoreEntry :> es
+  => [DbGameId] -> Eff es (Map.Map DbPlayerId [PitchingRow])
+  ! mirror of buildBattingMap
+
+scoreOneTeam
+  :: LineupSlot :> es
+  => LeagueScoring
+  -> Map.Map DbPlayerId [BattingRow]
+  -> Map.Map DbPlayerId [PitchingRow]
+  -> DbLeagueTeamId
+  -> Eff es TeamScore
+  ! lineup → players → per-player scores → sum
+  ! uses LS.getSlotsForTeam (current lineup), not a historical snapshot
+
+lookupAndScore
+  :: LeagueScoring
+  -> Map.Map DbPlayerId [BattingRow]
+  -> Map.Map DbPlayerId [PitchingRow]
+  -> DbPlayerId
+  -> PlayerScore
+  ! Map.findWithDefault [] for both rows; a player on the lineup with no boxscore activity scores zero
+
+%decision PureKernelSplitFromEffects
+  what:    scorePlayerPure / sumBattingPoints / sumPitchingPoints / rowToBattingStats / rowToPitchingStats are pure and exported separately from the effectful scoreLeague / scoreTeam
+  why:     The pure kernel is the part hedgehog tests can hit without spinning up Postgres. Splitting them lets us unit-test 'given these rows, the score is X' without an in-memory effect runner — just a record literal and a function call. The pure functions deliberately take and return DB row types (BattingRow / PitchingRow), not domain types, because the round-trip BattingRow -> BattingStats -> Points loses no information; storing-then-loading and direct-scoring agree by construction.
+  affects: scorePlayerPure, sumBattingPoints, sumPitchingPoints, rowToBattingStats, rowToPitchingStats
+
+%decision MissingLeagueReturnsNothing
+  what:    scoreLeague and scoreTeam both return Maybe; Nothing means the league config (or the team) wasn't in the DB
+  why:     Distinguishes 'this league doesn't exist' from 'this league has zero teams' (Just LeagueScore { lscTeams = [] }). An empty lineup still produces a TeamScore with zero points — dropping such teams would be a presentation choice the caller should make. Doesn't validate that the team belongs to the league in scoreTeam — caller's responsibility to check.
+  affects: scoreLeague, scoreTeam
+
+%decision InningsPitchedRoundTripsViaText
+  what:    rowToPitchingStats reconstructs pitInningsPitched as Text via renderInningsPitched, even though the DB stores exact outs
+  why:     scorePitching's contract is 'consume PitchingStats whose pitInningsPitched is the wire-format string', and we honour that contract regardless of whether the input came from a live wire response or a DB round-trip. The round-trip parseInningsPitched . renderInningsPitched is exact for valid outs (precondition: the DB column is constrained to non-negative outs, which it is by virtue of the conversion at write time in Pelotero.Sync.Boxscores.inningsPitchedOuts). Pitting both pitInningsPitched and pitOuts means scorePitching has redundant inputs; today it prefers parseInningsPitched, but if a future caller sets pitOuts only, the round-trip would silently zero them out. Note for future refactor.
+  affects: rowToPitchingStats
+
+%decision PeriodFromUtcStartEnd
+  what:    scoreLeague derives lscPeriodStart / lscPeriodEnd by utctDay'ing lcScoringStart and lcScoringEnd from the league config
+  why:     league_config stores UTCTime instants because lineup-lock cutoffs are timezone-sensitive (see Pelotero.Domain.League decision ScoringPeriodAsUtcTime), but the DB game.game_date is Day, so the query needs Day bounds. Truncating UTCTime to Day in UTC is correct only because game_date is also stored in UTC at write time. A change to either column's timezone semantics would break this silently. The two utctDay calls happen once per scoreLeague invocation; not a perf concern.
+  affects: scoreLeague, scoreTeam
+
+%decision PerGamePerStatTypeReadsAreNplusM
+  what:    buildPlayerMaps issues one getBattingForGame and one getPitchingForGame per game in the period, then buckets by player
+  why:     Simple to reason about; each call is a single index hit on (game_id) and the result is a few dozen rows. For a one-week period across one league: ~100 games × 2 calls = 200 transactions. For a season: ~2400 games × 2 = 4800 transactions. Acceptable but not great. Replacement: a single SELECT joining game.game_date with game_player_batting / game_player_pitching, returning rows directly bucketed by player_id. Worth doing if scoring becomes a hot path.
+  affects: scoreLeague, buildPlayerMaps, buildBattingMap, buildPitchingMap
+
+
+=== BEGIN Pelotero/Sync/Boxscores.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Sync/Boxscores.hs
+%mod Pelotero.Sync.Boxscores
+
+%ext TypeOperators, FlexibleContexts
+
+%uses Control.Monad
+%uses qualified Crypto.Hash.SHA256 as SHA256
+%uses qualified Data.Aeson as Aeson
+%uses qualified Data.ByteString as BS
+%uses qualified Data.ByteString.Base16 as B16
+%uses Data.Int
+%uses qualified Data.Text as T
+%uses qualified Data.Text.Encoding as TE
+%uses Effectful
+%uses Pelotero.DB.BoxscoreEntry
+%uses Pelotero.DB.FetchLog
+%uses Pelotero.DB.Provider
+%uses Pelotero.Domain.Id
+%uses qualified Pelotero.Domain.Stats as DStats
+%uses qualified Pelotero.MLB.Convert as Convert
+%uses qualified Pelotero.MLB.Wire.Boxscore as WB
+%uses Pelotero.Effects.BoxscoreEntry
+%uses Pelotero.Effects.FetchLog
+%uses Pelotero.Effects.Games
+%uses Pelotero.Effects.MLBClient
+%uses Pelotero.Effects.Players
+%uses Pelotero.Effects.Teams
+
+data BoxscoreSyncResult = BoxscoreSyncResult
+  { boxGamesSeen        :: !Int
+  , boxGamesProcessed   :: !Int
+  , boxGamesSkipped     :: !Int
+  , boxBattingUpserted  :: !Int
+  , boxPitchingUpserted :: !Int
+  , boxErrors           :: ![BoxscoreSyncError]
+  , boxConvertWarnings  :: ![Convert.ConvertWarning]
+  }
+  deriving stock (Show, Eq)
+
+data BoxscoreSyncError
+  = -- | The 'GameId' wasn't in the local games table. Run schedule sync
+    --   first, then retry.
+    GameNotKnown !GameId
+  | -- | HTTP or transport failure from the 'MLBClient' effect.
+    FetchFailed  !GameId !String
+  | -- | Aeson decode failure on the raw bytes.
+    ParseFailed  !GameId !String
+  deriving stock (Show, Eq)
+
+syncBoxscores
+  :: ( BoxscoreEntry :> es
+     , Games         :> es
+     , Players       :> es
+     , Teams         :> es
+     , MLBClient     :> es
+     , FetchLog      :> es
+     )
+  => ProviderName
+  -> [GameId]
+  -> Eff es BoxscoreSyncResult
+  ! intent: Process a list of upstream GameIds: resolve each to DbGameId, fetch raw boxscore bytes, decode, convert, and upsert per-player batting and pitching rows
+  ! effects: BoxscoreEntry, Games, Players, Teams, MLBClient, FetchLog
+  ! iterates input order; no concurrency at this layer
+  ! accumulates per-game results into a BoxscoreSyncResult so partial failures don't abort the batch
+  ! boxConvertWarnings is concatenated across all successfully-processed games
+
+syncOne
+  :: ( BoxscoreEntry :> es
+     , Games         :> es
+     , Players       :> es
+     , Teams         :> es
+     , MLBClient     :> es
+     , FetchLog      :> es
+     )
+  => ProviderName
+  -> GameId
+  -> Eff es (Either BoxscoreSyncError (Int, Int, [Convert.ConvertWarning]))
+  ! GameNotKnown: lookupGameByExternalId returned Nothing; caller must run schedule sync first
+  ! FetchFailed: HTTP or transport-level failure from MLBClient
+  ! ParseFailed: Aeson decode failure on the raw bytes
+  ! writes FetchLog after a successful upsert pass, NOT before — a partial-write scenario doesn't get logged as a successful fetch
+
+upsertEntries
+  :: ( BoxscoreEntry :> es
+     , Players       :> es
+     , Teams         :> es
+     )
+  => ProviderName
+  -> DbGameId
+  -> [Convert.BoxscoreEntry]
+  -> Eff es (Int, Int)
+  ! fold over [BoxscoreEntry] producing (battingCount, pitchingCount)
+  ! missing player → skip entry (counts unchanged); missing team → degrade team_id to NULL
+  ! boxBatting Nothing → no batting row written; boxPitching Nothing → no pitching row written
+
+battingRowFor
+  :: DbGameId -> DbPlayerId -> Maybe DbTeamId -> DStats.BattingStats -> BattingRow
+  ! mechanical Maybe Int → Maybe Int32 widening for every stat field
+
+pitchingRowFor
+  :: DbGameId -> DbPlayerId -> Maybe DbTeamId -> DStats.PitchingStats -> PitchingRow
+  ! same as battingRowFor; innings pitched goes through inningsPitchedOuts
+
+inningsPitchedOuts :: DStats.PitchingStats -> Maybe Int32
+  ! prefers parsed pitInningsPitched over wire pitOuts when both present
+  ! falls back to pitOuts on parse failure or absent IP string
+  ! returns Nothing iff both are absent
+
+i32 :: Maybe Int -> Maybe Int32
+  ! fmap fromIntegral; Int → Int32 narrowing
+
+sha256Hex :: BS.ByteString -> T.Text
+  ! raw ByteString → hex-encoded Text via SHA-256
+
+%decision PerGameFetchLogEntry
+  what:    syncBoxscores writes one FetchLogRow per game (resource = 'boxscore', scope = the GameId as text), not one row per batch
+  why:     Catch-up runs ('which boxscores are new since last sync?') become a single getLastFetch query per gameId, which is the natural primitive for incremental work. A per-batch row would force the caller to remember which games it included, defeating the purpose of an external log. Cost: high write volume on a fresh-season backfill (~2400 rows for a full season). Acceptable; provider_fetch_log is append-only and not a query hot path.
+  affects: syncBoxscores, syncOne
+
+%decision MissingPlayerSilentSkip
+  what:    If lookupPlayerByExternalId returns Nothing for a boxscore entry's playerId, the entry is silently skipped (no upsert, no warning, no error)
+  why:     Real cause: roster sync hasn't run for that player yet (mid-season callup, traded mid-game). Re-running after the next roster sync recovers the data. Failing the whole game would lose 25 known-good batting lines because of one unknown player. Trade-off: silently skipping means no operator visibility. A future improvement would be to count skipped entries in BoxscoreSyncResult so the operator can detect when this is happening at scale.
+  affects: upsertEntries
+
+%decision MissingTeamSilentDegradation
+  what:    If a boxscore entry has a TeamId that isn't in the local DB, the team_id field is set to NULL rather than skipping the entry
+  why:     The batting/pitching row is still useful without team attribution (player's stats are intact); team is a join convenience. MLB occasionally ships parentTeamId values for teams that haven't been ingested (international roster expansions, mid-season ownership swaps). Symmetrical to player handling above but lossier — at least the player would re-sync; an unknown team_id never gets backfilled. Worth flagging if it becomes common.
+  affects: upsertEntries
+
+%decision InningsPitchedOutsConversionAtWriteTime
+  what:    inningsPitchedOuts prefers parseInningsPitched . pitInningsPitched over the wire's pitOuts field
+  why:     MLB's pitOuts and pitInningsPitched can disagree (rare; usually only during live-update windows). The IP string is the canonical source of truth. Falls back to pitOuts only if the IP string is absent or unparseable. Returns Nothing if both are absent — preserves the 'didn't pitch' signal rather than fabricating a 0.
+  affects: inningsPitchedOuts
+
+
 === BEGIN Pelotero/Sync/Players.hs ===
 
 %file /home/bismuth/git/pelotero-engine/lib/Pelotero/Sync/Players.hs
@@ -3794,31 +4118,38 @@ upsertAllPlayers
 %uses qualified Data.Text as T
 %uses Data.Time.Clock
 %uses Effectful
+%uses Pelotero.DB.FetchLog
 %uses Pelotero.DB.Game
 %uses Pelotero.DB.Provider
 %uses Pelotero.Domain.Game
 %uses Pelotero.Domain.Id
 %uses Pelotero.Effects.Clock
+%uses Pelotero.Effects.FetchLog
 %uses Pelotero.Effects.Games
 %uses Pelotero.Effects.Teams
 
 data ScheduleSyncResult = ScheduleSyncResult
   { schedGamesUpserted :: !Int
   , schedGamesSkipped  :: !Int
+  , schedFetchSha256   :: !T.Text
   }
   deriving stock (Show, Eq)
 
 syncSchedule
-  :: ( Games :> es
-     , Teams :> es
-     , Clock :> es
+  :: ( Games    :> es
+     , Teams    :> es
+     , FetchLog :> es
+     , Clock    :> es
      )
   => ProviderName
+  -> T.Text                  -- ^ scope (e.g. "2025-04-01..2025-04-07")
+  -> T.Text                  -- ^ SHA-256 of raw payload, computed by caller
   -> [Game]
   -> Eff es ScheduleSyncResult
   ! intent: Provider-agnostic upsert pipeline for already-converted [Game] domain values
-  ! effects: Games, Teams, Clock
-  ! no FetchLog write here; schedule sync is currently considered ephemeral fetch-log-wise (could be added if needed)
+  ! effects: Games, Teams, FetchLog, Clock
+  ! writes one fetch-log row per call with resource = 'schedule', scope supplied by caller (typically a date-range string like '2025-04-01..2025-04-07')
+  ! fetchLogRecordCount is the total games count, NOT just upserted games; matches the input list length so an operator can compare against schedGamesUpserted to detect skip-rate
   ! single Clock.now call shared across all game upserts in this run
   ! iteration order is the input list order; not stable across runs because the upstream wire conversion preserves API order
 
@@ -3841,4 +4172,9 @@ resolveTeam :: Teams :> es => ProviderName -> TeamId -> Eff es (Maybe DbTeamId)
   what:    syncSchedule resolves both away and home teams via lookupTeamByExternalId; if either is missing, the entire game is skipped and counted in schedGamesSkipped
   why:     The schedule endpoint can include teams that haven't been ingested yet (spring training affiliates, all-star game rosters, exhibition opponents). Inserting a game with a NULL or fabricated team_id violates the foreign-key contract and silently corrupts later joins. Skipping is recoverable: re-run after a roster sync and the game shows up. Failing the whole batch on one missing reference is not. The skip count is surfaced in ScheduleSyncResult so operators can detect when this is happening at scale.
   affects: syncSchedule, upsertOneGame
+
+%decision FetchLogResourceLiteralSchedule
+  what:    syncSchedule writes fetchLogResource = 'schedule' as a literal rather than parameterising it
+  why:     Mirrors the convention in Pelotero.Sync.Players where 'active-rosters' is the literal resource name. If a future scope adds e.g. minor-league schedule fetches, that becomes a new resource string, not a flag here.
+  affects: syncSchedule
 

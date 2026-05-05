@@ -1,4 +1,3 @@
--- lib/Pelotero/MLB/Convert.hs
 -- | Wire-to-domain conversion for MLB API responses.
 module Pelotero.MLB.Convert
   ( -- * Conversion
@@ -31,12 +30,7 @@ import Pelotero.Domain.Player
   , parseHandedness
   )
 import Pelotero.Domain.Position (Position, parsePosition)
-import Pelotero.Domain.Stats
-  ( BattingStats(..)
-  , PitchingStats(..)
-  , emptyBatting
-  , emptyPitching
-  )
+import Pelotero.Domain.Stats (BattingStats(..), PitchingStats(..))
 import qualified Pelotero.MLB.Wire.Boxscore as WB
 import qualified Pelotero.MLB.Wire.Player as WP
 import qualified Pelotero.MLB.Wire.Schedule as WS
@@ -181,15 +175,22 @@ parseDate t = parseTimeM True defaultTimeLocale "%Y-%-m-%-d" (T.unpack t)
 -- Boxscore
 
 -- | One entry per player appearance per side. The 'GameId' is supplied by
--- the caller — the wire format doesn't carry it, because by the time you
--- have a boxscore in hand you also have the game ID from the URL it was
--- fetched at.
+-- the caller; the wire format doesn't carry it because by the time you have
+-- a boxscore in hand you also have the game ID from the URL it was fetched
+-- at.
+--
+-- 'boxBatting' and 'boxPitching' are 'Maybe' to preserve the wire-level
+-- distinction between "this player batted" and "this player did not bat" /
+-- "this player pitched" and "this player did not pitch". A position player
+-- in an AL game has 'Nothing' for pitching; a relief pitcher who did not
+-- come to the plate has 'Nothing' for batting. The DB-write layer skips
+-- 'Nothing' rather than inserting an all-null row.
 data BoxscoreEntry = BoxscoreEntry
   { boxGameId   :: !GameId
   , boxPlayerId :: !PlayerId
   , boxTeamId   :: !(Maybe TeamId)
-  , boxBatting  :: !BattingStats
-  , boxPitching :: !PitchingStats
+  , boxBatting  :: !(Maybe BattingStats)
+  , boxPitching :: !(Maybe PitchingStats)
   }
   deriving stock (Show, Eq)
 
@@ -207,10 +208,8 @@ boxsideEntries gid side = map mkEntry (Map.elems (WB.wbtPlayers side))
       { boxGameId   = gid
       , boxPlayerId = PlayerId (WB.wbpPersonId (WB.wbpPerson wp))
       , boxTeamId   = TeamId <$> WB.wbpParentTeamId wp
-      , boxBatting  = maybe emptyBatting convertBatting
-                        (WB.wbsBatting =<< WB.wbpStats wp)
-      , boxPitching = maybe emptyPitching convertPitching
-                        (WB.wbsPitching =<< WB.wbpStats wp)
+      , boxBatting  = fmap convertBatting (WB.wbpStats wp >>= WB.wbsBatting)
+      , boxPitching = fmap convertPitching (WB.wbpStats wp >>= WB.wbsPitching)
       }
 
 convertBatting :: WB.WireBoxBatting -> BattingStats

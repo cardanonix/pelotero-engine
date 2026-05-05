@@ -68,8 +68,9 @@ wireToDomainTeam wt = DTeam.Team
   }
 
 data FetchedSchedule = FetchedSchedule
-  { fsGames    :: ![DGame.Game]
-  , fsWarnings :: ![Convert.ConvertWarning]
+  { fsGames      :: ![DGame.Game]
+  , fsWarnings   :: ![Convert.ConvertWarning]
+  , fsPayloadSha :: !T.Text
   }
 
 fetchSchedule :: String -> String -> IO (Either String FetchedSchedule)
@@ -77,14 +78,16 @@ fetchSchedule startDate endDate = do
   body <- fetchUrl (Urls.scheduleUrl startDate endDate)
   case body of
     Left err -> pure (Left err)
-    Right lb ->
-      case Aeson.eitherDecodeStrict (LBS.toStrict lb) of
+    Right lb -> do
+      let strict = LBS.toStrict lb
+      case Aeson.eitherDecodeStrict strict of
         Left err -> pure (Left ("Schedule parse failure: " <> err))
         Right env -> do
           let (warnings, schedule) = Convert.convertSchedule env
           pure $ Right FetchedSchedule
-            { fsGames    = DGame.unGameSchedule schedule
-            , fsWarnings = warnings
+            { fsGames      = DGame.unGameSchedule schedule
+            , fsWarnings   = warnings
+            , fsPayloadSha = computeSha strict
             }
 
 fetchBoxscoreRaw :: Int -> IO (Either String BS.ByteString)

@@ -8,6 +8,7 @@ import qualified Pelotero.Domain.ScoringSpec    as Scoring
 import qualified Pelotero.Domain.DraftSpec      as Draft
 import qualified Pelotero.MLB.ConvertSpec       as Convert
 import qualified Pelotero.Effects.PlayersSpec   as PlayersEff
+import qualified Pelotero.ScoreSpec             as Score
 
 main :: IO ()
 main = hspec $ do
@@ -17,3 +18,4 @@ main = hspec $ do
   Draft.spec
   Convert.spec
   PlayersEff.spec
+  Score.spec

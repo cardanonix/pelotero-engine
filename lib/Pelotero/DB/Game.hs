@@ -15,6 +15,7 @@ module Pelotero.DB.Game
   , updateGameT
   , getByIdT
   , getByDateT
+  , getByDateRangeT
   , linkExternalIdT
   , lookupByExternalIdT
   , getExternalIdT
@@ -23,6 +24,7 @@ module Pelotero.DB.Game
   , updateGame
   , getById
   , getByDate
+  , getByDateRange
   , linkExternalId
   , lookupByExternalId
   , getExternalId
@@ -42,6 +44,9 @@ import           Rel8                       ( Column
                                             , Result
                                             , TableSchema(..)
                                             , (==.)
+                                            , (<=.)
+                                            , (>=.)
+                                            , (&&.)
                                             )
 import qualified Rel8                       as R
 
@@ -184,6 +189,20 @@ getByDateT d = do
       pure g
   pure (map fromResult rows)
 
+-- | Inclusive on both ends. Use this when scoring a period rather than
+-- iterating 'getByDateT' day-by-day.
+getByDateRangeT :: Day -> Day -> Tx.Transaction [GameRow]
+getByDateRangeT startDay endDay = do
+  rows <- Tx.statement () $ R.run $ R.select $
+    R.orderBy ((_gameGameDate >$< R.asc) <> (_gameId >$< R.asc)) $ do
+      g <- R.each gameSchema
+      R.where_
+        ( _gameGameDate g >=. R.lit startDay
+       &&. _gameGameDate g <=. R.lit endDay
+        )
+      pure g
+  pure (map fromResult rows)
+
 linkExternalIdT :: DbGameId -> ProviderName -> Text -> Tx.Transaction ()
 linkExternalIdT gid provider extId = Tx.statement () $ R.run_ $ R.insert R.Insert
   { R.into       = gameExternalIdSchema
@@ -249,6 +268,9 @@ getById pool gid = runTransaction pool (getByIdT gid)
 
 getByDate :: Pool -> Day -> IO (Either DBError [GameRow])
 getByDate pool d = runTransaction pool (getByDateT d)
+
+getByDateRange :: Pool -> Day -> Day -> IO (Either DBError [GameRow])
+getByDateRange pool s e = runTransaction pool (getByDateRangeT s e)
 
 linkExternalId :: Pool -> DbGameId -> ProviderName -> Text -> IO (Either DBError ())
 linkExternalId pool gid provider extId =

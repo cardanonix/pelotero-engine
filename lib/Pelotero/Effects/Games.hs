@@ -12,6 +12,7 @@ module Pelotero.Effects.Games
   , getGameExternalId
   , getGameById
   , getGamesByDate
+  , getGamesByDateRange
   , runGamesDB
   , runGamesInMemory
   ) where
@@ -37,6 +38,7 @@ data Games :: Effect where
   GetGameExternalId      :: DbGameId -> ProviderName -> Games m (Maybe Text)
   GetGameById            :: DbGameId -> Games m (Maybe GameRow)
   GetGamesByDate         :: Day -> Games m [GameRow]
+  GetGamesByDateRange    :: Day -> Day -> Games m [GameRow]
 
 type instance DispatchOf Games = 'Dynamic
 
@@ -60,6 +62,10 @@ getGameById = send . GetGameById
 getGamesByDate :: Games E.:> es => Day -> E.Eff es [GameRow]
 getGamesByDate = send . GetGamesByDate
 
+-- | Inclusive on both ends.
+getGamesByDateRange :: Games E.:> es => Day -> Day -> E.Eff es [GameRow]
+getGamesByDateRange s e = send (GetGamesByDateRange s e)
+
 runGamesDB
   :: Database E.:> es
   => E.Eff (Games : es) a
@@ -75,6 +81,8 @@ runGamesDB = interpret_ $ \case
     runTx (GameRepo.getByIdT gid)
   GetGamesByDate day ->
     runTx (GameRepo.getByDateT day)
+  GetGamesByDateRange s e ->
+    runTx (GameRepo.getByDateRangeT s e)
 
 data GameStore = GameStore
   { gameExternalIdToDb :: !(Map.Map (ProviderName, Text) DbGameId)
@@ -111,6 +119,11 @@ runGamesInMemory action = do
         store <- E.liftIO (readIORef ref)
         pure [ r | r <- Map.elems (gameRowsByDb store)
                  , gameRowGameDate r == day ]
+      GetGamesByDateRange s e -> do
+        store <- E.liftIO (readIORef ref)
+        pure [ r | r <- Map.elems (gameRowsByDb store)
+                 , gameRowGameDate r >= s
+                 , gameRowGameDate r <= e ]
 
     upsertOp provider extId incoming store =
       case Map.lookup (provider, extId) (gameExternalIdToDb store) of

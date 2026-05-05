@@ -129,7 +129,7 @@ runMLBClientFixture fix = interpret_ $ \case
                 let wireTeams              = WT.wireTeams teamsEnv
                     (playerWarns, players) = Convert.convertPlayers playersEnv
                     domainTeams            = map wireToDomainTeam wireTeams
-                    sha = TE.decodeUtf8 (B16.encode (SHA256.hash (tb <> pb)))
+                    sha = sha256Hex (tb <> pb)
                 pure $ Right FetchedRosters
                   { frTeams      = domainTeams
                   , frPlayers    = players
@@ -149,8 +149,9 @@ runMLBClientFixture fix = interpret_ $ \case
           Right env -> do
             let (warnings, schedule) = Convert.convertSchedule env
             pure $ Right FetchedSchedule
-              { fsGames    = DGame.unGameSchedule schedule
-              , fsWarnings = warnings
+              { fsGames      = DGame.unGameSchedule schedule
+              , fsWarnings   = warnings
+              , fsPayloadSha = sha256Hex bs
               }
 
   FetchBoxscoreRaw gamePk -> E.liftIO $ do
@@ -164,6 +165,9 @@ runMLBClientFixture fix = interpret_ $ \case
       pure $ case r of
         Right bs              -> Right bs
         Left (e :: IOError)   -> Left ("fixture not found at " <> p <> ": " <> show e)
+
+    sha256Hex :: BS.ByteString -> T.Text
+    sha256Hex = TE.decodeUtf8 . B16.encode . SHA256.hash
 
     -- Same conversion as Pelotero.MLB.Fetch.wireToDomainTeam (which is
     -- private to that module). One-line translation; not worth a new export.
