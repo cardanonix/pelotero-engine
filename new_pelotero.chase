@@ -1,5 +1,5 @@
 %bundle chase v1
-%generated 2026-05-05T05:12:43Z
+%generated 2026-05-05T05:24:25Z
 %roots /home/bismuth/git/pelotero-engine/lib
 %files 51 ok, 0 failed
 
@@ -8,7 +8,8 @@
 # begins with === BEGIN <path> === on its own line. Blocks contain
 # the rendered .chase format: %file, %mod, %ext, %fixity, %uses,
 # %const, %topology, data decls, %pattern, type signatures with
-# attached invariants and consumers, %decision blocks, and parse
+# attached invariants and consumers, %decision blocks, %open_issue
+# blocks (known problems with blocking/affects targets), and parse
 # errors. Function bodies are deliberately omitted; the lines
 # beginning with ! after a signature are the behavioral facts you
 # would otherwise have to infer from reading the source.
@@ -1653,6 +1654,11 @@ extendRankingsWithUnranked
   what:    This module has DraftPick (a record of a made pick) but NO state machine for running a draft
   why:     A live draft needs database writes per pick (depending on the effects layer). Putting the state machine here would force this module to depend on the effects layer, which it currently doesn't. Phase 5 work; designed but not yet implemented.
   affects: 
+
+%open_issue CremDraftStateMachineNotImplemented
+  what:     The original refactor plan called for a crem state machine with WaitingToStart | Drafting | Complete states; the module has DraftPick records but no machine that transitions between states
+  why:      generateDraftOrder is the pure pre-computation; running an actual draft requires per-pick database writes (DraftPick effect), which means the state machine has to live somewhere with effect access — probably a new Pelotero.Draft module, not in Pelotero.Domain.Draft. This is the load-bearing replacement for the legacy (state, Maybe String) referential-equality detector in old_src/League/Draft.hs. Until this exists, AutoDraft.hs's behaviour cannot be ported; that executable depends on the state machine to run. crem is the natural fit (finite states, well-defined transitions, Generic-derivable singletons) and Cheeblr already uses it — same machinery, different domain.
+  blocking: app/auto-draft, app/draft-run
 
 
 === BEGIN Pelotero/Domain/Game.hs ===
@@ -3880,6 +3886,17 @@ lookupAndScore
   why:     Simple to reason about; each call is a single index hit on (game_id) and the result is a few dozen rows. For a one-week period across one league: ~100 games × 2 calls = 200 transactions. For a season: ~2400 games × 2 = 4800 transactions. Acceptable but not great. Replacement: a single SELECT joining game.game_date with game_player_batting / game_player_pitching, returning rows directly bucketed by player_id. Worth doing if scoring becomes a hot path.
   affects: scoreLeague, buildPlayerMaps, buildBattingMap, buildPitchingMap
 
+%open_issue CurrentLineupAgainstHistoricalBoxscores
+  what:     scoreLeague applies the team's CURRENT lineup_slot rows to every game in the scoring period, not the lineup that was active on the day each game was played
+  why:      Real fantasy leagues lock lineups daily — Tuesday's lineup scores Tuesday's games, Wednesday's lineup scores Wednesday's games. If an owner moves a player between lineup slots mid-period, every prior day's score retroactively changes when re-computed. Owners notice this and lose trust in the system. This is a correctness bug, not a missing feature. Fix requires either a lineup_slot_history table (every change recorded with timestamps) or per-game lineup snapshots written at game start.
+  blocking: any production use that retains scoring history across lineup edits
+  affects:  scoreLeague, scoreTeam, scoreOneTeam
+
+%open_issue NplusMQueriesAtScale
+  what:     buildPlayerMaps issues 2 transactions per game in the period
+  why:      Acceptable today (~200 transactions per weekly score for one league). At full season × multiple leagues this becomes a real cost. Replace with a JOIN-driven query when scoring becomes a hot path.
+  affects:  buildPlayerMaps, buildBattingMap, buildPitchingMap
+
 
 === BEGIN Pelotero/Sync/Boxscores.hs ===
 
@@ -4107,6 +4124,21 @@ upsertAllPlayers
   why:     The MLB roster endpoint queried (rosterUrl) filters to activeStatus=ACTIVE on the server side, so this resource name is the literal truth of what was fetched. If a future scope adds inactive/40-man/minor-league fetches, that becomes a new resource name passed in by the caller, not a flag here.
   affects: syncRosters
 
+%open_issue IdempotencyByChecksumNotWired
+  what:     syncRosters always upserts every team and player; it computes the payload SHA, writes it to provider_fetch_log, but never reads the prior value to skip
+  why:      The original refactor plan called for re-running sync to be a no-op when the upstream checksum hasn't changed. The shortcut is one getLastFetch call before doing work: if the previous fetch's payload_sha256 matches the new one, return early with zeros. Currently the cost is ~700 player upserts + 30 team upserts on every CLI invocation, even when nothing changed. Fix is small: getLastFetch provider 'active-rosters' scope; compare fetchLogPayloadSha256 to the inbound payloadSha; bail with SyncResult { syncTeamsUpserted = 0, syncPlayersUpserted = 0, syncFetchSha256 = payloadSha } if equal.
+  affects:  syncRosters
+
+%open_issue ExternalIdEncodingIsImplicitContract
+  what:     T.pack . show . unTeamId in upsertAllTeams must agree byte-for-byte with the same encoding in Pelotero.Sync.Schedule.resolveTeam, but the contract lives in source comments rather than the type system
+  why:      If anyone changes either encoding without changing the other, every game upsert silently skips because resolveTeam returns Nothing for every team. Same shape of bug as the legacy 'commissioner' vs 'comissioner' JSON-key bug: an implicit string contract crossing module boundaries. Fix: a single `externalIdFromTeamId :: TeamId -> Text` helper exported from a shared module (Pelotero.Domain.Id or a new Pelotero.Provider.ExternalId), used by both sites. Same problem applies to PlayerId (Sync.Players + Sync.Boxscores) and GameId (Sync.Schedule + Sync.Boxscores).
+  affects:  upsertAllTeams, upsertAllPlayers
+
+%open_issue HandednessCharRoundTripPartial
+  what:     handToChar = T.head . renderHandedness; T.head is partial
+  why:      renderHandedness today returns one of 'L' / 'R' / 'S', all length 1, so T.head never throws — the safety lives in the renderHandedness exhaustive sum, not in the type. If a future Handedness constructor renders to an empty Text or a multi-character string, this silently misbehaves (truncates) or throws. The DB column for bat_side / pitch_hand is Text, not CHAR(1) — there's no actual storage advantage to encoding as Char first. Fix: either store Text end-to-end (delete handToChar, change PlayerRow's batSide / pitchHand fields to Maybe Text), or expose a total handChar :: Handedness -> Char from Pelotero.Domain.Player so the Char path is type-safe.
+  affects:  upsertAllPlayers
+
 
 === BEGIN Pelotero/Sync/Schedule.hs ===
 
@@ -4177,4 +4209,14 @@ resolveTeam :: Teams :> es => ProviderName -> TeamId -> Eff es (Maybe DbTeamId)
   what:    syncSchedule writes fetchLogResource = 'schedule' as a literal rather than parameterising it
   why:     Mirrors the convention in Pelotero.Sync.Players where 'active-rosters' is the literal resource name. If a future scope adds e.g. minor-league schedule fetches, that becomes a new resource string, not a flag here.
   affects: syncSchedule
+
+%open_issue IdempotencyByChecksumNotWired
+  what:     syncSchedule always upserts every game even when the payload SHA matches the previous fetch
+  why:      Same gap as Pelotero.Sync.Players.IdempotencyByChecksumNotWired. Schedule sync is heavier than roster sync (more rows, more team-resolution work), so the win from short-circuiting is bigger. Fix: same shape — getLastFetch provider 'schedule' scope; compare SHAs; bail if equal.
+  affects:  syncSchedule
+
+%open_issue ExternalIdEncodingIsImplicitContract
+  what:     resolveTeam encodes TeamId as T.pack . show . unTeamId; must match upsertAllTeams in Pelotero.Sync.Players exactly
+  why:      See Pelotero.Sync.Players.ExternalIdEncodingIsImplicitContract — same gap, this is the consumer side. The source comment on resolveTeam already calls this out: 'the show-of-Int convention here MUST match upsertAllTeams in Pelotero.Sync.Players or every game gets skipped.' A comment in source isn't a contract; the type system is. Fix is a shared helper.
+  affects:  upsertOneGame, resolveTeam
 
