@@ -1,79 +1,276 @@
-The honest read: the old code is what happens when a project grows by accretion. The new code is a step in the right direction, but it's not consistent with the stack you're using on Cheeblr, and that's the single most important thing to fix before you write more.
+## Refactor plan 2.0
 
-## Major problems in the old code
+I'm collapsing the work into five phases ordered by "blocks future work" rather than by feature area. Each item is small enough to land in one or two sittings.
 
-1. **Type duplication is the central disease.** `BattingStats`/`PitchingStats` exist in `Input.hs`, `Stats.hs`, and `Input_trace.hs`, plus near-identical `BattingTotals`/`PitchingTotals` in `Leaderboard.hs`, plus the points-result variants in `Points.hs`. At least four places describe "what does a batter do in a game."
+### Phase A — Foundations
 
-2. **Data flows through a pipeline of slightly-different shapes.** `Input.Player` → `Middle.JsonPlayerData` → `Points.GmPoints`, each stage with its own JSON schema. The literal module name `Middle` is the smell — that's mutation that should be queries against a database.
+These all unblock other phases; do them first or you'll redo work.
 
-3. **9-field positional records (`cR/b1R/b2R/.../rpR`)** for both `Roster` and `CurrentLineup`. Every operation that touches a position is a 9-arm case expression. `Map Position [PlayerId]` collapses it all.
+**A.1 — `Pelotero.Provider.ExternalId` helper** (Issue 3)
 
-4. **`PlayerID` is inconsistent.** Newtype `Int` in `OfficialRoster`, `Text` in `Roster` fields (you serialize IDs as text in lineups!), bare `Text`/`Int` elsewhere. There's also a `PlayerIDstring` lurking. Pick one representation.
-
-5. **`{-# LANGUAGE GADTs #-}` enabled on every module that defines plain ADTs.** Nothing is actually using GADT features. That's a tell that pragma blocks were copy-pasted module-to-module.
-
-6. **`-Wno-deferred-out-of-scope-variables`** in multiple modules. That's the compiler telling you something is broken and you've muted it.
-
-7. **Each executable has its own `main` and there's no library.** Cabal rebuilds shared modules per-executable target. Move it all into a library; thin `app/*.hs` Mains only.
-
-8. **JSON files as the persistence layer.** `appData/rosters/*.json`, `appData/stats/*.json`, `appData/rankings/*.json`, draft results round-tripping back to JSON. You're using the filesystem as a poorly-typed K/V store. This is what you're refactoring away — good.
-
-9. **`Position` is `Text`** with informal codes ("1B"/"first"/"pitcher"). Three translation functions (`positionTextToOfficialCode`, `positionCodeToText`, `positionCodeToOfficialText`, `positionCodeToDraftText`) each do something subtly different. Sum type, parse-don't-validate at the boundary.
-
-10. **`Draft.draftCycle` returns `(state, Maybe String)` and detects failure with `newState == state`.** A state machine running on referential equality of records. Brittle. `Either DraftError DraftState`.
-
-11. **Errors are a mix of `Either String _` and `Either Text _`.** No typed error hierarchy.
-
-12. **No tests.** `Test.hs` reads two JSON files and prints them. That's not a test.
-
-
-**Target stack:**
-- `rel8` + `hasql` + `hasql-pool` + `hasql-migration`
-- `effectful` for the effect layer
-- `katip` with the broadcast-scribe pattern from Cheeblr
-- `aeson` only at the wire boundary
-- `crem` for the draft state machine (textbook use case — finite states, well-defined transitions)
-- `hedgehog` for property tests on point calc and draft invariants
-- `sops-nix` for DB credentials
-- Flake with a `default` dev shell and a minimal `.#ci` shell, mirroring Cheeblr
-
-**Phased plan:**
-
-**Phase 0 — Skeleton.** Library + `app/*.hs` mains. `flake.nix` with dev/CI shells. `sops-nix` for the DB password. Local dev DB launched from the flake.
-
-**Phase 1 — Single source of truth for domain types.**
-- `Pelotero.Domain.Player`, `.Team`, `.Position`, `.Stats` (one `Batting`, one `Pitching`, that's it)
-- `Position` is a sum type with `parsePositionCode` / `renderPositionCode`
-- Newtypes: `PlayerId`, `TeamId`, `GameId`, `SeasonYear`, all `Int` underneath
-- Wire types live in `Pelotero.MLB.Wire.*` and convert to domain at the boundary. Domain types never appear in `aeson` instances.
-
-**Phase 2 — Schema + rel8.**
-- Tables: `player`, `team`, `game`, `game_player_batting`, `game_player_pitching`, `league_config`, `league_team`, `roster_slot`, `lineup_slot`, `player_ranking`, `draft_pick`
-- `roster_slot` / `lineup_slot` shaped as `(team_id, position, player_id)` — kills the 9-field record problem at the storage layer
-- Migrations versioned in `db/migrations/*.sql`, applied at startup
-- rel8 schema definitions in `Pelotero.DB.Schema.*`. Write the SQL first; let the types follow the schema, not the other way around.
-
-**Phase 3 — Effects.**
-- `DB :: Effect` (`getPlayer`, `upsertPlayers`, `getRoster`, `recordDraftPick`, …)
-- `MLBClient :: Effect` (`fetchActiveRoster`, `fetchSchedule`, `fetchBoxscore`)
-- `Logging :: Effect` (Katip-backed)
-- `Time :: Effect` (so time-sensitive logic is testable)
-- Production interpreters real; test interpreters in-memory.
-
-**Phase 4 — Port the scraper.** `Scraper.hs` becomes `Pelotero.MLB.Sync` calling the `MLBClient` and `DB` effects. Drop filesystem writes entirely. Add idempotency: re-running `sync-rosters 2024` is a no-op when the upstream checksum hasn't changed (you've already got the checksum concept — actually use it).
-
-**Phase 5 — Port domain logic.**
-- `Pelotero.Points.Calculate` — `calcBattingPoints`/`calcPitchingPoints` are already mostly pure; port straight across with hedgehog tests.
-- `Pelotero.Draft` as a `crem` state machine. `States = WaitingToStart | Drafting | Complete`, transitions `StartDraft | PickPlayer | EndDraft`. The `(state, Maybe String)` pattern dies.
-- `Pelotero.Validators` — typed `ValidationError`, not `String`.
-
-**Phase 6 — Apps.**
+One module exporting:
 ```
-pelotero sync rosters --season 2024
-pelotero sync stats --from 2024-04-01 --to 2024-04-07
-pelotero league validate --league-id <id>
-pelotero draft run --league-id <id>
-pelotero h2h <team-a> <team-b> --from <date> --to <date>
+externalIdFromTeamId   :: TeamId   -> Text
+externalIdFromPlayerId :: PlayerId -> Text
+externalIdFromGameId   :: GameId   -> Text
+externalIdToTeamId     :: Text -> Maybe TeamId
+externalIdToPlayerId   :: Text -> Maybe PlayerId
+externalIdToGameId     :: Text -> Maybe GameId
 ```
 
-**Phase 7 — Delete.** Once each old executable has a replacement passing acceptance tests, delete `src/`, `src/ADT/`, `src/League/`, the `appData/` JSON files, and the old executables from the cabal file. Do not leave both halves around — that's how the current mess started.
+Replace every `T.pack . show . unTeamId` (and friends) with the helper. Sites: `Sync.Players.upsertAllTeams`, `Sync.Players.upsertAllPlayers`, `Sync.Schedule.upsertOneGame`, `Sync.Schedule.resolveTeam`, `Sync.Boxscores.syncOne`, `Sync.Boxscores.upsertEntries`. Add a Hedgehog roundtrip property: `externalIdToTeamId . externalIdFromTeamId === Just`.
+
+**A.2 — `Pelotero.Effects.Logging`** (Issue 6)
+
+Lift the Cheeblr Katip pattern: a `Logging` effect with `logFM`, `logItem`, `katipNamespace`, plus a broadcast scribe in production (stdout JSON + file rotating). Test interpreter is `runLoggingPure :: Eff (Logging : es) a -> Eff es (a, [LogLine])` collecting messages for assertion. Replace `Convert.logWarnings` (direct stderr IO) with `Logging.logFM`. The `logWarningsTo` Handle indirection becomes test-mode dead code; delete it.
+
+**A.3 — Typed `DBError` via `Error` co-effect** (Issue 7)
+
+Change `Database` effect's interpreter signature:
+```
+runDatabasePool
+  :: (IOE :> es, Error DBError :> es)
+  => Pool
+  -> Eff (Database : es) a
+  -> Eff es a
+```
+Delete `runOrThrow`. Callers that don't care about typed handling do `runError @DBError` at the top and either crash or log on `Left`. Callers that want to handle pool exhaustion specifically can pattern-match on `PoolUsageError`. Update every effect runner that consumes `Database` (Players, Teams, Games, BoxscoreEntry, FetchLog, LeagueConfig, LeagueTeam, RosterSlot, LineupSlot, PlayerRanking, DraftPick) to thread `Error DBError` through.
+
+**A.4 — Layering: pull JSON instances out of Domain** (Issue 12)
+
+Move `ToJSON`/`FromJSON` for `LeagueScoring`, `BattingMultipliers`, `PitchingMultipliers`, `RosterLimits`, `LineupLimits` out of `Pelotero.Domain.*`. Two reasonable shapes:
+
+Option a (my preference): create `Pelotero.DB.JsonB` with newtype wrappers:
+```
+newtype JsonbScoring = JsonbScoring LeagueScoring
+  deriving newtype (Show, Eq)
+  -- ToJSON/FromJSON instances live HERE
+```
+Use the wrapper type in `LeagueConfig`'s `Column f` declarations; unwrap at the API boundary. Domain types stay pure.
+
+Option b: an `Encoding` module that imports both Domain and Aeson. Less ideal because the orphan has to live somewhere and the wrapper version makes the layer explicit.
+
+**A.5 — `Pelotero.DB.Common.ProviderKeyed`** (Issue 9)
+
+Abstract the surrogate-id + external_id pattern over the row type. Sketch:
+
+```haskell
+class ProviderKeyed row where
+  type RowId row
+  type RowEntity row
+  rowSchema           :: TableSchema (RowEntity row Name)
+  externalIdSchema    :: TableSchema (ExternalIdE row Name)
+  rowIdColumn         :: RowEntity row Expr -> Expr (RowId row)
+  externalIdToRow     :: ExternalIdE row Expr -> Expr (RowId row)
+
+upsertByExternalIdT
+  :: ProviderKeyed row
+  => ProviderName -> Text -> row -> Tx.Transaction (RowId row)
+
+linkExternalIdT
+  :: ProviderKeyed row
+  => RowId row -> ProviderName -> Text -> Tx.Transaction ()
+
+lookupByExternalIdT
+  :: ProviderKeyed row
+  => ProviderName -> Text -> Tx.Transaction (Maybe (RowId row))
+
+getExternalIdT
+  :: ProviderKeyed row
+  => RowId row -> ProviderName -> Tx.Transaction (Maybe Text)
+```
+
+Then `Pelotero.DB.Player`, `.Team`, `.Game` each provide one `instance ProviderKeyed PlayerRow` (etc.) plus their entity-specific reads (`getActive`, `getByDate`, etc.). The boilerplate `linkExternalIdT/lookupByExternalIdT/getExternalIdT/upsertByExternalIdT` collapses to one definition. The test interpreters in `Effects.Players/Teams/Games` similarly collapse: they share a `ProviderKeyedStore row` shape and one `runProviderKeyedInMemory`.
+
+This is the only abstraction that's earned its keep at three callers. Don't generalize further (LeagueConfig and LeagueTeam don't have external ids, DraftPick is append-only) — they stay bespoke.
+
+**A.6 — Total `handChar`** (Issue 11)
+
+Add to `Pelotero.Domain.Player`:
+```
+handChar :: Handedness -> Char
+handChar = \case
+  LeftHanded  -> 'L'
+  RightHanded -> 'R'
+  Switch      -> 'S'
+```
+Replace `T.head . renderHandedness` in `Sync.Players.upsertAllPlayers` with `handChar`. No partiality, totality lives in the type.
+
+### Phase B — Correctness
+
+These fix actual wrong behaviour, not just structural smells. B.3 is the load-bearing one for the entire engine being usable.
+
+**B.1 — Canonical `pitOuts` in domain + discrepancy warnings** (Issue 10)
+
+Per the rework above:
+- `Pelotero.Domain.Stats.PitchingStats`: drop `pitInningsPitched`. Keep `pitOuts :: Maybe Int`.
+- `Pelotero.MLB.Convert`: in `convertPitching`, parse both wire fields, compare, emit `WireFieldDiscrepancy` if they disagree; output `pitOuts = parseInningsPitched ip <|> wbpOuts`.
+- `Pelotero.Domain.Scoring.scorePitching`: read `pitOuts` directly. Drop the `parseInningsPitched . pitInningsPitched` step.
+- `Pelotero.Score.rowToPitchingStats`: drop the `renderInningsPitched <$>` reconstruction. Just pass outs through.
+- DB schema: `_pInningsPitchedOuts :: Column f (Maybe Int32)` becomes the single source.
+
+This removes the round-trip-through-Text and the redundancy footgun.
+
+**B.2 — `order_index` column on `roster_slot` and `lineup_slot`** (Issue 13)
+
+New migration `V0030__order_index.sql`:
+```sql
+ALTER TABLE roster_slot ADD COLUMN order_index INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE lineup_slot ADD COLUMN order_index INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX roster_slot_order ON roster_slot(league_team_id, slot, order_index);
+CREATE INDEX lineup_slot_order ON lineup_slot(league_team_id, slot, order_index);
+```
+
+`RosterSlotRow` and `LineupSlotRow` get an `rsOrderIndex :: Int32` field. `addSlotT` sets it from a caller-supplied value or computes `MAX(order_index) + 1` within the slot. `getSlotsForTeamT` does `ORDER BY slot, order_index, player_id`. The Seq-based domain ordering now actually persists. Today no consumer cares about the order; tomorrow when batting orders matter, it's already there.
+
+**B.3 — `lineup_snapshot` table + per-game-start snapshot writes + scoring reads from snapshots** (Issue 1, the big one)
+
+Schema:
+```sql
+CREATE TABLE lineup_snapshot (
+  id              BIGSERIAL PRIMARY KEY,
+  league_team_id  BIGINT NOT NULL REFERENCES league_team(id),
+  game_id         BIGINT NOT NULL REFERENCES game(id),
+  slot            TEXT   NOT NULL,
+  player_id       BIGINT NOT NULL REFERENCES player(id),
+  order_index     INTEGER NOT NULL DEFAULT 0,
+  snapshotted_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (league_team_id, game_id, slot, player_id)
+);
+CREATE INDEX lineup_snapshot_game ON lineup_snapshot(game_id);
+CREATE INDEX lineup_snapshot_team_game ON lineup_snapshot(league_team_id, game_id);
+```
+
+New module `Pelotero.DB.LineupSnapshot` mirrors the LineupSlot shape. New effect `Pelotero.Effects.LineupSnapshot`. Snapshot-writing logic in a new `Pelotero.Lineup.Snapshot` module:
+
+```haskell
+snapshotLineupsForGame
+  :: ( LineupSlot     :> es
+     , LineupSnapshot :> es
+     , LeagueTeam     :> es
+     , Clock          :> es
+     , Logging        :> es
+     )
+  => DbGameId -> Eff es ()
+```
+
+Called from a CLI subcommand (`pelotero snapshot lineups --on-date 2025-04-15`) that runs on a cron schedule before the day's earliest game starts. For every active `league_team`, copy current `lineup_slot` rows into `lineup_snapshot` keyed by `(league_team_id, game_id)`. Idempotent: re-running before game start updates; re-running after silently skips per the unique constraint.
+
+`Pelotero.Score.scoreOneTeam` switches its source: instead of `LS.getSlotsForTeam`, use a new `LineupSnapshot.getSnapshotForTeamGame :: DbLeagueTeamId -> DbGameId -> Eff es [LineupSlotRow]`. The scoring loop is now per-game (which it should be anyway): for each game in the period, get the snapshot for this team for that game, score that game's stats against that snapshot, sum.
+
+This makes the score function correct even if owners shuffle lineups mid-period. Re-running scoring at any time gives the same answer. This is the precondition for everyone trusting the engine.
+
+Note: this depends on B.2 (order_index) only if you want batting-order positional scoring; for current scoring it's independent. Land B.2 first if you want to do them as one migration.
+
+### Phase C — Performance and operational hygiene
+
+**C.1 — Idempotency by checksum in syncRosters and syncSchedule** (Issue 4)
+
+Both `syncRosters` and `syncSchedule` get a guard at the top:
+
+```haskell
+syncRosters provider scope payloadSha teams players = do
+  prior <- getLastFetch provider "active-rosters" scope
+  case prior of
+    Just FetchLogRow { fetchLogPayloadSha256 = oldSha }
+      | oldSha == payloadSha -> do
+          logFM InfoS $ "rosters: payload unchanged, skipping; sha=" <> payloadSha
+          pure SyncResult { syncTeamsUpserted = 0, syncPlayersUpserted = 0
+                          , syncFetchSha256 = payloadSha }
+    _ -> do
+      ... existing path ...
+```
+
+Same shape for `syncSchedule` with `"schedule"` resource. Five lines each.
+
+**C.2 — Single-SELECT scoring** (Issue 8)
+
+Replace `Pelotero.Score.buildPlayerMaps` (currently `2 × n_games` transactions) with a single repository function in `Pelotero.DB.BoxscoreEntry`:
+
+```haskell
+getBattingForDateRangeT
+  :: Day -> Day -> Tx.Transaction (Map.Map DbPlayerId [BattingRow])
+getBattingForDateRangeT startDay endDay = do
+  rows <- select $ do
+    g <- each gameSchema
+    b <- each battingSchema
+    where_ $ _gameId g ==. _bGameId b
+        &&. _gameGameDate g >=. lit startDay
+        &&. _gameGameDate g <=. lit endDay
+    pure b
+  pure $ Map.fromListWith (++) [(battingPlayerId r, [r]) | r <- map fromBattingResult rows]
+```
+
+Mirror for pitching. `Pelotero.Effects.BoxscoreEntry` adds two operations; in-memory interpreter does a List filter+groupBy. `Score.buildPlayerMaps` becomes two effect calls instead of `2 * n` transactions. For a season-long period this is the difference between 4800 transactions and 2.
+
+### Phase D — Draft
+
+**D.1 — `Pelotero.Draft` with crem state machine** (Issue 5)
+
+New module, NOT in `Pelotero.Domain` (it has effect dependencies):
+
+```haskell
+-- States
+data DraftState
+  = WaitingToStart
+  | Drafting !DraftContext
+  | Complete !DraftSummary
+
+data DraftContext = DraftContext
+  { dcLeague        :: !DbLeagueConfigId
+  , dcOrder         :: ![(DbLeagueTeamId, DraftPickNumber)]
+  , dcRemaining     :: ![(DbLeagueTeamId, DraftPickNumber)]
+  , dcAvailable     :: !(Set DbPlayerId)
+  , dcPicksMade     :: !Int
+  }
+
+-- Commands and events; let crem derive the singletons via Generic
+data DraftCommand
+  = StartDraft DbLeagueConfigId
+  | MakePick   DbLeagueTeamId DbPlayerId
+  | AutoPick   DbLeagueTeamId
+  | EndDraft
+
+data DraftEvent
+  = DraftStarted DbLeagueConfigId [DbLeagueTeamId]
+  | PickRecorded DbLeagueTeamId DbPlayerId DraftPickNumber
+  | DraftCompleted DraftSummary
+```
+
+Use crem's `StateMachine` type to declare valid transitions. Effects: `LeagueConfig`, `LeagueTeam`, `PlayerRanking`, `DraftPick`, `Players`, `Logging`, `Clock`. `MakePick` consults the team's `PlayerRanking` to validate the pick is sane (not already drafted, on the available list, picker's turn). `AutoPick` chooses by `PlayerRanking` head, falling back to `extendRankingsWithUnranked`.
+
+The legacy `(state, Maybe String)` "did anything change" trick dies. crem's transition function returns `Either DraftError NewState`.
+
+**D.2 — Port AutoDraft as `pelotero draft run`**
+
+Once the state machine exists, a CLI app instantiates `WaitingToStart`, sends `StartDraft`, then loops `AutoPick` until `Complete`. Compare summary against legacy `AutoDraft.hs` output as an acceptance test.
+
+### Phase E — Apps and cleanup
+
+**E.1 — `app/*.hs` mains**
+
+```
+app/sync-rosters.hs       -> pelotero sync rosters --season 2025
+app/sync-schedule.hs      -> pelotero sync schedule --from 2025-04-01 --to 2025-04-07
+app/sync-boxscores.hs     -> pelotero sync boxscores --from 2025-04-01 --to 2025-04-07
+app/snapshot-lineups.hs   -> pelotero snapshot lineups --on-date 2025-04-15
+app/score.hs              -> pelotero score --league-id <id>
+app/draft-run.hs          -> pelotero draft run --league-id <id>
+app/league-validate.hs    -> pelotero league validate --league-id <id>
+```
+
+Library carries everything; app mains are thin parsers + effect runner stacks.
+
+**E.2 — Delete `old_src/`**
+
+Only after every executable above is passing acceptance tests against fixture data and at least one real-world boxscore comparison.
+
+
+## What I'd actually do this week
+
+1. Phase A.1 (external-id helper) and A.6 (handChar). Both small, both unblock everything else, both removable as open issues by EOD.
+2. Phase A.2 (Logging) and A.3 (typed DBError). They want to go together because the effect-runner stack changes.
+3. Phase B.1 (canonical pitOuts). Small but touches Score, Convert, Domain.Stats, DB.BoxscoreEntry. Do this before any other Score work.
+4. Phase B.3 (lineup snapshots). The big one. Land it and re-score a few weeks of historical data; verify the numbers don't drift on re-runs after lineup edits.
+
+After that the rest is mechanical. The plan above gets you to a state where your engine is correct, observable, idempotent, and ready to delete the old code.
