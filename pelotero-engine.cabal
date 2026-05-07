@@ -43,6 +43,8 @@ library
   exposed-modules:
     Pelotero.Prelude
     Pelotero.Score
+    -- Providers
+    Pelotero.Provider.ExternalId
     -- Domain
     Pelotero.Domain.Id
     Pelotero.Domain.Position
@@ -163,9 +165,11 @@ test-suite pelotero-test
     Pelotero.Domain.RosterSpec
     Pelotero.Domain.ScoringSpec
     Pelotero.Domain.DraftSpec
+    Pelotero.Domain.PlayerSpec
     Pelotero.MLB.ConvertSpec
     Pelotero.Effects.PlayersSpec
     Pelotero.ScoreSpec
+    Pelotero.Provider.ExternalIdSpec
   build-depends:    base
                   , pelotero-engine
                   , aeson

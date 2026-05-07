@@ -1,70 +1,49 @@
-{-# LANGUAGE TypeOperators     #-}
-{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE TypeOperators    #-}
+{-# LANGUAGE FlexibleContexts #-}
 
--- | Boxscore sync pipeline.
---
--- For each upstream 'GameId' the caller hands us:
---
---   1. Resolve the game to a 'DbGameId' via the 'Games' effect. If the
---      game isn't in the DB, skip it. The caller is expected to have run
---      schedule sync first.
---   2. Fetch the raw boxscore bytes via the 'MLBClient' effect.
---   3. Decode the bytes as 'WireBoxscore' and convert to per-player
---      'Convert.BoxscoreEntry' values.
---   4. For each entry, resolve the upstream 'PlayerId' to 'DbPlayerId' (skip
---      silently if the player isn't yet synced) and the upstream 'TeamId'
---      to 'DbTeamId' (degrade to 'NULL' on miss).
---   5. Upsert one batting row and/or one pitching row per entry, depending
---      on which sides of the wire stat block were present.
---   6. Record one fetch-log entry per game on success, with
---      @resource = "boxscore"@ and @scope = T.pack (show (unGameId gid))@.
---
--- Per-game logging means "have we synced this game?" reduces to a single
--- 'getLastFetch' lookup, which is the natural primitive for incremental
--- catch-up runs.
 module Pelotero.Sync.Boxscores
-  ( BoxscoreSyncResult(..)
-  , BoxscoreSyncError(..)
+  ( BoxscoreSyncResult (..)
+  , BoxscoreSyncError  (..)
   , syncBoxscores
   ) where
 
-import           Control.Monad        (foldM)
-import qualified Crypto.Hash.SHA256   as SHA256
-import qualified Data.Aeson           as Aeson
-import qualified Data.ByteString      as BS
-import qualified Data.ByteString.Base16 as B16
-import           Data.Int             (Int32)
-import qualified Data.Text            as T
-import qualified Data.Text.Encoding   as TE
+import           Control.Monad              (foldM)
+import qualified Crypto.Hash.SHA256         as SHA256
+import qualified Data.Aeson                 as Aeson
+import qualified Data.ByteString            as BS
+import qualified Data.ByteString.Base16     as B16
+import           Data.Int                   (Int32)
+import qualified Data.Text                  as T
+import qualified Data.Text.Encoding         as TE
 
-import Effectful (Eff, (:>))
+import           Effectful                  (Eff, (:>))
 
-import           Pelotero.DB.BoxscoreEntry (BattingRow(..), PitchingRow(..))
-import           Pelotero.DB.FetchLog      (FetchLogRow(..))
-import           Pelotero.DB.Provider      (ProviderName)
+import           Pelotero.DB.BoxscoreEntry  (BattingRow (..), PitchingRow (..))
+import           Pelotero.DB.FetchLog       (FetchLogRow (..))
+import           Pelotero.DB.Provider       (ProviderName)
 import           Pelotero.Domain.Id
-                   ( DbGameId
-                   , DbPlayerId
-                   , DbTeamId
-                   , GameId(..)
-                   , unGameId
-                   , unPlayerId
-                   , unTeamId
-                   )
-import qualified Pelotero.Domain.Stats     as DStats
-import qualified Pelotero.MLB.Convert      as Convert
-import qualified Pelotero.MLB.Wire.Boxscore as WB
+                     ( DbGameId
+                     , DbPlayerId
+                     , DbTeamId
+                     , GameId
+                     , unGameId
+                     )
+import qualified Pelotero.Domain.Stats      as DStats
+import qualified Pelotero.MLB.Convert       as Convert
 
-import Pelotero.Effects.BoxscoreEntry
-                   (BoxscoreEntry, upsertBatting, upsertPitching)
-import Pelotero.Effects.FetchLog       (FetchLog, recordFetch)
-import Pelotero.Effects.Games          (Games, lookupGameByExternalId)
-import Pelotero.Effects.MLBClient      (MLBClient, fetchBoxscoreRaw)
-import Pelotero.Effects.Players        (Players, lookupPlayerByExternalId)
-import Pelotero.Effects.Teams          (Teams, lookupTeamByExternalId)
+import           Pelotero.Effects.BoxscoreEntry
+                     (BoxscoreEntry, upsertBatting, upsertPitching)
+import           Pelotero.Effects.FetchLog  (FetchLog, recordFetch)
+import           Pelotero.Effects.Games     (Games, lookupGameByExternalId)
+import           Pelotero.Effects.MLBClient (MLBClient, fetchBoxscoreRaw)
+import           Pelotero.Effects.Players   (Players, lookupPlayerByExternalId)
+import           Pelotero.Effects.Teams     (Teams, lookupTeamByExternalId)
 
---------------------------------------------------------------------------------
--- Result types
+import           Pelotero.Provider.ExternalId
+                     ( externalIdFromGameId
+                     , externalIdFromPlayerId
+                     , externalIdFromTeamId
+                     )
 
 data BoxscoreSyncResult = BoxscoreSyncResult
   { boxGamesSeen        :: !Int
@@ -77,21 +56,15 @@ data BoxscoreSyncResult = BoxscoreSyncResult
   }
   deriving stock (Show, Eq)
 
--- | Per-game failure modes. We don't conflate them with successes: a single
--- game that 404s shouldn't kill the run, but the operator needs to know
--- which games failed and why.
 data BoxscoreSyncError
   = -- | The 'GameId' wasn't in the local games table. Run schedule sync
     --   first, then retry.
     GameNotKnown !GameId
-  | -- | HTTP or transport failure from the 'MLBClient' effect.
-    FetchFailed  !GameId !String
-  | -- | Aeson decode failure on the raw bytes.
-    ParseFailed  !GameId !String
+    -- | HTTP or transport failure from the 'MLBClient' effect.
+  | FetchFailed  !GameId !String
+    -- | Aeson decode failure on the raw bytes.
+  | ParseFailed  !GameId !String
   deriving stock (Show, Eq)
-
---------------------------------------------------------------------------------
--- Public entry point
 
 syncBoxscores
   :: ( BoxscoreEntry :> es
@@ -109,8 +82,8 @@ syncBoxscores provider gids = do
   let processed = length [() | Right _ <- outcomes]
       skipped   = length [() | Left  _ <- outcomes]
       errors    = [e | Left e <- outcomes]
-      bat       = sum [b | Right (b, _, _) <- outcomes]
-      pit       = sum [p | Right (_, p, _) <- outcomes]
+      bat       = sum    [b | Right (b, _, _) <- outcomes]
+      pit       = sum    [p | Right (_, p, _) <- outcomes]
       warns     = concat [w | Right (_, _, w) <- outcomes]
   pure BoxscoreSyncResult
     { boxGamesSeen        = length gids
@@ -121,9 +94,6 @@ syncBoxscores provider gids = do
     , boxErrors           = errors
     , boxConvertWarnings  = warns
     }
-
---------------------------------------------------------------------------------
--- Per-game
 
 syncOne
   :: ( BoxscoreEntry :> es
@@ -137,7 +107,7 @@ syncOne
   -> GameId
   -> Eff es (Either BoxscoreSyncError (Int, Int, [Convert.ConvertWarning]))
 syncOne provider gid = do
-  let extId = T.pack (show (unGameId gid))
+  let extId = externalIdFromGameId gid
   mDbGid <- lookupGameByExternalId provider extId
   case mDbGid of
     Nothing -> pure (Left (GameNotKnown gid))
@@ -174,7 +144,7 @@ upsertEntries
 upsertEntries provider dbGid = foldM step (0, 0)
   where
     step (b, p) entry = do
-      let pidExt = T.pack (show (unPlayerId (Convert.boxPlayerId entry)))
+      let pidExt = externalIdFromPlayerId (Convert.boxPlayerId entry)
       mPid <- lookupPlayerByExternalId provider pidExt
       case mPid of
         Nothing    -> pure (b, p)
@@ -182,8 +152,7 @@ upsertEntries provider dbGid = foldM step (0, 0)
           mTid <- case Convert.boxTeamId entry of
             Nothing  -> pure Nothing
             Just tid ->
-              lookupTeamByExternalId provider
-                (T.pack (show (unTeamId tid)))
+              lookupTeamByExternalId provider (externalIdFromTeamId tid)
           dB <- case Convert.boxBatting entry of
             Nothing -> pure 0
             Just bs -> do
@@ -196,44 +165,49 @@ upsertEntries provider dbGid = foldM step (0, 0)
               pure 1
           pure (b + dB, p + dP)
 
---------------------------------------------------------------------------------
--- Domain → Row builders
-
 battingRowFor
-  :: DbGameId -> DbPlayerId -> Maybe DbTeamId -> DStats.BattingStats -> BattingRow
+  :: DbGameId
+  -> DbPlayerId
+  -> Maybe DbTeamId
+  -> DStats.BattingStats
+  -> BattingRow
 battingRowFor gid pid mTid s = BattingRow
-  { battingGameId                 = gid
-  , battingPlayerId               = pid
-  , battingTeamId                 = mTid
-  , battingGamesPlayed            = i32 (DStats.batGamesPlayed s)
-  , battingPlateAppearances       = i32 (DStats.batPlateAppearances s)
-  , battingAtBats                 = i32 (DStats.batAtBats s)
-  , battingRuns                   = i32 (DStats.batRuns s)
-  , battingHits                   = i32 (DStats.batHits s)
-  , battingDoubles                = i32 (DStats.batDoubles s)
-  , battingTriples                = i32 (DStats.batTriples s)
-  , battingHomeRuns               = i32 (DStats.batHomeRuns s)
-  , battingRbi                    = i32 (DStats.batRbi s)
-  , battingBaseOnBalls            = i32 (DStats.batBaseOnBalls s)
-  , battingIntentionalWalks       = i32 (DStats.batIntentionalWalks s)
-  , battingStrikeOuts             = i32 (DStats.batStrikeOuts s)
-  , battingStolenBases            = i32 (DStats.batStolenBases s)
-  , battingCaughtStealing         = i32 (DStats.batCaughtStealing s)
-  , battingHitByPitch             = i32 (DStats.batHitByPitch s)
-  , battingSacBunts               = i32 (DStats.batSacBunts s)
-  , battingSacFlies               = i32 (DStats.batSacFlies s)
-  , battingGroundIntoDoublePlay   = i32 (DStats.batGroundIntoDoublePlay s)
-  , battingGroundIntoTriplePlay   = i32 (DStats.batGroundIntoTriplePlay s)
-  , battingLeftOnBase             = i32 (DStats.batLeftOnBase s)
-  , battingTotalBases             = i32 (DStats.batTotalBases s)
-  , battingFlyOuts                = i32 (DStats.batFlyOuts s)
-  , battingGroundOuts             = i32 (DStats.batGroundOuts s)
-  , battingCatchersInterference   = i32 (DStats.batCatchersInterference s)
-  , battingPickoffs               = i32 (DStats.batPickoffs s)
+  { battingGameId               = gid
+  , battingPlayerId             = pid
+  , battingTeamId               = mTid
+  , battingGamesPlayed          = i32 (DStats.batGamesPlayed s)
+  , battingPlateAppearances     = i32 (DStats.batPlateAppearances s)
+  , battingAtBats               = i32 (DStats.batAtBats s)
+  , battingRuns                 = i32 (DStats.batRuns s)
+  , battingHits                 = i32 (DStats.batHits s)
+  , battingDoubles              = i32 (DStats.batDoubles s)
+  , battingTriples              = i32 (DStats.batTriples s)
+  , battingHomeRuns             = i32 (DStats.batHomeRuns s)
+  , battingRbi                  = i32 (DStats.batRbi s)
+  , battingBaseOnBalls          = i32 (DStats.batBaseOnBalls s)
+  , battingIntentionalWalks     = i32 (DStats.batIntentionalWalks s)
+  , battingStrikeOuts           = i32 (DStats.batStrikeOuts s)
+  , battingStolenBases          = i32 (DStats.batStolenBases s)
+  , battingCaughtStealing       = i32 (DStats.batCaughtStealing s)
+  , battingHitByPitch           = i32 (DStats.batHitByPitch s)
+  , battingSacBunts             = i32 (DStats.batSacBunts s)
+  , battingSacFlies             = i32 (DStats.batSacFlies s)
+  , battingGroundIntoDoublePlay = i32 (DStats.batGroundIntoDoublePlay s)
+  , battingGroundIntoTriplePlay = i32 (DStats.batGroundIntoTriplePlay s)
+  , battingLeftOnBase           = i32 (DStats.batLeftOnBase s)
+  , battingTotalBases           = i32 (DStats.batTotalBases s)
+  , battingFlyOuts              = i32 (DStats.batFlyOuts s)
+  , battingGroundOuts           = i32 (DStats.batGroundOuts s)
+  , battingCatchersInterference = i32 (DStats.batCatchersInterference s)
+  , battingPickoffs             = i32 (DStats.batPickoffs s)
   }
 
 pitchingRowFor
-  :: DbGameId -> DbPlayerId -> Maybe DbTeamId -> DStats.PitchingStats -> PitchingRow
+  :: DbGameId
+  -> DbPlayerId
+  -> Maybe DbTeamId
+  -> DStats.PitchingStats
+  -> PitchingRow
 pitchingRowFor gid pid mTid s = PitchingRow
   { pitchingGameId                 = gid
   , pitchingPlayerId               = pid
@@ -282,9 +256,11 @@ pitchingRowFor gid pid mTid s = PitchingRow
   , pitchingPassedBall             = i32 (DStats.pitPassedBall s)
   }
 
--- | Prefer the parsed 'pitInningsPitched' string ("6.2" → 20 outs); fall
--- back to the wire's 'pitOuts' field if the IP string is missing or
--- malformed; 'Nothing' if both are absent.
+-- | Pre-Phase B.1 reconciliation: prefer the wire IP-string parse, fall
+-- back to wire @outs@. After Phase B.1 this whole helper goes away —
+-- @PitchingStats@ will carry only @pitOuts@ and the reconciliation
+-- (with a 'WireFieldDiscrepancy' warning on disagreement) will live in
+-- 'Pelotero.MLB.Convert.convertPitching'.
 inningsPitchedOuts :: DStats.PitchingStats -> Maybe Int32
 inningsPitchedOuts s =
   case DStats.pitInningsPitched s >>= DStats.parseInningsPitched of
@@ -293,9 +269,6 @@ inningsPitchedOuts s =
 
 i32 :: Maybe Int -> Maybe Int32
 i32 = fmap fromIntegral
-
---------------------------------------------------------------------------------
--- Hash
 
 sha256Hex :: BS.ByteString -> T.Text
 sha256Hex = TE.decodeUtf8 . B16.encode . SHA256.hash

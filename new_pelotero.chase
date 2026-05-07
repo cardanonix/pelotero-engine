@@ -1,7 +1,7 @@
 %bundle chase v1
-%generated 2026-05-07T15:28:44Z
+%generated 2026-05-07T16:07:41Z
 %roots /home/bismuth/git/pelotero-engine/lib
-%files 51 ok, 0 failed
+%files 52 ok, 0 failed
 
 # This file is a chase bundle: structural skeletons of multiple
 # Haskell and PureScript source files concatenated into one document.
@@ -1761,24 +1761,29 @@ renderLeagueStatus :: LeagueStatus -> Text
 %file /home/bismuth/git/pelotero-engine/lib/Pelotero/Domain/Player.hs
 %mod Pelotero.Domain.Player
 
+%ext LambdaCase, OverloadedStrings
+
 %uses Data.Text
 %uses Pelotero.Domain.Id
 %uses Pelotero.Domain.Position
 
 data Player = Player
-  { playerId        :: PlayerId
-  , playerFirstName :: Text       -- ^ MLB's "useName"
-  , playerLastName  :: Text       -- ^ MLB's "useLastName"
-  , playerNameSlug  :: Text       -- ^ URL-safe identifier
-  , playerTeamId    :: Maybe TeamId
-  , playerPosition  :: Maybe Position
-  , playerBatSide   :: Maybe Handedness
-  , playerPitchHand :: Maybe Handedness
-  , playerActive    :: Bool
+  { playerId        :: !PlayerId
+  , playerFirstName :: !Text       -- ^ MLB's "useName"
+  , playerLastName  :: !Text       -- ^ MLB's "useLastName"
+  , playerNameSlug  :: !Text       -- ^ URL-safe identifier
+  , playerTeamId    :: !(Maybe TeamId)
+  , playerPosition  :: !(Maybe Position)
+  , playerBatSide   :: !(Maybe Handedness)
+  , playerPitchHand :: !(Maybe Handedness)
+  , playerActive    :: !Bool
   }
   deriving stock (Show, Eq)
 
-data Handedness = LeftHanded | RightHanded | Switch
+data Handedness
+  = LeftHanded
+  | RightHanded
+  | Switch
   deriving stock (Show, Eq, Ord, Enum, Bounded)
 
 parseHandedness :: Text -> Maybe Handedness
@@ -1788,6 +1793,10 @@ parseHandedness :: Text -> Maybe Handedness
 renderHandedness :: Handedness -> Text
   ! exhaustive: LeftHanded -> 'L', RightHanded -> 'R', Switch -> 'S'
   ! kept for symmetry with parseHandedness; sync code now uses handChar instead
+
+handChar :: Handedness -> Char
+  ! exhaustive case-of: LeftHanded -> 'L', RightHanded -> 'R', Switch -> 'S'
+  ! total; consumed by Pelotero.Sync.Players.upsertAllPlayers (replacing T.head . renderHandedness)
 
 %decision TotalHandChar
   what:    handChar :: Handedness -> Char is exhaustive case-of, total at the type level
@@ -3624,6 +3633,53 @@ appVersion :: Text
   affects: appVersion
 
 
+=== BEGIN Pelotero/Provider/ExternalId.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Provider/ExternalId.hs
+%mod Pelotero.Provider.ExternalId
+
+%ext OverloadedStrings
+
+%uses Data.Text
+%uses qualified Data.Text as T
+%uses qualified Data.Text.Read as TR
+%uses Pelotero.Domain.Id
+
+externalIdFromTeamId :: TeamId -> Text
+  ! TeamId -> Text via T.pack . show . unTeamId
+  ! stable byte-for-byte: this is the canonical wire encoding stored in team_external_id.external_id
+
+externalIdFromPlayerId :: PlayerId -> Text
+  ! PlayerId -> Text via T.pack . show . unPlayerId
+  ! consumed by Sync.Players.upsertAllPlayers and Sync.Boxscores.upsertEntries (forward) and Sync.Boxscores.syncOne (reverse via the roundtrip)
+
+externalIdFromGameId :: GameId -> Text
+  ! GameId -> Text via T.pack . show . unGameId
+  ! consumed by Sync.Schedule.upsertOneGame and Sync.Boxscores.syncOne
+
+externalIdToTeamId :: Text -> Maybe TeamId
+  ! Text -> Maybe TeamId; reads via Text.Read.readMaybe and wraps in TeamId
+  ! returns Nothing on any non-integer or negative value; an empty Text returns Nothing
+
+externalIdToPlayerId :: Text -> Maybe PlayerId
+  ! mirror of externalIdToTeamId
+
+externalIdToGameId :: Text -> Maybe GameId
+  ! mirror of externalIdToTeamId
+
+parseIntStrict :: Text -> Maybe Int
+
+%decision SingleHelperEliminatesImplicitContract
+  what:    All upstream-id <-> external_id Text encodings live in this one module; every site that crosses that boundary calls a typed helper rather than rolling its own T.pack . show
+  why:     The legacy pattern (T.pack . show . unTeamId scattered across Sync.Players, Sync.Schedule, Sync.Boxscores) was an implicit string contract; if anyone changed one site without changing the others, every game upsert silently skipped because resolveTeam returned Nothing for every team. Centralising the encoding makes the contract a function call: changing the encoding requires editing one module, and the type system enforces that callers go through the helper. The roundtrip property (externalIdToTeamId . externalIdFromTeamId === Just) is checked by Hedgehog so encoding drift between forward and reverse paths is caught at test time.
+  affects: externalIdFromTeamId, externalIdFromPlayerId, externalIdFromGameId, externalIdToTeamId, externalIdToPlayerId, externalIdToGameId
+
+%decision PerIdTypePairsNotPolymorphic
+  what:    Six concrete functions (one from + one to per id type) rather than a single class-based polymorphic encoder
+  why:     Three id types is below the threshold where typeclass machinery earns its keep; six monomorphic helpers are easier to grep, easier to test, and easier to read at call sites. If a fourth id type appears (e.g. ProviderInternal player ids using a different scheme), this is the place to revisit; until then, monomorphic wins.
+  affects: 
+
+
 === BEGIN Pelotero/Score.hs ===
 
 %file /home/bismuth/git/pelotero-engine/lib/Pelotero/Score.hs
@@ -3825,13 +3881,13 @@ lookupAndScore
 %uses Pelotero.Domain.Id
 %uses qualified Pelotero.Domain.Stats as DStats
 %uses qualified Pelotero.MLB.Convert as Convert
-%uses qualified Pelotero.MLB.Wire.Boxscore as WB
 %uses Pelotero.Effects.BoxscoreEntry
 %uses Pelotero.Effects.FetchLog
 %uses Pelotero.Effects.Games
 %uses Pelotero.Effects.MLBClient
 %uses Pelotero.Effects.Players
 %uses Pelotero.Effects.Teams
+%uses Pelotero.Provider.ExternalId
 
 data BoxscoreSyncResult = BoxscoreSyncResult
   { boxGamesSeen        :: !Int
@@ -3848,10 +3904,10 @@ data BoxscoreSyncError
   = -- | The 'GameId' wasn't in the local games table. Run schedule sync
     --   first, then retry.
     GameNotKnown !GameId
-  | -- | HTTP or transport failure from the 'MLBClient' effect.
-    FetchFailed  !GameId !String
-  | -- | Aeson decode failure on the raw bytes.
-    ParseFailed  !GameId !String
+    -- | HTTP or transport failure from the 'MLBClient' effect.
+  | FetchFailed  !GameId !String
+    -- | Aeson decode failure on the raw bytes.
+  | ParseFailed  !GameId !String
   deriving stock (Show, Eq)
 
 syncBoxscores
@@ -3901,11 +3957,19 @@ upsertEntries
   ! boxBatting Nothing → no batting row written; boxPitching Nothing → no pitching row written
 
 battingRowFor
-  :: DbGameId -> DbPlayerId -> Maybe DbTeamId -> DStats.BattingStats -> BattingRow
+  :: DbGameId
+  -> DbPlayerId
+  -> Maybe DbTeamId
+  -> DStats.BattingStats
+  -> BattingRow
   ! mechanical Maybe Int → Maybe Int32 widening for every stat field
 
 pitchingRowFor
-  :: DbGameId -> DbPlayerId -> Maybe DbTeamId -> DStats.PitchingStats -> PitchingRow
+  :: DbGameId
+  -> DbPlayerId
+  -> Maybe DbTeamId
+  -> DStats.PitchingStats
+  -> PitchingRow
   ! same as battingRowFor; pitOuts is passed straight through (no IP string reconciliation here post Phase B.1)
 
 inningsPitchedOuts :: DStats.PitchingStats -> Maybe Int32
@@ -3965,6 +4029,7 @@ sha256Hex :: BS.ByteString -> T.Text
 %uses Pelotero.Effects.FetchLog
 %uses Pelotero.Effects.Players
 %uses Pelotero.Effects.Teams
+%uses Pelotero.Provider.ExternalId
 
 data SyncResult = SyncResult
   { syncTeamsUpserted   :: !Int
@@ -3980,10 +4045,10 @@ syncRosters
      , Clock    :> es
      )
   => ProviderName
-  -> T.Text              -- ^ scope (e.g. "2025" for season)
-  -> T.Text              -- ^ SHA-256 of raw payload, computed by caller
-  -> [DTeam.Team]        -- ^ teams, already converted from wire format
-  -> [DPlayer.Player]    -- ^ players, already converted from wire format
+  -> T.Text             -- ^ scope (e.g. season as text)
+  -> T.Text             -- ^ SHA-256 of raw payload, computed by caller
+  -> [DTeam.Team]
+  -> [DPlayer.Player]
   -> Eff es SyncResult
   ! intent: Provider-agnostic upsert pipeline: idempotency check, teams, then players, then fetch-log entry, returning a small summary
   ! effects: Players, Teams, FetchLog, Clock, Logging
@@ -4067,6 +4132,7 @@ upsertAllPlayers
 %uses Pelotero.Effects.FetchLog
 %uses Pelotero.Effects.Games
 %uses Pelotero.Effects.Teams
+%uses Pelotero.Provider.ExternalId
 
 data ScheduleSyncResult = ScheduleSyncResult
   { schedGamesUpserted :: !Int
@@ -4082,8 +4148,8 @@ syncSchedule
      , Clock    :> es
      )
   => ProviderName
-  -> T.Text                  -- ^ scope (e.g. "2025-04-01..2025-04-07")
-  -> T.Text                  -- ^ SHA-256 of raw payload, computed by caller
+  -> T.Text                 -- ^ scope (e.g. "2025-04-01..2025-04-07")
+  -> T.Text                 -- ^ SHA-256 of raw payload, computed by caller
   -> [Game]
   -> Eff es ScheduleSyncResult
   ! intent: Provider-agnostic upsert pipeline for already-converted [Game] domain values, with idempotency short-circuit
@@ -4104,7 +4170,11 @@ upsertOneGame
   ! extId = externalIdFromGameId game (post Phase A.1)
   ! discards the DbGameId returned by upsertGameByExternalId; downstream boxscore upserts re-resolve via lookupGameByExternalId at scoring time
 
-resolveTeam :: Teams :> es => ProviderName -> TeamId -> Eff es (Maybe DbTeamId)
+resolveTeam
+  :: Teams :> es
+  => ProviderName
+  -> TeamId
+  -> Eff es (Maybe DbTeamId)
   ! wraps lookupTeamByExternalId, calling externalIdFromTeamId for the encoding
   ! the encoding is now type-checked at compile time via the Provider.ExternalId helper, not asserted via source comments
 

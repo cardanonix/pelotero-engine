@@ -1,38 +1,31 @@
-{-# LANGUAGE TypeOperators     #-}
-{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE TypeOperators    #-}
+{-# LANGUAGE FlexibleContexts #-}
 
--- | Schedule sync pipeline, provider-agnostic.
---
--- Takes already-converted domain 'Game' values plus the payload SHA-256
--- computed by the caller, and upserts them. Team references are resolved
--- to DB surrogate keys via the Teams effect; games referencing unknown
--- teams are skipped (and counted as such in the result).
---
--- Writes one fetch-log entry per call so "have we synced this date range"
--- is queryable without inspecting game rows.
 module Pelotero.Sync.Schedule
-  ( ScheduleSyncResult(..)
+  ( ScheduleSyncResult (..)
   , syncSchedule
   ) where
 
-import qualified Data.Text       as T
-import Data.Time.Clock           (UTCTime)
+import qualified Data.Text                 as T
+import           Data.Time.Clock           (UTCTime)
 
-import Effectful (Eff, (:>))
+import           Effectful                 (Eff, (:>))
 
-import Pelotero.DB.FetchLog      (FetchLogRow(..))
-import Pelotero.DB.Game          (GameRow(..))
-import Pelotero.DB.Provider      (ProviderName)
-import Pelotero.Domain.Game      (Game(..))
-import Pelotero.Domain.Id        (DbTeamId, TeamId(..), unGameId)
+import           Pelotero.DB.FetchLog      (FetchLogRow (..))
+import           Pelotero.DB.Game          (GameRow (..))
+import           Pelotero.DB.Provider      (ProviderName)
+import           Pelotero.Domain.Game      (Game (..))
+import           Pelotero.Domain.Id        (DbTeamId, TeamId)
 
-import Pelotero.Effects.Clock    (Clock, now)
-import Pelotero.Effects.FetchLog (FetchLog, recordFetch)
-import Pelotero.Effects.Games    (Games, upsertGameByExternalId)
-import Pelotero.Effects.Teams    (Teams, lookupTeamByExternalId)
+import           Pelotero.Effects.Clock    (Clock, now)
+import           Pelotero.Effects.FetchLog (FetchLog, recordFetch)
+import           Pelotero.Effects.Games    (Games, upsertGameByExternalId)
+import           Pelotero.Effects.Teams    (Teams, lookupTeamByExternalId)
 
---------------------------------------------------------------------------------
--- Result type
+import           Pelotero.Provider.ExternalId
+                     ( externalIdFromGameId
+                     , externalIdFromTeamId
+                     )
 
 data ScheduleSyncResult = ScheduleSyncResult
   { schedGamesUpserted :: !Int
@@ -41,9 +34,6 @@ data ScheduleSyncResult = ScheduleSyncResult
   }
   deriving stock (Show, Eq)
 
---------------------------------------------------------------------------------
--- Public entry point
-
 syncSchedule
   :: ( Games    :> es
      , Teams    :> es
@@ -51,8 +41,8 @@ syncSchedule
      , Clock    :> es
      )
   => ProviderName
-  -> T.Text                  -- ^ scope (e.g. "2025-04-01..2025-04-07")
-  -> T.Text                  -- ^ SHA-256 of raw payload, computed by caller
+  -> T.Text                 -- ^ scope (e.g. "2025-04-01..2025-04-07")
+  -> T.Text                 -- ^ SHA-256 of raw payload, computed by caller
   -> [Game]
   -> Eff es ScheduleSyncResult
 syncSchedule provider scope payloadSha games = do
@@ -78,9 +68,8 @@ syncSchedule provider scope payloadSha games = do
     , schedFetchSha256   = payloadSha
     }
 
---------------------------------------------------------------------------------
--- Helpers
-
+-- | Upsert a single 'Game'; returns 'False' (counted as skipped) if
+-- either side's team has not been ingested yet.
 upsertOneGame
   :: (Games :> es, Teams :> es)
   => ProviderName
@@ -92,7 +81,7 @@ upsertOneGame provider syncedAt game = do
   mHome <- resolveTeam provider (gameHomeTeam game)
   case (mAway, mHome) of
     (Just dbAway, Just dbHome) -> do
-      let extId = T.pack (show (unGameId (gameId game)))
+      let extId = externalIdFromGameId (gameId game)
           row   = GameRow
             { gameRowId                 = Nothing
             , gameRowGameDate           = gameDate game
@@ -105,6 +94,10 @@ upsertOneGame provider syncedAt game = do
       pure True
     _ -> pure False
 
-resolveTeam :: Teams :> es => ProviderName -> TeamId -> Eff es (Maybe DbTeamId)
-resolveTeam provider (TeamId mlbId) =
-  lookupTeamByExternalId provider (T.pack (show mlbId))
+resolveTeam
+  :: Teams :> es
+  => ProviderName
+  -> TeamId
+  -> Eff es (Maybe DbTeamId)
+resolveTeam provider tid =
+  lookupTeamByExternalId provider (externalIdFromTeamId tid)

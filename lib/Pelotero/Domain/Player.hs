@@ -1,40 +1,46 @@
--- | Domain representation of an MLB player. Kept separate from the wire
--- shape ("Pelotero.MLB.Wire.Player") so the domain can evolve independently
--- and the wire layer stays free of business logic.
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
+
+-- | The domain 'Player' record and its 'Handedness' sum.
+--
+-- @parseHandedness@ accepts only @\"L\"@, @\"R\"@, @\"S\"@. @renderHandedness@
+-- inverts that for human-facing display. @handCharййй@ is the total 'Char'
+-- projection used everywhere persistence needs a single character (the DB
+-- bat_side / pitch_hand columns store @TEXT@ but only ever a one-character
+-- value; see @decision BatHandStoredAsText@ in @Pelotero.DB.Player@).
 module Pelotero.Domain.Player
-  ( Player(..)
-  , Handedness(..)
+  ( Player (..)
+  , Handedness (..)
   , parseHandedness
   , renderHandedness
+  , handChar
   ) where
 
-import Data.Text (Text)
+import           Data.Text             (Text)
 
-import Pelotero.Domain.Id (PlayerId, TeamId)
-import Pelotero.Domain.Position (Position)
+import           Pelotero.Domain.Id    (PlayerId, TeamId)
+import           Pelotero.Domain.Position (Position)
 
--- | A roster entry. Stable identity (PlayerId), denormalised display name,
--- current MLB team, primary position, and handedness for batting and
--- pitching. Active flag from upstream — keep it; we filter on it elsewhere.
 data Player = Player
-  { playerId        :: PlayerId
-  , playerFirstName :: Text       -- ^ MLB's "useName"
-  , playerLastName  :: Text       -- ^ MLB's "useLastName"
-  , playerNameSlug  :: Text       -- ^ URL-safe identifier
-  , playerTeamId    :: Maybe TeamId
-  , playerPosition  :: Maybe Position
-  , playerBatSide   :: Maybe Handedness
-  , playerPitchHand :: Maybe Handedness
-  , playerActive    :: Bool
+  { playerId        :: !PlayerId
+  , playerFirstName :: !Text       -- ^ MLB's "useName"
+  , playerLastName  :: !Text       -- ^ MLB's "useLastName"
+  , playerNameSlug  :: !Text       -- ^ URL-safe identifier
+  , playerTeamId    :: !(Maybe TeamId)
+  , playerPosition  :: !(Maybe Position)
+  , playerBatSide   :: !(Maybe Handedness)
+  , playerPitchHand :: !(Maybe Handedness)
+  , playerActive    :: !Bool
   }
   deriving stock (Show, Eq)
 
--- | Batter or pitcher hand. MLB also reports "S" for switch-hitters.
-data Handedness = LeftHanded | RightHanded | Switch
+data Handedness
+  = LeftHanded
+  | RightHanded
+  | Switch
   deriving stock (Show, Eq, Ord, Enum, Bounded)
 
--- | Parse from MLB's single-letter code. "L"/"R"/"S" are well-formed;
--- anything else returns Nothing.
+-- | Parse the wire-format single-character handedness code.
 parseHandedness :: Text -> Maybe Handedness
 parseHandedness = \case
   "L" -> Just LeftHanded
@@ -42,8 +48,20 @@ parseHandedness = \case
   "S" -> Just Switch
   _   -> Nothing
 
+-- | Render handedness back to the canonical wire form.
 renderHandedness :: Handedness -> Text
 renderHandedness = \case
   LeftHanded  -> "L"
   RightHanded -> "R"
   Switch      -> "S"
+
+-- | Total 'Char' projection of 'Handedness'.
+--
+-- Replaces the partial @T.head . renderHandedness@ idiom in sync code.
+-- Adding a new 'Handedness' constructor without updating this function is
+-- a @-Wincomplete-patterns@ error.
+handChar :: Handedness -> Char
+handChar = \case
+  LeftHanded  -> 'L'
+  RightHanded -> 'R'
+  Switch      -> 'S'
