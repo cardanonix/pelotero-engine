@@ -11,24 +11,26 @@ import qualified Pelotero.Effects.PlayersSpec     as PlayersEff
 import qualified Pelotero.MLB.ConvertSpec         as Convert
 import qualified Pelotero.Provider.ExternalIdSpec as ExternalId
 import qualified Pelotero.ScoreSpec               as Score
+import qualified Pelotero.Sync.BoxscoresSpec      as SyncBoxscores
+import qualified Pelotero.Sync.PlayersSpec        as SyncPlayers
+import qualified Pelotero.Sync.ScheduleSpec       as SyncSchedule
 
 main :: IO ()
 main = hspec $ do
-  -- Domain
   Position.spec
   Roster.spec
   Scoring.spec
   Draft.spec
   DomainPlayer.spec
 
-  -- Provider
   ExternalId.spec
 
-  -- Boundary
   Convert.spec
 
-  -- Effects
   PlayersEff.spec
 
-  -- Higher-level
   Score.spec
+
+  SyncPlayers.spec
+  SyncSchedule.spec
+  SyncBoxscores.spec

@@ -1,5 +1,5 @@
 %bundle chase v1
-%generated 2026-05-08T12:17:45Z
+%generated 2026-05-08T13:28:08Z
 %roots /home/bismuth/git/pelotero-engine/lib
 %files 57 ok, 0 failed
 
@@ -2426,23 +2426,23 @@ data Team = Team
 %file /home/bismuth/git/pelotero-engine/lib/Pelotero/Effects/BoxscoreEntry.hs
 %mod Pelotero.Effects.BoxscoreEntry
 
-%ext TypeFamilies, DataKinds, TypeOperators, FlexibleContexts, GADTs, LambdaCase
+%ext DataKinds, FlexibleContexts, GADTs, LambdaCase, TypeFamilies, TypeOperators
 
 %uses Effectful
 %uses qualified Effectful as E
 %uses Effectful.Dispatch.Dynamic
-%uses qualified Pelotero.DB.BoxscoreEntry as BoxRepo
 %uses Pelotero.DB.BoxscoreEntry
+%uses qualified Pelotero.DB.BoxscoreEntry as BoxRepo
 %uses Pelotero.Domain.Id
 %uses Pelotero.Effects.Database
 
 data BoxscoreEntry :: Effect where
-  UpsertBatting          :: BattingRow  -> BoxscoreEntry m ()
-  UpsertPitching         :: PitchingRow -> BoxscoreEntry m ()
-  GetBattingForGame      :: DbGameId    -> BoxscoreEntry m [BattingRow]
-  GetPitchingForGame     :: DbGameId    -> BoxscoreEntry m [PitchingRow]
-  DeleteBattingForGame   :: DbGameId    -> BoxscoreEntry m ()
-  DeletePitchingForGame  :: DbGameId    -> BoxscoreEntry m ()
+  UpsertBatting         :: BattingRow  -> BoxscoreEntry m ()
+  UpsertPitching        :: PitchingRow -> BoxscoreEntry m ()
+  GetBattingForGame     :: DbGameId    -> BoxscoreEntry m [BattingRow]
+  GetPitchingForGame    :: DbGameId    -> BoxscoreEntry m [PitchingRow]
+  DeleteBattingForGame  :: DbGameId    -> BoxscoreEntry m ()
+  DeletePitchingForGame :: DbGameId    -> BoxscoreEntry m ()
 
 upsertBatting :: BoxscoreEntry E.:> es => BattingRow -> E.Eff es ()
   ! BoxscoreEntry send-only
@@ -2450,11 +2450,13 @@ upsertBatting :: BoxscoreEntry E.:> es => BattingRow -> E.Eff es ()
 upsertPitching :: BoxscoreEntry E.:> es => PitchingRow -> E.Eff es ()
   ! BoxscoreEntry send-only
 
-getBattingForGame :: BoxscoreEntry E.:> es => DbGameId -> E.Eff es [BattingRow]
+getBattingForGame
+  :: BoxscoreEntry E.:> es => DbGameId -> E.Eff es [BattingRow]
   ! BoxscoreEntry send-only
   ! consumed by Pelotero.Score.buildPlayerMaps (one call per game in the period)
 
-getPitchingForGame :: BoxscoreEntry E.:> es => DbGameId -> E.Eff es [PitchingRow]
+getPitchingForGame
+  :: BoxscoreEntry E.:> es => DbGameId -> E.Eff es [PitchingRow]
   ! BoxscoreEntry send-only
   ! consumed by Pelotero.Score.buildPlayerMaps
 
@@ -2469,6 +2471,13 @@ runBoxscoreEntryDB
   => E.Eff (BoxscoreEntry : es) a
   -> E.Eff es a
   ! Database-backed interpreter; requires Error DBError
+
+runBoxscoreEntryNever
+  :: E.Eff (BoxscoreEntry : es) a
+  -> E.Eff es a
+  ! test interpreter that errors on every operation
+  ! useful for tests that need BoxscoreEntry in the effect stack but exercise paths where no batting/pitching upsert should occur (e.g. C.1 SHA-skip tests with empty boxscore JSON)
+  ! any actual invocation is the test's bug, not a real failure mode — the error message names the operation that was unexpectedly called
 
 
 === BEGIN Pelotero/Effects/Clock.hs ===
@@ -4288,7 +4297,7 @@ mergePlayerScores :: PlayerScore -> PlayerScore -> PlayerScore
 %file /home/bismuth/git/pelotero-engine/lib/Pelotero/Sync/Boxscores.hs
 %mod Pelotero.Sync.Boxscores
 
-%ext TypeOperators, FlexibleContexts
+%ext FlexibleContexts, TypeOperators
 
 %uses Control.Monad
 %uses qualified Crypto.Hash.SHA256 as SHA256
@@ -4299,23 +4308,37 @@ mergePlayerScores :: PlayerScore -> PlayerScore -> PlayerScore
 %uses qualified Data.Text as T
 %uses qualified Data.Text.Encoding as TE
 %uses Effectful
+%uses Katip
 %uses Pelotero.DB.BoxscoreEntry
 %uses Pelotero.DB.FetchLog
 %uses Pelotero.DB.Provider
 %uses Pelotero.Domain.Id
 %uses qualified Pelotero.Domain.Stats as DStats
-%uses qualified Pelotero.MLB.Convert as Convert
 %uses Pelotero.Effects.BoxscoreEntry
+%uses qualified Pelotero.Effects.BoxscoreEntry as Box
 %uses Pelotero.Effects.FetchLog
+%uses qualified Pelotero.Effects.FetchLog as FetchLog
 %uses Pelotero.Effects.Games
+%uses qualified Pelotero.Effects.Games as Games
+%uses Pelotero.Effects.Logging
 %uses Pelotero.Effects.MLBClient
+%uses qualified Pelotero.Effects.MLBClient as MLB
 %uses Pelotero.Effects.Players
+%uses qualified Pelotero.Effects.Players as Players
 %uses Pelotero.Effects.Teams
+%uses qualified Pelotero.Effects.Teams as Teams
+%uses qualified Pelotero.MLB.Convert as Convert
 %uses Pelotero.Provider.ExternalId
+
+data BoxscoreOutcome
+  = BoxUpserted !Int !Int ![Convert.ConvertWarning]
+  | BoxUnchanged
+  deriving stock (Show, Eq)
 
 data BoxscoreSyncResult = BoxscoreSyncResult
   { boxGamesSeen        :: !Int
   , boxGamesProcessed   :: !Int
+  , boxGamesUnchanged   :: !Int
   , boxGamesSkipped     :: !Int
   , boxBattingUpserted  :: !Int
   , boxPitchingUpserted :: !Int
@@ -4325,14 +4348,18 @@ data BoxscoreSyncResult = BoxscoreSyncResult
   deriving stock (Show, Eq)
 
 data BoxscoreSyncError
-  = -- | The 'GameId' wasn't in the local games table. Run schedule sync
-    --   first, then retry.
+  = -- | The 'GameId' wasn't in the local games table. Run schedule
+    --   sync first, then retry.
     GameNotKnown !GameId
-    -- | HTTP or transport failure from the 'MLBClient' effect.
-  | FetchFailed  !GameId !String
-    -- | Aeson decode failure on the raw bytes.
-  | ParseFailed  !GameId !String
+  | -- | HTTP or transport failure from the 'MLBClient' effect.
+    FetchFailed  !GameId !String
+  | -- | Aeson decode failure on the raw bytes.
+    ParseFailed  !GameId !String
   deriving stock (Show, Eq)
+
+emptyResult :: BoxscoreSyncResult
+
+boxscoreResource :: T.Text
 
 syncBoxscores
   :: ( BoxscoreEntry :> es
@@ -4341,15 +4368,17 @@ syncBoxscores
      , Teams         :> es
      , MLBClient     :> es
      , FetchLog      :> es
+     , Logging       :> es
      )
   => ProviderName
   -> [GameId]
   -> Eff es BoxscoreSyncResult
-  ! intent: Process a list of upstream GameIds: resolve each to DbGameId, fetch raw boxscore bytes, decode, convert, and upsert per-player batting and pitching rows
-  ! effects: BoxscoreEntry, Games, Players, Teams, MLBClient, FetchLog
+  ! intent: Process a list of upstream GameIds: resolve each to DbGameId, fetch raw boxscore bytes, decide via SHA whether the payload changed, then (on miss) decode, convert, and upsert per-player batting and pitching rows
+  ! effects: BoxscoreEntry, Games, Players, Teams, MLBClient, FetchLog, Logging
   ! iterates input order; no concurrency at this layer
   ! accumulates per-game results into a BoxscoreSyncResult so partial failures don't abort the batch
-  ! boxConvertWarnings is concatenated across all successfully-processed games (now includes any WireFieldDiscrepancy warnings from convertPitching)
+  ! boxConvertWarnings is concatenated across all successfully-processed games (now includes any WireFieldDiscrepancy warnings from convertPitching); SHA-skipped games contribute no warnings
+  ! boxGamesSeen == boxGamesProcessed + boxGamesUnchanged + length boxErrors as an identity (modulo any future per-game skip categories tracked by boxGamesSkipped)
 
 syncOne
   :: ( BoxscoreEntry :> es
@@ -4358,14 +4387,16 @@ syncOne
      , Teams         :> es
      , MLBClient     :> es
      , FetchLog      :> es
+     , Logging       :> es
      )
   => ProviderName
   -> GameId
-  -> Eff es (Either BoxscoreSyncError (Int, Int, [Convert.ConvertWarning]))
+  -> Eff es (Either BoxscoreSyncError BoxscoreOutcome)
   ! GameNotKnown: lookupGameByExternalId returned Nothing; caller must run schedule sync first
   ! FetchFailed: HTTP or transport-level failure from MLBClient
   ! ParseFailed: Aeson decode failure on the raw bytes
   ! writes FetchLog after a successful upsert pass, NOT before — a partial-write scenario doesn't get logged as a successful fetch
+  ! C.1 short-circuit: after a successful fetch but before parse, computes sha256Hex of the bytes and reads getLastFetch for ('provider', 'boxscore', externalIdFromGameId gid). On SHA match returns BoxUnchanged; otherwise proceeds with the original parse / convert / upsert / record-fetch path
 
 upsertEntries
   :: ( BoxscoreEntry :> es
@@ -4396,8 +4427,6 @@ pitchingRowFor
   -> PitchingRow
   ! same as battingRowFor; pitOuts is passed straight through (no IP string reconciliation here post Phase B.1)
 
-inningsPitchedOuts :: DStats.PitchingStats -> Maybe Int32
-
 i32 :: Maybe Int -> Maybe Int32
   ! fmap fromIntegral; Int -> Int32 narrowing
 
@@ -4406,7 +4435,7 @@ sha256Hex :: BS.ByteString -> T.Text
 
 %decision PerGameFetchLogEntry
   what:    syncBoxscores writes one FetchLogRow per game (resource = 'boxscore', scope = the GameId as text), not one row per batch
-  why:     Catch-up runs ('which boxscores are new since last sync?') become a single getLastFetch query per gameId, which is the natural primitive for incremental work. A per-batch row would force the caller to remember which games it included, defeating the purpose of an external log. Cost: high write volume on a fresh-season backfill (~2400 rows for a full season). Acceptable; provider_fetch_log is append-only and not a query hot path.
+  why:     Catch-up runs ('which boxscores are new since last sync?') become a single getLastFetch query per gameId, which is the natural primitive for incremental work. A per-batch row would force the caller to remember which games it included, defeating the purpose of an external log. Cost: high write volume on a fresh-season backfill (~2400 rows for a full season). Acceptable; provider_fetch_log is append-only and not a query hot path. Phase C.1 reads from this same per-game row to make the SHA short-circuit possible.
   affects: syncBoxscores, syncOne
 
 %decision MissingPlayerSilentSkip
@@ -4426,8 +4455,18 @@ sha256Hex :: BS.ByteString -> T.Text
 
 %decision ExternalIdViaCentralisedHelper
   what:    syncOne uses externalIdFromGameId to resolve GameId -> DbGameId and externalIdFromPlayerId / externalIdFromTeamId for entry resolution
-  why:     Phase A.1 unified the encoding; this module is one of the consumer sites. Same compile-time enforcement applies.
+  why:     Phase A.1 unified the encoding; this module is one of the consumer sites. Same compile-time enforcement applies. Phase C.1 also uses externalIdFromGameId as the fetch-log scope, so the SHA-lookup path goes through the same helper as the upsert path.
   affects: syncOne, upsertEntries
+
+%decision BoxscoreOutcomeTypedSum
+  what:    syncOne returns Either BoxscoreSyncError BoxscoreOutcome where BoxscoreOutcome = BoxUpserted Int Int [ConvertWarning] | BoxUnchanged
+  why:     Distinguishes 'fetched, parsed, upserted zero rows because the boxscore was genuinely empty' from 'short-circuited on SHA match because nothing changed since last run'. The two are operationally different and need different counters. Replaces the prior (Int, Int, [ConvertWarning]) tuple. The aggregator in syncBoxscores increments boxGamesProcessed for BoxUpserted and boxGamesUnchanged for BoxUnchanged. BoxUnchanged carries no warnings because no parse/convert ran; warnings are exclusively a parse/convert artefact.
+  affects: syncOne, syncBoxscores
+
+%decision IdempotencyByPayloadSha
+  what:    syncOne computes sha256Hex of the fetched bytes, looks up the most recent fetch-log row for ('provider', 'boxscore', externalIdFromGameId gid), and returns BoxUnchanged if the SHA matches; in that case the parse, convert, upsert, and fetch-log INSERT are all skipped, and one InfoS log line is emitted
+  why:     Asymmetry vs. syncRosters/syncSchedule: those callers compute the SHA before invoking the sync, so the short-circuit precedes the HTTP work entirely. For boxscores, the bytes are fetched inside syncOne via MLBClient, so the HTTP cost is unavoidable. What the short-circuit saves is parse + convert + upsert + fetch-log INSERT — the bulk of the per-game DB work. For a fresh-season backfill where most games are already final (byte-identical on every refetch), this is one HTTP per game and zero DB work. Live games (mid-game boxscores still updating) will never short-circuit because their bytes change on every poll. That is correct behaviour: live data has to be re-ingested. Ordering remains load-bearing: the fetch-log INSERT is the LAST step of the non-skip path, so a crash mid-upsert leaves no log row and the next run retries. Phase C.1.
+  affects: syncOne, syncBoxscores
 
 
 === BEGIN Pelotero/Sync/Players.hs ===
@@ -4435,12 +4474,13 @@ sha256Hex :: BS.ByteString -> T.Text
 %file /home/bismuth/git/pelotero-engine/lib/Pelotero/Sync/Players.hs
 %mod Pelotero.Sync.Players
 
-%ext TypeOperators, FlexibleContexts
+%ext FlexibleContexts, TypeOperators
 
 %uses qualified Data.Map.Strict as Map
 %uses qualified Data.Text as T
 %uses Data.Time.Clock
 %uses Effectful
+%uses Katip
 %uses Pelotero.DB.FetchLog
 %uses Pelotero.DB.Player
 %uses Pelotero.DB.Provider
@@ -4450,12 +4490,16 @@ sha256Hex :: BS.ByteString -> T.Text
 %uses qualified Pelotero.Domain.Position as DPos
 %uses qualified Pelotero.Domain.Team as DTeam
 %uses Pelotero.Effects.Clock
+%uses qualified Pelotero.Effects.Clock as Clock
 %uses Pelotero.Effects.FetchLog
-%uses Pelotero.Effects.Players
-%uses Pelotero.Effects.Teams
-%uses Pelotero.Provider.ExternalId
-%uses qualified Pelotero.MLB.Convert as Convert
+%uses qualified Pelotero.Effects.FetchLog as FetchLog
 %uses Pelotero.Effects.Logging
+%uses Pelotero.Effects.Players
+%uses qualified Pelotero.Effects.Players as Players
+%uses Pelotero.Effects.Teams
+%uses qualified Pelotero.Effects.Teams as Teams
+%uses qualified Pelotero.MLB.Convert as Convert
+%uses Pelotero.Provider.ExternalId
 
 data SyncResult = SyncResult
   { syncTeamsUpserted   :: !Int
@@ -4464,13 +4508,14 @@ data SyncResult = SyncResult
   }
   deriving stock (Show, Eq)
 
-logConvertWarnings :: Logging :> es => [Convert.ConvertWarning] -> Eff es ()
+rostersResource :: T.Text
 
 syncRosters
   :: ( Players  :> es
      , Teams    :> es
      , FetchLog :> es
      , Clock    :> es
+     , Logging  :> es
      )
   => ProviderName
   -> T.Text             -- ^ scope (e.g. season as text)
@@ -4478,13 +4523,14 @@ syncRosters
   -> [DTeam.Team]
   -> [DPlayer.Player]
   -> Eff es SyncResult
-  ! intent: Provider-agnostic upsert pipeline: teams, then players, then fetch-log entry, returning a small summary
-  ! effects: Players, Teams, FetchLog, Clock
+  ! intent: Provider-agnostic upsert pipeline: SHA-checked short-circuit, then (on miss) teams, players, and finally a fetch-log entry
+  ! effects: Players, Teams, FetchLog, Clock, Logging
   ! single Clock.now call shared by both team and player upserts; both rows get identical last_synced_at
   ! fetchLogResource hardcoded to 'active-rosters'; scope is supplied by the caller (typically the season as Text)
   ! fetchLogRecordCount is the player count, NOT the team count; teams are bookkeeping
   ! fetchLogId and fetchLogFetchedAt are Nothing on the inbound row; the DB layer fills them via DEFAULT
-  ! no idempotency short-circuit today: every call performs full upsert work regardless of whether the inbound payload SHA matches the previous fetch (planned C.1 work)
+  ! SHA short-circuit (Phase C.1): if payloadSha matches the most recent fetchLogRow.fetchLogPayloadSha256 for this (provider, 'active-rosters', scope), returns a zero-row SyncResult and emits exactly one InfoS log line. Both counts being zero is the canonical 'we skipped' signal — distinguishable from 'first call with empty inputs' by the syncFetchSha256 echoing the input
+  ! the fetch-log INSERT is the last step in the non-skip path; reordering it before the upserts would let a crash at the wrong moment silently mask a partial-state on the next run
   > consumed by: CLI sync command (process startup or scheduled run)
 
 upsertAllTeams
@@ -4508,6 +4554,8 @@ upsertAllPlayers
   ! extId = externalIdFromPlayerId player — single source of truth
   ! discards the DbPlayerId returned by upsertPlayerByExternalId; the caller doesn't need it
   ! handedness conversion via handChar (total Domain function), not T.head of renderHandedness
+
+logConvertWarnings :: Logging :> es => [Convert.ConvertWarning] -> Eff es ()
 
 %decision TeamsBeforePlayersOrdering
   what:    syncRosters upserts all teams first, builds a TeamId -> DbTeamId map, then upserts players using that map to resolve playerRowCurrentTeamId
@@ -4534,28 +4582,38 @@ upsertAllPlayers
   why:     Phase A.6 introduced handChar :: Handedness -> Char as an exhaustive case-of in the domain layer. T.head's partiality is gone because the conversion is no longer a Text indexing operation. The total function lives next to the Handedness type so any new constructor forces an exhaustivity check at compile time, eliminating the legacy class of bug where a renderHandedness change could silently break this caller. DB column for bat_side / pitch_hand is still Text (CHAR(1) has padding gotchas in PostgreSQL), but the API path is now total end-to-end.
   affects: upsertAllPlayers
 
+%decision IdempotencyByPayloadSha
+  what:    syncRosters short-circuits when the inbound payloadSha matches the most recent fetch-log row for ('provider', 'active-rosters', 'scope'); the no-op path returns SyncResult { syncTeamsUpserted = 0, syncPlayersUpserted = 0, syncFetchSha256 = payloadSha } and emits one InfoS log line
+  why:     Re-running with an unchanged payload should not re-upsert ~30 teams + ~700 players or write a new fetch-log row; that work is wasted writes and DB contention. The fetch-log already records payload_sha256 for exactly this purpose; the short-circuit reads at most one row before deciding whether to do anything. Ordering is load-bearing: the fetch-log INSERT is the LAST step in the non-skip path, AFTER both upserts complete. A crash mid-upsert leaves no log row, so the next run retries rather than silently skips a partial state. Inverting this ordering would mask partial writes — comments at the call site flag this for future maintainers. Phase C.1.
+  affects: syncRosters
+
 
 === BEGIN Pelotero/Sync/Schedule.hs ===
 
 %file /home/bismuth/git/pelotero-engine/lib/Pelotero/Sync/Schedule.hs
 %mod Pelotero.Sync.Schedule
 
-%ext TypeOperators, FlexibleContexts
+%ext FlexibleContexts, TypeOperators
 
 %uses qualified Data.Text as T
 %uses Data.Time.Clock
 %uses Effectful
+%uses Katip
 %uses Pelotero.DB.FetchLog
 %uses Pelotero.DB.Game
 %uses Pelotero.DB.Provider
 %uses Pelotero.Domain.Game
 %uses Pelotero.Domain.Id
 %uses Pelotero.Effects.Clock
+%uses qualified Pelotero.Effects.Clock as Clock
 %uses Pelotero.Effects.FetchLog
+%uses qualified Pelotero.Effects.FetchLog as FetchLog
 %uses Pelotero.Effects.Games
-%uses Pelotero.Effects.Teams
-%uses qualified Pelotero.MLB.Convert as Convert
+%uses qualified Pelotero.Effects.Games as Games
 %uses Pelotero.Effects.Logging
+%uses Pelotero.Effects.Teams
+%uses qualified Pelotero.Effects.Teams as Teams
+%uses qualified Pelotero.MLB.Convert as Convert
 %uses Pelotero.Provider.ExternalId
 
 data ScheduleSyncResult = ScheduleSyncResult
@@ -4565,24 +4623,28 @@ data ScheduleSyncResult = ScheduleSyncResult
   }
   deriving stock (Show, Eq)
 
+scheduleResource :: T.Text
+
 syncSchedule
   :: ( Games    :> es
      , Teams    :> es
      , FetchLog :> es
      , Clock    :> es
+     , Logging  :> es
      )
   => ProviderName
   -> T.Text                 -- ^ scope (e.g. "2025-04-01..2025-04-07")
   -> T.Text                 -- ^ SHA-256 of raw payload, computed by caller
   -> [Game]
   -> Eff es ScheduleSyncResult
-  ! intent: Provider-agnostic upsert pipeline for already-converted [Game] domain values
-  ! effects: Games, Teams, FetchLog, Clock
-  ! writes one fetch-log row per call with resource = 'schedule', scope supplied by caller (typically a date-range string like '2025-04-01..2025-04-07')
+  ! intent: Provider-agnostic upsert pipeline for already-converted [Game] domain values: SHA-checked short-circuit, then (on miss) per-game upserts and a fetch-log entry
+  ! effects: Games, Teams, FetchLog, Clock, Logging
+  ! writes one fetch-log row per call (in the non-skip path) with resource = 'schedule', scope supplied by caller (typically a date-range string like '2025-04-01..2025-04-07')
   ! fetchLogRecordCount is the total games count, NOT just upserted games; matches the input list length so an operator can compare against schedGamesUpserted to detect skip-rate
   ! single Clock.now call shared across all game upserts in this run
   ! iteration order is the input list order
-  ! no idempotency short-circuit today (planned C.1 work)
+  ! SHA short-circuit (Phase C.1): if payloadSha matches the most recent fetchLogRow.fetchLogPayloadSha256 for this (provider, 'schedule', scope), returns a zero-row ScheduleSyncResult and emits exactly one InfoS log line. Both schedGamesUpserted and schedGamesSkipped are zero
+  ! the fetch-log INSERT is the last step in the non-skip path, mirroring syncRosters; this is load-bearing for partial-failure recovery
 
 upsertOneGame
   :: (Games :> es, Teams :> es)
@@ -4618,4 +4680,9 @@ logConvertWarnings :: Logging :> es => [Convert.ConvertWarning] -> Eff es ()
   what:    upsertOneGame and resolveTeam call Pelotero.Provider.ExternalId helpers; no inline encoding
   why:     Phase A.1 made resolveTeam use externalIdFromTeamId on the lookup side and upsertOneGame use externalIdFromGameId for game external ids. The implicit cross-module contract that previously lived in source comments ('the show-of-Int convention here MUST match upsertAllTeams') is now a typed function call. Source comments don't need to assert what the type system enforces.
   affects: upsertOneGame, resolveTeam
+
+%decision IdempotencyByPayloadSha
+  what:    syncSchedule short-circuits when the inbound payloadSha matches the most recent fetch-log row for ('provider', 'schedule', 'scope'); the no-op path returns ScheduleSyncResult { schedGamesUpserted = 0, schedGamesSkipped = 0, schedFetchSha256 = payloadSha } and emits one InfoS log line
+  why:     Symmetric to the syncRosters short-circuit (Phase C.1). Re-running with an unchanged schedule payload should not re-upsert hundreds of games. Ordering matters here too: the fetch-log INSERT is the LAST step in the non-skip path. A crash mid-upsert leaves no log row, so retry is safe. Both counts (schedGamesUpserted and schedGamesSkipped) being zero is the unambiguous 'we skipped entirely' signal; distinguishable from a non-skip run with an empty input list because the input list of zero games is itself a degenerate non-skip case that still writes a fetch-log row. Phase C.1.
+  affects: syncSchedule
 

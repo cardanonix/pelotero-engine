@@ -177,6 +177,9 @@ test-suite pelotero-test
     Pelotero.Effects.PlayersSpec
     Pelotero.ScoreSpec
     Pelotero.Provider.ExternalIdSpec
+    Pelotero.Sync.PlayersSpec
+    Pelotero.Sync.ScheduleSpec
+    Pelotero.Sync.BoxscoresSpec 
   build-depends:    base
                   , pelotero-engine
                   , aeson
@@ -188,6 +191,7 @@ test-suite pelotero-test
                   , hspec-hedgehog
                   , text
                   , time
+                  , katip
   ghc-options:      -O0 -threaded
 
 test-suite pelotero-integration-test

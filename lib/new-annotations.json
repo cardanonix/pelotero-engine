@@ -389,18 +389,29 @@
             "DB column for bat_side / pitch_hand is still Text (CHAR(1) has padding gotchas in PostgreSQL), but the API path is now total end-to-end."
           ],
           "affects": ["upsertAllPlayers"]
+        },
+        {
+          "name": "IdempotencyByPayloadSha",
+          "what": "syncRosters short-circuits when the inbound payloadSha matches the most recent fetch-log row for ('provider', 'active-rosters', 'scope'); the no-op path returns SyncResult { syncTeamsUpserted = 0, syncPlayersUpserted = 0, syncFetchSha256 = payloadSha } and emits one InfoS log line",
+          "why": [
+            "Re-running with an unchanged payload should not re-upsert ~30 teams + ~700 players or write a new fetch-log row; that work is wasted writes and DB contention. The fetch-log already records payload_sha256 for exactly this purpose; the short-circuit reads at most one row before deciding whether to do anything.",
+            "Ordering is load-bearing: the fetch-log INSERT is the LAST step in the non-skip path, AFTER both upserts complete. A crash mid-upsert leaves no log row, so the next run retries rather than silently skips a partial state. Inverting this ordering would mask partial writes — comments at the call site flag this for future maintainers.",
+            "Phase C.1."
+          ],
+          "affects": ["syncRosters"]
         }
       ],
       "invariants": {
         "syncRosters": {
-          "intent": "Provider-agnostic upsert pipeline: teams, then players, then fetch-log entry, returning a small summary",
-          "effects": ["Players", "Teams", "FetchLog", "Clock"],
+          "intent": "Provider-agnostic upsert pipeline: SHA-checked short-circuit, then (on miss) teams, players, and finally a fetch-log entry",
+          "effects": ["Players", "Teams", "FetchLog", "Clock", "Logging"],
           "notes": [
             "single Clock.now call shared by both team and player upserts; both rows get identical last_synced_at",
             "fetchLogResource hardcoded to 'active-rosters'; scope is supplied by the caller (typically the season as Text)",
             "fetchLogRecordCount is the player count, NOT the team count; teams are bookkeeping",
             "fetchLogId and fetchLogFetchedAt are Nothing on the inbound row; the DB layer fills them via DEFAULT",
-            "no idempotency short-circuit today: every call performs full upsert work regardless of whether the inbound payload SHA matches the previous fetch (planned C.1 work)"
+            "SHA short-circuit (Phase C.1): if payloadSha matches the most recent fetchLogRow.fetchLogPayloadSha256 for this (provider, 'active-rosters', scope), returns a zero-row SyncResult and emits exactly one InfoS log line. Both counts being zero is the canonical 'we skipped' signal — distinguishable from 'first call with empty inputs' by the syncFetchSha256 echoing the input",
+            "the fetch-log INSERT is the last step in the non-skip path; reordering it before the upserts would let a crash at the wrong moment silently mask a partial-state on the next run"
           ],
           "consumes": [
             "CLI sync command (process startup or scheduled run)"
@@ -450,18 +461,30 @@
             "The implicit cross-module contract that previously lived in source comments ('the show-of-Int convention here MUST match upsertAllTeams') is now a typed function call. Source comments don't need to assert what the type system enforces."
           ],
           "affects": ["upsertOneGame", "resolveTeam"]
+        },
+        {
+          "name": "IdempotencyByPayloadSha",
+          "what": "syncSchedule short-circuits when the inbound payloadSha matches the most recent fetch-log row for ('provider', 'schedule', 'scope'); the no-op path returns ScheduleSyncResult { schedGamesUpserted = 0, schedGamesSkipped = 0, schedFetchSha256 = payloadSha } and emits one InfoS log line",
+          "why": [
+            "Symmetric to the syncRosters short-circuit (Phase C.1). Re-running with an unchanged schedule payload should not re-upsert hundreds of games.",
+            "Ordering matters here too: the fetch-log INSERT is the LAST step in the non-skip path. A crash mid-upsert leaves no log row, so retry is safe.",
+            "Both counts (schedGamesUpserted and schedGamesSkipped) being zero is the unambiguous 'we skipped entirely' signal; distinguishable from a non-skip run with an empty input list because the input list of zero games is itself a degenerate non-skip case that still writes a fetch-log row.",
+            "Phase C.1."
+          ],
+          "affects": ["syncSchedule"]
         }
       ],
       "invariants": {
         "syncSchedule": {
-          "intent": "Provider-agnostic upsert pipeline for already-converted [Game] domain values",
-          "effects": ["Games", "Teams", "FetchLog", "Clock"],
+          "intent": "Provider-agnostic upsert pipeline for already-converted [Game] domain values: SHA-checked short-circuit, then (on miss) per-game upserts and a fetch-log entry",
+          "effects": ["Games", "Teams", "FetchLog", "Clock", "Logging"],
           "notes": [
-            "writes one fetch-log row per call with resource = 'schedule', scope supplied by caller (typically a date-range string like '2025-04-01..2025-04-07')",
+            "writes one fetch-log row per call (in the non-skip path) with resource = 'schedule', scope supplied by caller (typically a date-range string like '2025-04-01..2025-04-07')",
             "fetchLogRecordCount is the total games count, NOT just upserted games; matches the input list length so an operator can compare against schedGamesUpserted to detect skip-rate",
             "single Clock.now call shared across all game upserts in this run",
             "iteration order is the input list order",
-            "no idempotency short-circuit today (planned C.1 work)"
+            "SHA short-circuit (Phase C.1): if payloadSha matches the most recent fetchLogRow.fetchLogPayloadSha256 for this (provider, 'schedule', scope), returns a zero-row ScheduleSyncResult and emits exactly one InfoS log line. Both schedGamesUpserted and schedGamesSkipped are zero",
+            "the fetch-log INSERT is the last step in the non-skip path, mirroring syncRosters; this is load-bearing for partial-failure recovery"
           ]
         },
         "upsertOneGame": [
@@ -484,7 +507,8 @@
           "why": [
             "Catch-up runs ('which boxscores are new since last sync?') become a single getLastFetch query per gameId, which is the natural primitive for incremental work.",
             "A per-batch row would force the caller to remember which games it included, defeating the purpose of an external log.",
-            "Cost: high write volume on a fresh-season backfill (~2400 rows for a full season). Acceptable; provider_fetch_log is append-only and not a query hot path."
+            "Cost: high write volume on a fresh-season backfill (~2400 rows for a full season). Acceptable; provider_fetch_log is append-only and not a query hot path.",
+            "Phase C.1 reads from this same per-game row to make the SHA short-circuit possible."
           ],
           "affects": ["syncBoxscores", "syncOne"]
         },
@@ -521,44 +545,61 @@
           "name": "ExternalIdViaCentralisedHelper",
           "what": "syncOne uses externalIdFromGameId to resolve GameId -> DbGameId and externalIdFromPlayerId / externalIdFromTeamId for entry resolution",
           "why": [
-            "Phase A.1 unified the encoding; this module is one of the consumer sites. Same compile-time enforcement applies."
+            "Phase A.1 unified the encoding; this module is one of the consumer sites. Same compile-time enforcement applies.",
+            "Phase C.1 also uses externalIdFromGameId as the fetch-log scope, so the SHA-lookup path goes through the same helper as the upsert path."
           ],
           "affects": ["syncOne", "upsertEntries"]
+        },
+        {
+          "name": "BoxscoreOutcomeTypedSum",
+          "what": "syncOne returns Either BoxscoreSyncError BoxscoreOutcome where BoxscoreOutcome = BoxUpserted Int Int [ConvertWarning] | BoxUnchanged",
+          "why": [
+            "Distinguishes 'fetched, parsed, upserted zero rows because the boxscore was genuinely empty' from 'short-circuited on SHA match because nothing changed since last run'. The two are operationally different and need different counters.",
+            "Replaces the prior (Int, Int, [ConvertWarning]) tuple. The aggregator in syncBoxscores increments boxGamesProcessed for BoxUpserted and boxGamesUnchanged for BoxUnchanged.",
+            "BoxUnchanged carries no warnings because no parse/convert ran; warnings are exclusively a parse/convert artefact."
+          ],
+          "affects": ["syncOne", "syncBoxscores"]
+        },
+        {
+          "name": "IdempotencyByPayloadSha",
+          "what": "syncOne computes sha256Hex of the fetched bytes, looks up the most recent fetch-log row for ('provider', 'boxscore', externalIdFromGameId gid), and returns BoxUnchanged if the SHA matches; in that case the parse, convert, upsert, and fetch-log INSERT are all skipped, and one InfoS log line is emitted",
+          "why": [
+            "Asymmetry vs. syncRosters/syncSchedule: those callers compute the SHA before invoking the sync, so the short-circuit precedes the HTTP work entirely. For boxscores, the bytes are fetched inside syncOne via MLBClient, so the HTTP cost is unavoidable.",
+            "What the short-circuit saves is parse + convert + upsert + fetch-log INSERT — the bulk of the per-game DB work. For a fresh-season backfill where most games are already final (byte-identical on every refetch), this is one HTTP per game and zero DB work.",
+            "Live games (mid-game boxscores still updating) will never short-circuit because their bytes change on every poll. That is correct behaviour: live data has to be re-ingested.",
+            "Ordering remains load-bearing: the fetch-log INSERT is the LAST step of the non-skip path, so a crash mid-upsert leaves no log row and the next run retries.",
+            "Phase C.1."
+          ],
+          "affects": ["syncOne", "syncBoxscores"]
         }
       ],
       "invariants": {
         "syncBoxscores": {
-          "intent": "Process a list of upstream GameIds: resolve each to DbGameId, fetch raw boxscore bytes, decode, convert, and upsert per-player batting and pitching rows",
-          "effects": ["BoxscoreEntry", "Games", "Players", "Teams", "MLBClient", "FetchLog"],
+          "intent": "Process a list of upstream GameIds: resolve each to DbGameId, fetch raw boxscore bytes, decide via SHA whether the payload changed, then (on miss) decode, convert, and upsert per-player batting and pitching rows",
+          "effects": ["BoxscoreEntry", "Games", "Players", "Teams", "MLBClient", "FetchLog", "Logging"],
           "notes": [
             "iterates input order; no concurrency at this layer",
             "accumulates per-game results into a BoxscoreSyncResult so partial failures don't abort the batch",
-            "boxConvertWarnings is concatenated across all successfully-processed games (now includes any WireFieldDiscrepancy warnings from convertPitching)"
+            "boxConvertWarnings is concatenated across all successfully-processed games (now includes any WireFieldDiscrepancy warnings from convertPitching); SHA-skipped games contribute no warnings",
+            "boxGamesSeen == boxGamesProcessed + boxGamesUnchanged + length boxErrors as an identity (modulo any future per-game skip categories tracked by boxGamesSkipped)"
           ]
         },
         "syncOne": [
           "GameNotKnown: lookupGameByExternalId returned Nothing; caller must run schedule sync first",
           "FetchFailed: HTTP or transport-level failure from MLBClient",
           "ParseFailed: Aeson decode failure on the raw bytes",
-          "writes FetchLog after a successful upsert pass, NOT before — a partial-write scenario doesn't get logged as a successful fetch"
+          "writes FetchLog after a successful upsert pass, NOT before — a partial-write scenario doesn't get logged as a successful fetch",
+          "C.1 short-circuit: after a successful fetch but before parse, computes sha256Hex of the bytes and reads getLastFetch for ('provider', 'boxscore', externalIdFromGameId gid). On SHA match returns BoxUnchanged; otherwise proceeds with the original parse / convert / upsert / record-fetch path"
         ],
         "upsertEntries": [
           "fold over [BoxscoreEntry] producing (battingCount, pitchingCount)",
           "missing player -> skip entry (counts unchanged); missing team -> degrade team_id to NULL",
           "boxBatting Nothing -> no batting row written; boxPitching Nothing -> no pitching row written"
         ],
-        "battingRowFor": [
-          "mechanical Maybe Int -> Maybe Int32 widening for every stat field"
-        ],
-        "pitchingRowFor": [
-          "same as battingRowFor; pitOuts is passed straight through (no IP string reconciliation here post Phase B.1)"
-        ],
-        "i32": [
-          "fmap fromIntegral; Int -> Int32 narrowing"
-        ],
-        "sha256Hex": [
-          "raw ByteString -> hex-encoded Text via SHA-256"
-        ]
+        "battingRowFor": ["mechanical Maybe Int -> Maybe Int32 widening for every stat field"],
+        "pitchingRowFor": ["same as battingRowFor; pitOuts is passed straight through (no IP string reconciliation here post Phase B.1)"],
+        "i32": ["fmap fromIntegral; Int -> Int32 narrowing"],
+        "sha256Hex": ["raw ByteString -> hex-encoded Text via SHA-256"]
       }
     },
 
@@ -2034,6 +2075,11 @@
         "deletePitchingForGame": ["BoxscoreEntry send-only"],
         "runBoxscoreEntryDB": [
           "Database-backed interpreter; requires Error DBError"
+        ],
+        "runBoxscoreEntryNever": [
+          "test interpreter that errors on every operation",
+          "useful for tests that need BoxscoreEntry in the effect stack but exercise paths where no batting/pitching upsert should occur (e.g. C.1 SHA-skip tests with empty boxscore JSON)",
+          "any actual invocation is the test's bug, not a real failure mode — the error message names the operation that was unexpectedly called"
         ]
       }
     },
