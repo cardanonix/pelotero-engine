@@ -284,7 +284,7 @@ What's left:
 A.4: JSON instances out of Domain (newtype wrappers in Pelotero.DB.JsonB)
 A.5: ProviderKeyed typeclass (collapses Player/Team/Game external-id boilerplate)
 B.2: order_index columns on roster_slot and lineup_slot
-C.1: idempotency-by-SHA in syncRosters and syncSchedule
+C.1: idempotency-by-SHA in syncRosters and syncSchedule (complete)
 C.2: single-SELECT scoring via date-range box queries
 D.1/D.2: Draft state machine and AutoDraft port
 E.1/E.2: CLI consolidation and old_src/ deletion
@@ -295,3 +295,7 @@ C.1 because it's roughly ten lines per function and produces a real operational 
 A.5 second because it's the big satisfying collapse and the three callers (DB.Player, DB.Team, DB.Game plus their effect interpreters) have genuinely earned the abstraction. A.4 is honestly a lower-priority layering cleanup and orthogonal to A.5 since LeagueConfig has no external IDs and so isn't a ProviderKeyed candidate. Doing A.5 first lets the typeclass shape stabilize against three real callers before you add wrapper noise from A.4.
 One pushback worth airing: B.2 (order_index) is in the plan but has zero current consumers. Adding the column now means a migration, four code touches, and a Hedgehog property for an invariant nobody reads. I'd defer B.2 until the first feature that actually wants positional batting order, and add the column as part of that feature's work. Landing it speculatively is the kind of thing that bit-rots and you discover six months later that the order field was never actually populated correctly because nothing tested it. Your call, but the plan's "today no consumer cares" framing is itself the argument for not doing it yet.
 Want me to start on C.1? I'd write the complete updated Pelotero.Sync.Players and Pelotero.Sync.Schedule with the SHA short-circuit at the top of each, plus the Logging.logFM InfoS line for the skip case so the skip is observable. Should be a tight diff.
+
+
+___________________
+expect the same run/run_/run1 and NumberOfRowsAffected → NoReturning edits across the other DB modules (Game.hs, BoxscoreEntry.hs, LeagueConfig.hs, LeagueTeam.hs, RosterSlot.hs, LineupSlot.hs, LineupSnapshot.hs, PlayerRanking.hs, DraftPick.hs, FetchLog.hs). The pattern is identical: select → run, insert/update with Returning fld → run1, insert/update with NoReturning → run_. A bulk grep for NumberOfRowsAffected and for Tx.statement () \$ insert/Tx.statement () \$ update (without run) should turn up everywhere that needs touching.

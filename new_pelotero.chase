@@ -1,7 +1,7 @@
 %bundle chase v1
-%generated 2026-05-08T13:28:08Z
+%generated 2026-05-08T14:18:05Z
 %roots /home/bismuth/git/pelotero-engine/lib
-%files 57 ok, 0 failed
+%files 58 ok, 0 failed
 
 # This file is a chase bundle: structural skeletons of multiple
 # Haskell and PureScript source files concatenated into one document.
@@ -1078,17 +1078,17 @@ insertApplied :: Stmt.Statement (Text, Text) ()
 %file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/Player.hs
 %mod Pelotero.DB.Player
 
-%ext DataKinds, DeriveAnyClass, DeriveGeneric, DerivingStrategies, DuplicateRecordFields, OverloadedStrings, StandaloneDeriving, TypeFamilies, TypeOperators, UndecidableInstances
+%ext DataKinds, DeriveAnyClass, DeriveGeneric, DerivingStrategies, DuplicateRecordFields, FlexibleContexts, OverloadedStrings, RecordWildCards, StandaloneDeriving, TypeApplications, TypeFamilies, TypeOperators, UndecidableInstances
 
-%uses Data.Functor.Contravariant
 %uses Data.Text
 %uses qualified Data.Text as T
 %uses Data.Time
 %uses GHC.Generics
 %uses qualified Hasql.Transaction as Tx
-%uses Rel8
-%uses qualified Rel8 as R
+%uses Rel8 hiding
 %uses Pelotero.DB.Pool
+%uses qualified Pelotero.DB.ProviderKeyed as PK
+%uses Pelotero.DB.ProviderKeyed
 %uses Pelotero.DB.Provider
 %uses Pelotero.DB.Rel8Instances
 %uses Pelotero.Domain.Id
@@ -1109,15 +1109,6 @@ data Player f = Player
   deriving stock    (Generic)
   deriving anyclass (Rel8able)
 
-data PlayerExternalId f = PlayerExternalId
-  { _peidPlayerId   :: Column f DbPlayerId
-  , _peidProvider   :: Column f ProviderName
-  , _peidExternalId :: Column f Text
-  , _peidFetchedAt  :: Column f UTCTime
-  }
-  deriving stock    (Generic)
-  deriving anyclass (Rel8able)
-
 data PlayerRow = PlayerRow
   { playerRowId                 :: !(Maybe DbPlayerId)
   , playerRowFirstName          :: !Text
@@ -1133,11 +1124,13 @@ data PlayerRow = PlayerRow
   }
   deriving stock (Show, Eq)
 
+instance ProviderKeyed PlayerRow where
+
 playerSchema :: TableSchema (Player Name)
   ! table 'player' with surrogate id, denormalised name, position, batting/pitching hand as text, active flag, FK to team, last-synced metadata
   ! playerCurrentTeamId is Maybe DbTeamId; a player without a team has NULL
 
-playerExternalIdSchema :: TableSchema (PlayerExternalId Name)
+playerExternalIdSchema :: TableSchema (ExternalIdE DbPlayerId Name)
   ! table 'player_external_id' with (player_id, provider, external_id, fetched_at)
 
 charToText :: Maybe Char -> Maybe Text
@@ -1149,6 +1142,8 @@ textToChar :: Maybe Text -> Maybe Char
 
 fromResult :: Player Result -> PlayerRow
   ! private; converts the rel8 Player Result row to the public PlayerRow
+
+playerRowToExpr :: PlayerRow -> Player Expr
 
 insertPlayerT :: PlayerRow -> Tx.Transaction DbPlayerId
   ! INSERT ... RETURNING id; uses Abort on conflict
@@ -1177,8 +1172,7 @@ lookupByExternalIdT :: ProviderName -> Text -> Tx.Transaction (Maybe DbPlayerId)
 getExternalIdT :: DbPlayerId -> ProviderName -> Tx.Transaction (Maybe Text)
   ! reverse lookup: given a DbPlayerId and provider, returns Maybe Text
 
-upsertByExternalIdT
-  :: ProviderName -> Text -> PlayerRow -> Tx.Transaction DbPlayerId
+upsertByExternalIdT :: ProviderName -> Text -> PlayerRow -> Tx.Transaction DbPlayerId
   ! two-step: lookup via (provider, external_id); if found, update player; if not, insert and link
   ! atomic within the caller's transaction
 
@@ -1206,8 +1200,7 @@ lookupByExternalId :: Pool -> ProviderName -> Text -> IO (Either DBError (Maybe 
 getExternalId :: Pool -> DbPlayerId -> ProviderName -> IO (Either DBError (Maybe Text))
   ! Pool-flavored wrapper
 
-upsertByExternalId
-  :: Pool -> ProviderName -> Text -> PlayerRow -> IO (Either DBError DbPlayerId)
+upsertByExternalId :: Pool -> ProviderName -> Text -> PlayerRow -> IO (Either DBError DbPlayerId)
   ! Pool-flavored wrapper
 
 %decision TwoTablePlayerExternalIdSplit
@@ -1421,6 +1414,117 @@ parseProviderName :: Text -> Maybe ProviderName
   affects: renderProviderName
 
 
+=== BEGIN Pelotero/DB/ProviderKeyed.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/ProviderKeyed.hs
+%mod Pelotero.DB.ProviderKeyed
+
+%ext AllowAmbiguousTypes, DataKinds, DeriveAnyClass, DeriveGeneric, DerivingStrategies, FlexibleContexts, OverloadedStrings, ScopedTypeVariables, StandaloneDeriving, TypeApplications, TypeFamilies, TypeOperators, UndecidableInstances
+
+%uses Data.Kind
+%uses Data.Text
+%uses Data.Time
+%uses GHC.Generics
+%uses qualified Hasql.Transaction as Tx
+%uses Rel8
+%uses Pelotero.DB.Pool
+%uses Pelotero.DB.Provider
+%uses Pelotero.DB.Rel8Instances
+
+data ExternalIdE i f = ExternalIdE
+  { _eidEntityId   :: Column f i
+  , _eidProvider   :: Column f ProviderName
+  , _eidExternalId :: Column f Text
+  , _eidFetchedAt  :: Column f UTCTime
+  }
+  deriving stock (Generic)
+
+class
+
+  rowSchema        :: TableSchema (RowEntity row Name)
+
+  externalIdSchema :: TableSchema (ExternalIdE (RowId row) Name)
+
+  rowIdColumn      :: RowEntity row Expr -> Expr (RowId row)
+
+  insertRowT       :: row -> Tx.Transaction (RowId row)
+
+  updateRowByIdT   :: RowId row -> row -> Tx.Transaction ()
+
+linkExternalIdT
+  :: forall row. ProviderKeyed row
+  => RowId row -> ProviderName -> Text -> Tx.Transaction ()
+  ! INSERT into externalIdSchema with ON CONFLICT DO NOTHING; idempotent on re-runs
+  ! _eidFetchedAt set via unsafeDefault — the DB column has DEFAULT NOW()
+
+lookupByExternalIdT
+  :: forall row. ProviderKeyed row
+  => ProviderName -> Text -> Tx.Transaction (Maybe (RowId row))
+  ! SELECT _eidEntityId WHERE provider AND external_id; returns the first row or Nothing
+  ! Phase A.5: replaces the inline lookup that was duplicated across DB.Player / DB.Team / DB.Game
+
+getExternalIdT
+  :: forall row. ProviderKeyed row
+  => RowId row -> ProviderName -> Tx.Transaction (Maybe Text)
+  ! Reverse lookup; SELECT _eidExternalId WHERE entity_id AND provider
+
+upsertByExternalIdT
+  :: forall row. ProviderKeyed row
+  => ProviderName -> Text -> row -> Tx.Transaction (RowId row)
+  ! Atomic within the caller's transaction: lookupByExternalIdT, then either updateRowByIdT (existing entity) or insertRowT + linkExternalIdT (new entity)
+  ! Returns the surrogate id either way — caller doesn't need to distinguish insert vs. update
+
+linkExternalId
+  :: forall row. ProviderKeyed row
+  => Pool -> RowId row -> ProviderName -> Text -> IO (Either DBError ())
+  ! Pool-flavored wrapper around linkExternalIdT
+
+lookupByExternalId
+  :: forall row. ProviderKeyed row
+  => Pool
+  -> ProviderName
+  -> Text
+  -> IO (Either DBError (Maybe (RowId row)))
+  ! Pool-flavored wrapper around lookupByExternalIdT
+
+getExternalId
+  :: forall row. ProviderKeyed row
+  => Pool
+  -> RowId row
+  -> ProviderName
+  -> IO (Either DBError (Maybe Text))
+  ! Pool-flavored wrapper around getExternalIdT
+
+upsertByExternalId
+  :: forall row. ProviderKeyed row
+  => Pool
+  -> ProviderName
+  -> Text
+  -> row
+  -> IO (Either DBError (RowId row))
+  ! Pool-flavored wrapper around upsertByExternalIdT
+
+%decision ParametricExternalIdEntity
+  what:    ExternalIdE i f is a single rel8able record parameterised by the surrogate id type, NOT three separate per-table records (PlayerExternalId, TeamExternalId, GameExternalId)
+  why:     All three external-id companion tables have identical column shape (entity_id, provider, external_id, fetched_at); the only difference is the type of entity_id. Sharing the record type forces that fact at compile time. Adding a fourth provider-keyed table is one TableSchema literal plus one ProviderKeyed instance; no new entity record needed. Cost: one Rel8able instance with a (DBType i, DBEq i) constraint, plus standalone-deriving ergonomics. Acceptable for the consolidation.
+  affects: ExternalIdE
+
+%decision TypeclassOverRecordOfFunctions
+  what:    ProviderKeyed is a typeclass with associated type families (RowEntity, RowId), not a record-of-functions value passed to free-standing helpers
+  why:     The associated type families let GHC propagate RowId row through to the surrogate-id type at every call site without manual threading. Type applications (linkExternalIdT @PlayerRow) at the few sites where row is otherwise ambiguous from the value-level args; explicit and greppable. A Proxy-based or record-of-functions variant would push that disambiguation to value-level boilerplate at every call site.
+  affects: ProviderKeyed
+
+%decision InsertAndUpdateAreInstanceMethods
+  what:    insertRowT and updateRowByIdT are typeclass methods (each instance provides its own), NOT default methods derived from rowSchema and a generic rowToExpr
+  why:     The rel8 Insert and Update clauses need entity-specific knowledge: which field is the surrogate id (so it can be set to unsafeDefault on insert and to lit pid on update), and the per-field 'lit value' translation. Generalising this would require per-field traversals via Generic, which is more machinery than the three current callers justify. Each instance's insertRowT and updateRowByIdT are literally one-liners that point at the existing per-table insertXxxT and updateXxxT functions, so no real boilerplate is added. If a fourth provider-keyed table arrives, this design extends cleanly: write the per-table insert/update, declare the instance.
+  affects: ProviderKeyed.insertRowT, ProviderKeyed.updateRowByIdT
+
+%decision FacadesPreserveCallSites
+  what:    Per-table modules (Pelotero.DB.Player / .Team / .Game) re-export the four external-id helpers and their Pool wrappers as one-line facades that call PK.foo @MyRow
+  why:     Zero call-site changes outside the DB layer. The effect interpreters (runPlayersDB etc.) and Sync code keep importing Pelotero.DB.Player.upsertByExternalIdT exactly as before. Cost: 4 × 2 = 8 trivial wrapper definitions per table. Worth it to keep the migration scope narrow. If we later decide call sites should go through PK directly, deleting the facades is a mechanical follow-up.
+  affects: 
+
+
 === BEGIN Pelotero/DB/Rel8Instances.hs ===
 
 %file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/Rel8Instances.hs
@@ -1553,16 +1657,17 @@ countBySlot :: Pool -> DbLeagueTeamId -> Text -> IO (Either DBError Int64)
 %file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/Team.hs
 %mod Pelotero.DB.Team
 
-%ext DataKinds, DeriveAnyClass, DeriveGeneric, DerivingStrategies, DuplicateRecordFields, OverloadedStrings, StandaloneDeriving, TypeFamilies, TypeOperators, UndecidableInstances
+%ext DataKinds, DeriveAnyClass, DeriveGeneric, DerivingStrategies, DuplicateRecordFields, OverloadedStrings, RecordWildCards, StandaloneDeriving, TypeApplications, TypeFamilies, TypeOperators, UndecidableInstances
 
 %uses Data.Functor.Contravariant
 %uses Data.Text
 %uses Data.Time
 %uses GHC.Generics
 %uses qualified Hasql.Transaction as Tx
-%uses Rel8
-%uses qualified Rel8 as R
+%uses Rel8 hiding
 %uses Pelotero.DB.Pool
+%uses qualified Pelotero.DB.ProviderKeyed as PK
+%uses Pelotero.DB.ProviderKeyed
 %uses Pelotero.DB.Provider
 %uses Pelotero.DB.Rel8Instances
 %uses Pelotero.Domain.Id
@@ -1578,15 +1683,6 @@ data Team f = Team
   deriving stock    (Generic)
   deriving anyclass (Rel8able)
 
-data TeamExternalId f = TeamExternalId
-  { _teidTeamId     :: Column f DbTeamId
-  , _teidProvider   :: Column f ProviderName
-  , _teidExternalId :: Column f Text
-  , _teidFetchedAt  :: Column f UTCTime
-  }
-  deriving stock    (Generic)
-  deriving anyclass (Rel8able)
-
 data TeamRow = TeamRow
   { teamRowId                 :: !(Maybe DbTeamId)
   , teamRowName               :: !Text
@@ -1597,15 +1693,19 @@ data TeamRow = TeamRow
   }
   deriving stock (Show, Eq)
 
+instance ProviderKeyed TeamRow where
+
 teamSchema :: TableSchema (Team Name)
   ! table 'team' with surrogate id, name, abbreviation, location_name (city), and last-synced metadata
   ! no FK out — teams are leaves in the FK graph
 
-teamExternalIdSchema :: TableSchema (TeamExternalId Name)
+teamExternalIdSchema :: TableSchema (ExternalIdE DbTeamId Name)
   ! same shape as player_external_id: (team_id, provider, external_id, fetched_at)
 
 fromResult :: Team Result -> TeamRow
   ! private; rel8 Result -> public TeamRow
+
+teamRowToExpr :: TeamRow -> Team Expr
 
 insertTeamT :: TeamRow -> Tx.Transaction DbTeamId
   ! INSERT ... RETURNING id; Abort on conflict
@@ -1628,8 +1728,7 @@ lookupByExternalIdT :: ProviderName -> Text -> Tx.Transaction (Maybe DbTeamId)
 getExternalIdT :: DbTeamId -> ProviderName -> Tx.Transaction (Maybe Text)
   ! reverse lookup; (DbTeamId, ProviderName) -> Maybe Text
 
-upsertByExternalIdT
-  :: ProviderName -> Text -> TeamRow -> Tx.Transaction DbTeamId
+upsertByExternalIdT :: ProviderName -> Text -> TeamRow -> Tx.Transaction DbTeamId
   ! lookup-then-update or insert-and-link
 
 insertTeam :: Pool -> TeamRow -> IO (Either DBError DbTeamId)
@@ -1653,8 +1752,7 @@ lookupByExternalId :: Pool -> ProviderName -> Text -> IO (Either DBError (Maybe 
 getExternalId :: Pool -> DbTeamId -> ProviderName -> IO (Either DBError (Maybe Text))
   ! Pool-flavored wrapper
 
-upsertByExternalId
-  :: Pool -> ProviderName -> Text -> TeamRow -> IO (Either DBError DbTeamId)
+upsertByExternalId :: Pool -> ProviderName -> Text -> TeamRow -> IO (Either DBError DbTeamId)
   ! Pool-flavored wrapper
 
 %decision MirrorsPlayerSchema

@@ -936,7 +936,71 @@
         ]
       }
     },
-
+    "Pelotero.DB.ProviderKeyed": {
+      "decisions": [
+        {
+          "name": "ParametricExternalIdEntity",
+          "what": "ExternalIdE i f is a single rel8able record parameterised by the surrogate id type, NOT three separate per-table records (PlayerExternalId, TeamExternalId, GameExternalId)",
+          "why": [
+            "All three external-id companion tables have identical column shape (entity_id, provider, external_id, fetched_at); the only difference is the type of entity_id. Sharing the record type forces that fact at compile time.",
+            "Adding a fourth provider-keyed table is one TableSchema literal plus one ProviderKeyed instance; no new entity record needed.",
+            "Cost: one Rel8able instance with a (DBType i, DBEq i) constraint, plus standalone-deriving ergonomics. Acceptable for the consolidation."
+          ],
+          "affects": ["ExternalIdE"]
+        },
+        {
+          "name": "TypeclassOverRecordOfFunctions",
+          "what": "ProviderKeyed is a typeclass with associated type families (RowEntity, RowId), not a record-of-functions value passed to free-standing helpers",
+          "why": [
+            "The associated type families let GHC propagate RowId row through to the surrogate-id type at every call site without manual threading.",
+            "Type applications (linkExternalIdT @PlayerRow) at the few sites where row is otherwise ambiguous from the value-level args; explicit and greppable.",
+            "A Proxy-based or record-of-functions variant would push that disambiguation to value-level boilerplate at every call site."
+          ],
+          "affects": ["ProviderKeyed"]
+        },
+        {
+          "name": "InsertAndUpdateAreInstanceMethods",
+          "what": "insertRowT and updateRowByIdT are typeclass methods (each instance provides its own), NOT default methods derived from rowSchema and a generic rowToExpr",
+          "why": [
+            "The rel8 Insert and Update clauses need entity-specific knowledge: which field is the surrogate id (so it can be set to unsafeDefault on insert and to lit pid on update), and the per-field 'lit value' translation. Generalising this would require per-field traversals via Generic, which is more machinery than the three current callers justify.",
+            "Each instance's insertRowT and updateRowByIdT are literally one-liners that point at the existing per-table insertXxxT and updateXxxT functions, so no real boilerplate is added.",
+            "If a fourth provider-keyed table arrives, this design extends cleanly: write the per-table insert/update, declare the instance."
+          ],
+          "affects": ["ProviderKeyed.insertRowT", "ProviderKeyed.updateRowByIdT"]
+        },
+        {
+          "name": "FacadesPreserveCallSites",
+          "what": "Per-table modules (Pelotero.DB.Player / .Team / .Game) re-export the four external-id helpers and their Pool wrappers as one-line facades that call PK.foo @MyRow",
+          "why": [
+            "Zero call-site changes outside the DB layer. The effect interpreters (runPlayersDB etc.) and Sync code keep importing Pelotero.DB.Player.upsertByExternalIdT exactly as before.",
+            "Cost: 4 × 2 = 8 trivial wrapper definitions per table. Worth it to keep the migration scope narrow.",
+            "If we later decide call sites should go through PK directly, deleting the facades is a mechanical follow-up."
+          ],
+          "affects": []
+        }
+      ],
+      "invariants": {
+        "linkExternalIdT": [
+          "INSERT into externalIdSchema with ON CONFLICT DO NOTHING; idempotent on re-runs",
+          "_eidFetchedAt set via unsafeDefault — the DB column has DEFAULT NOW()"
+        ],
+        "lookupByExternalIdT": [
+          "SELECT _eidEntityId WHERE provider AND external_id; returns the first row or Nothing",
+          "Phase A.5: replaces the inline lookup that was duplicated across DB.Player / DB.Team / DB.Game"
+        ],
+        "getExternalIdT": [
+          "Reverse lookup; SELECT _eidExternalId WHERE entity_id AND provider"
+        ],
+        "upsertByExternalIdT": [
+          "Atomic within the caller's transaction: lookupByExternalIdT, then either updateRowByIdT (existing entity) or insertRowT + linkExternalIdT (new entity)",
+          "Returns the surrogate id either way — caller doesn't need to distinguish insert vs. update"
+        ],
+        "linkExternalId": ["Pool-flavored wrapper around linkExternalIdT"],
+        "lookupByExternalId": ["Pool-flavored wrapper around lookupByExternalIdT"],
+        "getExternalId": ["Pool-flavored wrapper around getExternalIdT"],
+        "upsertByExternalId": ["Pool-flavored wrapper around upsertByExternalIdT"]
+      }
+    },
     "Pelotero.DB.Pool": {
       "decisions": [
         {

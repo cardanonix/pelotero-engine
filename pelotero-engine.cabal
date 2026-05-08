@@ -82,6 +82,7 @@ library
     Pelotero.DB.DraftPick
     Pelotero.DB.PlayerRanking
     Pelotero.DB.LineupSnapshot
+    Pelotero.DB.ProviderKeyed
     -- Effects
     Pelotero.Effects.Database
     Pelotero.Effects.Clock

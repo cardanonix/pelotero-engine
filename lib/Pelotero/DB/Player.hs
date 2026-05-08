@@ -3,14 +3,20 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Pelotero.DB.Player
-  ( PlayerRow(..)
+  ( Player (..)
+  , playerSchema
+  , playerExternalIdSchema
+  , PlayerRow (..)
   , insertPlayerT
   , updatePlayerT
   , getByIdT
@@ -31,31 +37,23 @@ module Pelotero.DB.Player
   , upsertByExternalId
   ) where
 
-import           Data.Functor.Contravariant ((>$<))
-import           Data.Text                  (Text)
-import qualified Data.Text                  as T
-import           Data.Time                  (UTCTime)
-import           GHC.Generics               (Generic)
+import Data.Text (Text)
+import qualified Data.Text as T
+import Data.Time (UTCTime)
+import GHC.Generics (Generic)
+import qualified Hasql.Transaction as Tx
+import Rel8 hiding (fromResult)
 
-import qualified Hasql.Transaction          as Tx
-
-import           Rel8                       ( Column
-                                            , Name
-                                            , Rel8able
-                                            , Result
-                                            , TableSchema(..)
-                                            , (==.)
-                                            )
-import qualified Rel8                       as R
-
-import Pelotero.DB.Pool      (DBError, Pool, runTransaction)
-import Pelotero.DB.Provider  (ProviderName)
+import Pelotero.DB.Pool (DBError, Pool, runTransaction)
+import qualified Pelotero.DB.ProviderKeyed as PK
+import Pelotero.DB.ProviderKeyed (ExternalIdE (..), ProviderKeyed (..))
+import Pelotero.DB.Provider (ProviderName)
 import Pelotero.DB.Rel8Instances ()
-import Pelotero.Domain.Id    (DbPlayerId(..), DbTeamId(..))
+import Pelotero.Domain.Id (DbPlayerId, DbTeamId)
 
--- ============================================================================
--- player
--- ============================================================================
+-- ---------------------------------------------------------------------
+-- Rel8 entity
+-- ---------------------------------------------------------------------
 
 data Player f = Player
   { _playerId                 :: Column f DbPlayerId
@@ -73,8 +71,28 @@ data Player f = Player
   deriving stock    (Generic)
   deriving anyclass (Rel8able)
 
-deriving stock instance f ~ Result => Show (Player f)
-deriving stock instance f ~ Result => Eq   (Player f)
+-- ---------------------------------------------------------------------
+-- Public row type
+-- ---------------------------------------------------------------------
+
+data PlayerRow = PlayerRow
+  { playerRowId                 :: !(Maybe DbPlayerId)
+  , playerRowFirstName          :: !Text
+  , playerRowLastName           :: !Text
+  , playerRowNameSlug           :: !Text
+  , playerRowPosition           :: !(Maybe Text)
+  , playerRowBatSide            :: !(Maybe Char)
+  , playerRowPitchHand          :: !(Maybe Char)
+  , playerRowActive             :: !Bool
+  , playerRowCurrentTeamId      :: !(Maybe DbTeamId)
+  , playerRowLastSyncedProvider :: !(Maybe ProviderName)
+  , playerRowLastSyncedAt       :: !(Maybe UTCTime)
+  }
+  deriving stock (Show, Eq)
+
+-- ---------------------------------------------------------------------
+-- Schemas
+-- ---------------------------------------------------------------------
 
 playerSchema :: TableSchema (Player Name)
 playerSchema = TableSchema
@@ -94,58 +112,30 @@ playerSchema = TableSchema
       }
   }
 
--- ============================================================================
--- player_external_id
--- ============================================================================
-
-data PlayerExternalId f = PlayerExternalId
-  { _peidPlayerId   :: Column f DbPlayerId
-  , _peidProvider   :: Column f ProviderName
-  , _peidExternalId :: Column f Text
-  , _peidFetchedAt  :: Column f UTCTime
-  }
-  deriving stock    (Generic)
-  deriving anyclass (Rel8able)
-
-playerExternalIdSchema :: TableSchema (PlayerExternalId Name)
+playerExternalIdSchema :: TableSchema (ExternalIdE DbPlayerId Name)
 playerExternalIdSchema = TableSchema
   { name    = "player_external_id"
-  , columns = PlayerExternalId
-      { _peidPlayerId   = "player_id"
-      , _peidProvider   = "provider"
-      , _peidExternalId = "external_id"
-      , _peidFetchedAt  = "fetched_at"
+  , columns = ExternalIdE
+      { _eidEntityId   = "player_id"
+      , _eidProvider   = "provider"
+      , _eidExternalId = "external_id"
+      , _eidFetchedAt  = "fetched_at"
       }
   }
 
--- ============================================================================
--- Public row type (API compatibility with old hasql module)
--- ============================================================================
-
-data PlayerRow = PlayerRow
-  { playerRowId                 :: !(Maybe DbPlayerId)
-  , playerRowFirstName          :: !Text
-  , playerRowLastName           :: !Text
-  , playerRowNameSlug           :: !Text
-  , playerRowPosition           :: !(Maybe Text)
-  , playerRowBatSide            :: !(Maybe Char)
-  , playerRowPitchHand          :: !(Maybe Char)
-  , playerRowActive             :: !Bool
-  , playerRowCurrentTeamId      :: !(Maybe DbTeamId)
-  , playerRowLastSyncedProvider :: !(Maybe ProviderName)
-  , playerRowLastSyncedAt       :: !(Maybe UTCTime)
-  }
-  deriving stock (Show, Eq)
+-- ---------------------------------------------------------------------
+-- Char <-> Text helpers
+-- ---------------------------------------------------------------------
 
 charToText :: Maybe Char -> Maybe Text
 charToText = fmap T.singleton
 
 textToChar :: Maybe Text -> Maybe Char
-textToChar = (>>= safeHead)
-  where
-    safeHead t = case T.uncons t of
-      Just (c, _) -> Just c
-      Nothing     -> Nothing
+textToChar = (>>= fmap fst . T.uncons)
+
+-- ---------------------------------------------------------------------
+-- Result <-> public row
+-- ---------------------------------------------------------------------
 
 fromResult :: Player Result -> PlayerRow
 fromResult Player{..} = PlayerRow
@@ -162,131 +152,106 @@ fromResult Player{..} = PlayerRow
   , playerRowLastSyncedAt       = _playerLastSyncedAt
   }
 
--- ============================================================================
--- Transaction-flavored CRUD
--- ============================================================================
+playerRowToExpr :: PlayerRow -> Player Expr
+playerRowToExpr PlayerRow{..} = Player
+  { _playerId                 = case playerRowId of
+                                  Nothing  -> unsafeDefault
+                                  Just pid -> lit pid
+  , _playerFirstName          = lit playerRowFirstName
+  , _playerLastName           = lit playerRowLastName
+  , _playerNameSlug           = lit playerRowNameSlug
+  , _playerPosition           = lit playerRowPosition
+  , _playerBatSide            = lit (charToText playerRowBatSide)
+  , _playerPitchHand          = lit (charToText playerRowPitchHand)
+  , _playerActive             = lit playerRowActive
+  , _playerCurrentTeamId      = lit playerRowCurrentTeamId
+  , _playerLastSyncedProvider = lit playerRowLastSyncedProvider
+  , _playerLastSyncedAt       = lit playerRowLastSyncedAt
+  }
+
+-- ---------------------------------------------------------------------
+-- Insert / Update
+-- ---------------------------------------------------------------------
 
 insertPlayerT :: PlayerRow -> Tx.Transaction DbPlayerId
-insertPlayerT row = Tx.statement () $ R.run1 $ R.insert R.Insert
-  { R.into       = playerSchema
-  , R.rows       = R.values
-      [ Player
-          { _playerId                 = R.unsafeDefault
-          , _playerFirstName          = R.lit (playerRowFirstName row)
-          , _playerLastName           = R.lit (playerRowLastName row)
-          , _playerNameSlug           = R.lit (playerRowNameSlug row)
-          , _playerPosition           = R.lit (playerRowPosition row)
-          , _playerBatSide            = R.lit (charToText (playerRowBatSide row))
-          , _playerPitchHand          = R.lit (charToText (playerRowPitchHand row))
-          , _playerActive             = R.lit (playerRowActive row)
-          , _playerCurrentTeamId      = R.lit (playerRowCurrentTeamId row)
-          , _playerLastSyncedProvider = R.lit (playerRowLastSyncedProvider row)
-          , _playerLastSyncedAt       = R.lit (playerRowLastSyncedAt row)
-          }
-      ]
-  , R.onConflict = R.Abort
-  , R.returning  = R.Returning _playerId
-  }
+insertPlayerT row =
+  Tx.statement () $ run1 $ insert Insert
+    { into       = playerSchema
+    , rows       = values [playerRowToExpr row]
+    , onConflict = Abort
+    , returning  = Returning _playerId
+    }
 
 updatePlayerT :: DbPlayerId -> PlayerRow -> Tx.Transaction ()
-updatePlayerT pid row = Tx.statement () $ R.run_ $ R.update R.Update
-  { R.target      = playerSchema
-  , R.from        = pure ()
-  , R.set         = \_ p -> p
-      { _playerFirstName          = R.lit (playerRowFirstName row)
-      , _playerLastName           = R.lit (playerRowLastName row)
-      , _playerNameSlug           = R.lit (playerRowNameSlug row)
-      , _playerPosition           = R.lit (playerRowPosition row)
-      , _playerBatSide            = R.lit (charToText (playerRowBatSide row))
-      , _playerPitchHand          = R.lit (charToText (playerRowPitchHand row))
-      , _playerActive             = R.lit (playerRowActive row)
-      , _playerCurrentTeamId      = R.lit (playerRowCurrentTeamId row)
-      , _playerLastSyncedProvider = R.lit (playerRowLastSyncedProvider row)
-      , _playerLastSyncedAt       = R.lit (playerRowLastSyncedAt row)
-      }
-  , R.updateWhere = \_ p -> _playerId p ==. R.lit pid
-  , R.returning   = R.NoReturning
-  }
+updatePlayerT pid row =
+  Tx.statement () $ run_ $ update Update
+    { target      = playerSchema
+    , from        = pure ()
+    , set         = \_ _ -> (playerRowToExpr row) { _playerId = lit pid }
+    , updateWhere = \_ p -> _playerId p ==. lit pid
+    , returning   = NoReturning
+    }
+
+-- ---------------------------------------------------------------------
+-- Reads
+-- ---------------------------------------------------------------------
 
 getByIdT :: DbPlayerId -> Tx.Transaction (Maybe PlayerRow)
 getByIdT pid = do
-  rows <- Tx.statement () $ R.run $ R.select $ do
-    p <- R.each playerSchema
-    R.where_ (_playerId p ==. R.lit pid)
+  rows <- Tx.statement () $ run $ select $ do
+    p <- each playerSchema
+    where_ $ _playerId p ==. lit pid
     pure p
   pure $ case rows of
-    (p : _) -> Just (fromResult p)
+    (r : _) -> Just (fromResult r)
     []      -> Nothing
 
 getAllT :: Tx.Transaction [PlayerRow]
 getAllT = do
-  rows <- Tx.statement () $ R.run $ R.select $
-    R.orderBy ((_playerLastName >$< R.asc) <> (_playerFirstName >$< R.asc))
-              (R.each playerSchema)
+  rows <- Tx.statement () $ run $ select $ each playerSchema
   pure (map fromResult rows)
 
 getActiveT :: Tx.Transaction [PlayerRow]
 getActiveT = do
-  rows <- Tx.statement () $ R.run $ R.select $
-    R.orderBy ((_playerLastName >$< R.asc) <> (_playerFirstName >$< R.asc)) $ do
-      p <- R.each playerSchema
-      R.where_ (_playerActive p)
-      pure p
+  rows <- Tx.statement () $ run $ select $ do
+    p <- each playerSchema
+    where_ $ _playerActive p ==. lit True
+    pure p
   pure (map fromResult rows)
 
+-- ---------------------------------------------------------------------
+-- ProviderKeyed instance
+-- ---------------------------------------------------------------------
+
+instance ProviderKeyed PlayerRow where
+  type RowEntity PlayerRow = Player
+  type RowId     PlayerRow = DbPlayerId
+
+  rowSchema        = playerSchema
+  externalIdSchema = playerExternalIdSchema
+  rowIdColumn      = _playerId
+  insertRowT       = insertPlayerT
+  updateRowByIdT   = updatePlayerT
+
+-- ---------------------------------------------------------------------
+-- External-id facades
+-- ---------------------------------------------------------------------
+
 linkExternalIdT :: DbPlayerId -> ProviderName -> Text -> Tx.Transaction ()
-linkExternalIdT pid provider extId = Tx.statement () $ R.run_ $ R.insert R.Insert
-  { R.into       = playerExternalIdSchema
-  , R.rows       = R.values
-      [ PlayerExternalId
-          { _peidPlayerId   = R.lit pid
-          , _peidProvider   = R.lit provider
-          , _peidExternalId = R.lit extId
-          , _peidFetchedAt  = R.unsafeDefault
-          }
-      ]
-  , R.onConflict = R.DoNothing
-  , R.returning  = R.NoReturning
-  }
+linkExternalIdT = PK.linkExternalIdT @PlayerRow
 
 lookupByExternalIdT :: ProviderName -> Text -> Tx.Transaction (Maybe DbPlayerId)
-lookupByExternalIdT provider extId = do
-  rows <- Tx.statement () $ R.run $ R.select $ do
-    e <- R.each playerExternalIdSchema
-    R.where_ (_peidProvider   e ==. R.lit provider)
-    R.where_ (_peidExternalId e ==. R.lit extId)
-    pure (_peidPlayerId e)
-  pure $ case rows of
-    (pid : _) -> Just pid
-    []        -> Nothing
+lookupByExternalIdT = PK.lookupByExternalIdT @PlayerRow
 
 getExternalIdT :: DbPlayerId -> ProviderName -> Tx.Transaction (Maybe Text)
-getExternalIdT pid provider = do
-  rows <- Tx.statement () $ R.run $ R.select $ do
-    e <- R.each playerExternalIdSchema
-    R.where_ (_peidPlayerId e ==. R.lit pid)
-    R.where_ (_peidProvider e ==. R.lit provider)
-    pure (_peidExternalId e)
-  pure $ case rows of
-    (extId : _) -> Just extId
-    []          -> Nothing
+getExternalIdT = PK.getExternalIdT @PlayerRow
 
-upsertByExternalIdT
-  :: ProviderName -> Text -> PlayerRow -> Tx.Transaction DbPlayerId
-upsertByExternalIdT provider extId row = do
-  found <- lookupByExternalIdT provider extId
-  case found of
-    Just pid -> do
-      updatePlayerT pid row
-      pure pid
-    Nothing -> do
-      pid <- insertPlayerT row
-      linkExternalIdT pid provider extId
-      pure pid
+upsertByExternalIdT :: ProviderName -> Text -> PlayerRow -> Tx.Transaction DbPlayerId
+upsertByExternalIdT = PK.upsertByExternalIdT @PlayerRow
 
--- ============================================================================
--- Pool-flavored CRUD
--- ============================================================================
+-- ---------------------------------------------------------------------
+-- Pool-flavored wrappers
+-- ---------------------------------------------------------------------
 
 insertPlayer :: Pool -> PlayerRow -> IO (Either DBError DbPlayerId)
 insertPlayer pool row = runTransaction pool (insertPlayerT row)
@@ -304,18 +269,13 @@ getActive :: Pool -> IO (Either DBError [PlayerRow])
 getActive pool = runTransaction pool getActiveT
 
 linkExternalId :: Pool -> DbPlayerId -> ProviderName -> Text -> IO (Either DBError ())
-linkExternalId pool pid provider extId =
-  runTransaction pool (linkExternalIdT pid provider extId)
+linkExternalId = PK.linkExternalId @PlayerRow
 
 lookupByExternalId :: Pool -> ProviderName -> Text -> IO (Either DBError (Maybe DbPlayerId))
-lookupByExternalId pool provider extId =
-  runTransaction pool (lookupByExternalIdT provider extId)
+lookupByExternalId = PK.lookupByExternalId @PlayerRow
 
 getExternalId :: Pool -> DbPlayerId -> ProviderName -> IO (Either DBError (Maybe Text))
-getExternalId pool pid provider =
-  runTransaction pool (getExternalIdT pid provider)
+getExternalId = PK.getExternalId @PlayerRow
 
-upsertByExternalId
-  :: Pool -> ProviderName -> Text -> PlayerRow -> IO (Either DBError DbPlayerId)
-upsertByExternalId pool provider extId row =
-  runTransaction pool (upsertByExternalIdT provider extId row)
+upsertByExternalId :: Pool -> ProviderName -> Text -> PlayerRow -> IO (Either DBError DbPlayerId)
+upsertByExternalId = PK.upsertByExternalId @PlayerRow
