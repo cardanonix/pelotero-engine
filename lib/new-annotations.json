@@ -86,13 +86,13 @@
       "decisions": [
         {
           "name": "KatipPatternLiftedFromCheeblr",
-          "what": "Logging effect uses the Katip pattern: logFM, logItem, katipNamespace; production interpreter broadcasts to stdout JSON + a rotating file scribe",
+          "what": "Logging effect uses the Katip pattern: logFM, logItem, addNamespace, addContext; production interpreter writes structured JSON to stdout",
           "why": [
-            "Cheeblr already runs this exact stack in production with structured search-friendly JSON logs; reusing it means we get the same querying, the same tooling, and one less invented wheel.",
+            "Cheeblr already runs this pattern in production with structured search-friendly JSON logs; reusing it means we get the same querying, the same tooling, and one less invented wheel.",
             "Structured logs make per-warning grepping (e.g. 'all UnknownPosition warnings in the last week') a one-line jq query rather than a regex over freeform text.",
-            "Test interpreter (runLoggingPure) collects messages into a [LogLine] return so assertions about logging behaviour are first-class rather than relying on captured stderr."
+            "Stdout-only at the application layer; the runtime (systemd / OCI runtime / k8s) handles persistence and rotation. We deliberately avoid in-process file rotation because it duplicates the runtime's job."
           ],
-          "affects": ["logFM", "logItem", "katipNamespace", "runLoggingProd", "runLoggingPure"]
+          "affects": ["logFM", "logItem", "addNamespace", "addContext", "runLoggingKatip", "runLoggingCapture", "runLoggingDiscard"]
         },
         {
           "name": "ReplacesConvertLogWarnings",
@@ -100,162 +100,52 @@
           "why": [
             "Convert.logWarnings wrote bare stderr lines with a 'convert: ' prefix; the prefix was the only structure log scrapers had to grab onto.",
             "Going through Logging means each ConvertWarning becomes a structured log item with its constructor name as a tag; downstream systems can filter on the tag, not on string-prefix scraping.",
-            "The Handle-parameterised logWarningsTo indirection existed only to make logWarnings testable; with a pure test interpreter (runLoggingPure), that indirection disappears."
+            "The Handle-parameterised logWarningsTo indirection existed only to make logWarnings testable; with a capturing test interpreter (runLoggingCapture), that indirection disappears."
           ],
           "affects": ["logFM"]
         }
       ],
       "invariants": {
         "logFM": [
-          "Logging send-only; structured log emission with severity + message + namespace fields",
-          "production: writes to broadcast scribe (stdout JSON + rotating file)",
-          "test: appends to an [LogLine] accumulator returned from runLoggingPure"
+          "Logging send-only; structured log emission with severity + message",
+          "production: writes a JSON line to stdout via Katip's stdout scribe",
+          "test: appends to an IORef-backed [LogLine] under runLoggingCapture, or no-ops under runLoggingDiscard"
         ],
         "logItem": [
-          "Logging send-only; logs an arbitrary Aeson-encodable payload with a severity",
+          "Logging send-only; logs a Katip-LogItem-encodable payload with a severity",
           "used for richer structured events (e.g. SyncResult summaries) where a plain text message loses the structure"
         ],
-        "katipNamespace": [
+        "addNamespace": [
           "Logging operation; runs an inner Eff under a nested Katip namespace",
           "used to scope all logs from a syncRosters call under e.g. 'sync.rosters' so traces are easy to filter"
         ],
-        "runLoggingProd": {
-          "intent": "Production interpreter; broadcasts to stdout JSON + rotating file scribe with the configured app namespace",
+        "addContext": [
+          "Logging operation; attaches structured key/value context to all logs emitted by the inner Eff",
+          "carries through to JSON output as additional fields on each log line"
+        ],
+        "runLoggingKatip": {
+          "intent": "Production interpreter; writes JSON-formatted log lines to stdout via Katip's stdout scribe",
           "effects": ["IOE"],
           "notes": [
             "scribes and namespace are wired once at startup",
-            "no per-call IO setup cost; Katip's machinery is fully initialised before the Eff runs"
+            "stdout-only; the runtime is responsible for persistence/rotation"
           ]
         },
-        "runLoggingPure": {
-          "intent": "Test interpreter; collects every emitted log into an in-memory [LogLine] returned alongside the inner action's result",
+        "runLoggingCapture": {
+          "intent": "Test interpreter that captures every emitted log into an IORef-backed [LogLine] returned alongside the inner action's result",
+          "effects": ["IOE"],
           "notes": [
-            "no IO; deterministic; suitable for property tests asserting 'these warnings were emitted in this order'",
-            "captures the FULL structured payload (severity, namespace, message, fields), not just the rendered string"
-          ]
-        }
-      }
-    },
-
-    "Pelotero.DB.JsonB": {
-      "decisions": [
-        {
-          "name": "NewtypeWrappersOwnTheJsonInstances",
-          "what": "JsonbScoring, JsonbBattingMultipliers, JsonbPitchingMultipliers, JsonbRosterLimits, JsonbLineupLimits are newtype wrappers that own the ToJSON/FromJSON instances; the underlying Domain types stay pure",
-          "why": [
-            "The previous arrangement put ToJSON/FromJSON instances directly on the Domain types (LeagueScoring, RosterLimits, LineupLimits, etc.). That forced the Domain layer to depend on Aeson, which is a wrong-direction layering: persistence-formatting concerns leaking into the pure domain.",
-            "Newtype wrappers move the Aeson instances into the persistence layer where they belong. Domain types remain Aeson-free; only DB code has to know about JSON-on-disk encoding.",
-            "The wrappers are deriving newtype (Show, Eq) so they're transparent at use sites; only the Aeson behaviour is added.",
-            "An 'Encoding' module that imports Domain + Aeson together would have been simpler in line count but would still leave the orphan-instance question open. Wrapper newtypes make the layer explicit and unambiguous."
-          ],
-          "affects": [
-            "JsonbScoring",
-            "JsonbBattingMultipliers",
-            "JsonbPitchingMultipliers",
-            "JsonbRosterLimits",
-            "JsonbLineupLimits"
+            "uses IOE because it needs an IORef; not pure",
+            "captures the structured payload (severity, namespace, message), suitable for asserting 'these warnings were emitted in this order' in property tests"
           ]
         },
-        {
-          "name": "WrappersUsedInColumnDeclarations",
-          "what": "Pelotero.DB.LeagueConfig declares its JSONB-backed columns at the wrapper type, not the Domain type",
-          "why": [
-            "Forces the unwrap to happen at the API boundary (the row type) rather than implicitly via an orphan instance.",
-            "Reading the LeagueConfig schema makes the JSON-encoded nature of those columns explicit at the type level; nothing is hidden behind 'just a Column f LeagueScoring with magic'.",
-            "The one-time cost is two trivial unwrap functions in fromResult and one wrap in toExpr; the win is no orphan instances anywhere in the codebase."
-          ],
-          "affects": []
-        }
-      ],
-      "invariants": {
-        "JsonbScoring": [
-          "newtype wrapper around Pelotero.Domain.Scoring.LeagueScoring",
-          "owns the ToJSON / FromJSON instances; Domain stays Aeson-free",
-          "DBType instance derives via JSONBEncoded so rel8 stores the wrapped value as JSONB"
-        ],
-        "JsonbBattingMultipliers": [
-          "newtype wrapper around BattingMultipliers; mirror of JsonbScoring"
-        ],
-        "JsonbPitchingMultipliers": [
-          "newtype wrapper around PitchingMultipliers; mirror of JsonbScoring"
-        ],
-        "JsonbRosterLimits": [
-          "newtype wrapper around Pelotero.Domain.Roster.RosterLimits",
-          "ToJSON encodes via Map.mapKeys renderRosterSlot; FromJSON parses with parseRosterSlot",
-          "unknown slot keys at parse time fail loudly with the offending key in the message"
-        ],
-        "JsonbLineupLimits": [
-          "newtype wrapper around LineupLimits; mirror of JsonbRosterLimits"
-        ]
-      }
-    },
-
-    "Pelotero.DB.Common.ProviderKeyed": {
-      "decisions": [
-        {
-          "name": "ClassEarnsKeepAtThreeCallers",
-          "what": "ProviderKeyed type class abstracts the surrogate-id + external_id companion-table pattern over Player, Team, and Game",
-          "why": [
-            "Three table modules (Pelotero.DB.Player, Pelotero.DB.Team, Pelotero.DB.Game) had near-identical linkExternalIdT / lookupByExternalIdT / getExternalIdT / upsertByExternalIdT functions, each ~30 lines. That's the threshold where structural duplication starts costing more than the abstraction.",
-            "The class collapses ~120 lines of boilerplate to one definition. Adding a fourth provider-keyed table is a new instance, not a new module of copy-paste.",
-            "Deliberately NOT generalised to LeagueConfig or LeagueTeam (which have user-supplied keys, not provider external ids) or DraftPick (append-only, no lookup). The class only fits where the pattern fits."
-          ],
-          "affects": [
-            "upsertByExternalIdT",
-            "linkExternalIdT",
-            "lookupByExternalIdT",
-            "getExternalIdT"
-          ]
-        },
-        {
-          "name": "AssociatedTypesForRowAndId",
-          "what": "ProviderKeyed has two associated types (RowId and RowEntity) plus four schema/projection functions; instances supply both",
-          "why": [
-            "Player needs to know that PlayerRow's id type is DbPlayerId and its entity is the rel8 Player f shape; the class machinery captures that pairing so the four boilerplate functions become row-polymorphic without losing type safety.",
-            "Without associated types, the same code would need PlayerId / TeamId / GameId conversions threaded through every call; with them, the rowIdColumn projection IS the conversion.",
-            "TableSchema-returning members (rowSchema, externalIdSchema) let instances hide the underlying rel8 schemas; the class only sees the abstract shape."
-          ],
-          "affects": []
-        }
-      ],
-      "invariants": {
-        "rowSchema": [
-          "Class member; returns the rel8 TableSchema for the entity table",
-          "instances: rowSchema = Pelotero.DB.Player.playerSchema (etc.)"
-        ],
-        "externalIdSchema": [
-          "Class member; returns the rel8 TableSchema for the external_id companion table",
-          "instances: externalIdSchema = Pelotero.DB.Player.playerExternalIdSchema (etc.)"
-        ],
-        "rowIdColumn": [
-          "Class projection; pulls the primary key column out of an entity Expr",
-          "instances: rowIdColumn = _playerId (etc.)"
-        ],
-        "externalIdToRow": [
-          "Class projection; pulls the entity foreign key out of an external_id Expr",
-          "instances: externalIdToRow = _peidPlayerId (etc.)"
-        ],
-        "upsertByExternalIdT": {
-          "intent": "Generic two-step upsert: lookup via (provider, external_id); if found, update entity; if not, insert and link",
+        "runLoggingDiscard": {
+          "intent": "Test interpreter that silently drops every log; pure (no effects on the inner stack)",
           "notes": [
-            "atomic within a transaction (caller's responsibility to wrap if needed; the pool variant does)",
-            "concurrent upserts to the same (provider, external_id) can race; acceptable because the sync pipeline is single-writer",
-            "instance-polymorphic; same shape for Player, Team, Game"
-          ],
-          "consumes": [
-            "Pelotero.Sync.Players.upsertAllPlayers, Pelotero.Sync.Players.upsertAllTeams, Pelotero.Sync.Schedule.upsertOneGame (via the corresponding effects)"
+            "default for tests that don't care about logging output",
+            "leaves the rest of the effect stack untouched so callers don't have to thread IOE just to silence logs"
           ]
-        },
-        "linkExternalIdT": [
-          "Generic INSERT ... ON CONFLICT DO NOTHING into the external_id companion table",
-          "idempotent; safe to call repeatedly during re-syncs"
-        ],
-        "lookupByExternalIdT": [
-          "Generic SELECT entity_id WHERE provider AND external_id; returns Maybe (RowId row)"
-        ],
-        "getExternalIdT": [
-          "Generic reverse lookup: given a RowId and provider, returns Maybe Text"
-        ]
+        }
       }
     },
 
@@ -302,14 +192,14 @@
           "affects": ["scoreLeague", "scoreTeam"]
         },
         {
-          "name": "DateRangeReadsAreTwoQueries",
-          "what": "buildPlayerMaps issues exactly two transactions per scoring run: one getBattingForDateRangeT and one getPitchingForDateRangeT, regardless of how many games are in the period",
+          "name": "PerGamePlayerMapBuilds",
+          "what": "buildPlayerMaps issues one BoxscoreEntry.getBattingForGame and one BoxscoreEntry.getPitchingForGame per game id and bucks the results into Map DbPlayerId [Row] in Haskell",
           "why": [
-            "Phase C.2 replaced the per-game N+M query pattern with a single date-range query per stat type. For a season-long period this is the difference between 4800 transactions and 2.",
-            "The repository functions JOIN game.game_date with game_player_batting / game_player_pitching and bucket results by player_id at the rel8 level.",
-            "In-memory test interpreter implements the same shape via filter+groupBy on the underlying List, so test/prod parity holds."
+            "BoxscoreEntry only exposes per-game queries today. A single date-range query would be the right shape (and is the planned C.2 work), but adding it requires extending both the DB module and the effect.",
+            "Per-game queries keep the Score module honest about its dependencies — it asks for what BoxscoreEntry actually offers — at the cost of N round-trips per scoring period.",
+            "Acceptable for current league sizes (a 30-day period is ~450 games for one MLB league) but explicitly a known performance gap; C.2 is the optimisation."
           ],
-          "affects": ["buildPlayerMaps", "buildBattingMap", "buildPitchingMap"]
+          "affects": ["buildPlayerMaps"]
         },
         {
           "name": "ScoringReadsFromLineupSnapshots",
@@ -324,10 +214,10 @@
       ],
       "invariants": {
         "rowToBattingStats": [
-          "mechanical Int32 → Int widening on every Maybe field; lossless"
+          "mechanical Int32 -> Int widening on every Maybe field; lossless"
         ],
         "rowToPitchingStats": [
-          "Int32 → Int widening on every Maybe field; lossless",
+          "Int32 -> Int widening on every Maybe field; lossless",
           "pitOuts is preserved straight from the row; no Text reconstruction (post Phase B.1)"
         ],
         "sumBattingPoints": [
@@ -338,12 +228,12 @@
         ],
         "scorePlayerPure": [
           "produces a PlayerScore with batting + pitching subtotals and their sum",
-          "pure: same inputs → same output, no IO or randomness",
+          "pure: same inputs -> same output, no IO or randomness",
           "the canonical hedgehog target for scoring property tests"
         ],
         "scoreLeague": {
           "intent": "Score every team in a league across the league's configured scoring period using snapshotted lineups",
-          "effects": ["LeagueConfig", "LeagueTeam", "LineupSnapshot", "Games", "BoxscoreEntry", "Logging"],
+          "effects": ["LeagueConfig", "LeagueTeam", "LineupSnapshot", "Games", "BoxscoreEntry"],
           "notes": [
             "returns Nothing if the league config row is absent",
             "empty lineups produce zero-point TeamScores rather than being dropped",
@@ -357,22 +247,27 @@
           "does NOT validate that the team belongs to the league"
         ],
         "buildPlayerMaps": [
-          "issues exactly two transactions: getBattingForDateRangeT(start, end) and getPitchingForDateRangeT(start, end)",
-          "endpoints inclusive on both sides",
-          "results bucket by player_id at the repository level; this function only renames"
-        ],
-        "buildBattingMap": [
-          "thin wrapper around BoxscoreEntry.getBattingForDateRangeT; returns Map DbPlayerId [BattingRow]"
-        ],
-        "buildPitchingMap": [
-          "mirror of buildBattingMap"
+          "takes [DbGameId] (the games in the period); the caller (collectGameIds) gets these from Games.getGamesByDateRange",
+          "issues one Box.getBattingForGame and one Box.getPitchingForGame per game id; bucks results into Map DbPlayerId [BattingRow] and Map DbPlayerId [PitchingRow] via Map.fromListWith (++)",
+          "exactly N+N database round trips for an N-game period; collapsing this into a single date-range query is planned C.2 work"
         ],
         "scoreOneTeam": [
-          "per-game inner loop: for each game in the period, fetch the team's lineup snapshot for that game, score that game's stats, sum",
-          "uses LineupSnapshot.getSnapshotForTeamGame (NOT LineupSlot.getSlotsForTeam)"
+          "per-game inner loop: for each game id, fetch the team's lineup snapshot for that game via LineupSnapshot.getSnapshotForTeamGame, score that game's stats, then aggregate per-player scores across games via Map.fromListWith mergePlayerScores",
+          "internal helper; not exported; signature subject to change"
         ],
-        "lookupAndScore": [
-          "Map.findWithDefault [] for both rows; a player on the lineup with no boxscore activity scores zero"
+        "scoreTeamForGame": [
+          "internal; for a (team, game) pair: read the snapshot rows, look up each player's batting/pitching for that specific game, score with scorePlayerPure",
+          "filter step inside scoreOnePlayerForGame discards rows from other games in the period maps"
+        ],
+        "scoreOnePlayerForGame": [
+          "internal; given a player and a game id, filter the player's period rows to only that game's, then call scorePlayerPure",
+          "a player on the snapshot with no boxscore activity for that game gets zero points (filter yields empty lists)"
+        ],
+        "mergePlayerScores": [
+          "internal; pointwise addition of two PlayerScores, used when aggregating per-game scores for the same player across multiple games"
+        ],
+        "collectGameIds": [
+          "internal helper; calls Games.getGamesByDateRange and mapMaybes the gameRowId field"
         ]
       }
     },
@@ -380,45 +275,67 @@
     "Pelotero.Lineup.Snapshot": {
       "decisions": [
         {
-          "name": "SnapshotPerGamePerTeam",
-          "what": "snapshotLineupsForGame copies the current lineup_slot rows into lineup_snapshot keyed by (league_team_id, game_id) at the moment a game is about to start",
+          "name": "SnapshotPerGamePerTeamWithExistsCheck",
+          "what": "snapshotLineupsForGame copies the current lineup_slot rows into lineup_snapshot keyed by (league_team_id, game_id); idempotency is enforced both by an explicit 'snapshot exists?' check at the orchestration level and by a UNIQUE constraint at the table level",
           "why": [
             "The (league_team_id, game_id) key gives us 'what was this team's lineup for this specific game'. Re-running scoring against a snapshot gives a deterministic answer.",
-            "Idempotent: re-running before game start updates the snapshot (caller may want to capture a late lineup change); re-running after game start silently skips per the unique constraint, preserving the canonical lineup.",
-            "Called from a CLI subcommand on a cron schedule (pelotero snapshot lineups --on-date 2025-04-15) before each day's earliest game start.",
-            "Decoupled from sync: snapshot writing is a separate operational concern from data ingestion."
+            "Once a snapshot exists for a (team, game) pair, it is treated as locked-in and is NOT overwritten by re-running. ON CONFLICT DO NOTHING in writeSnapshotsT plus the explicit pre-check together ensure 'first snapshot wins'. This deliberately prevents late-edit scenarios where an owner changes a lineup after the snapshot job ran.",
+            "There is no game-start-time guard at the orchestration level; the schema only tracks game_date (Day), not a precise instant. Operators are responsible for scheduling snapshots before first pitch."
           ],
-          "affects": ["snapshotLineupsForGame", "snapshotLineupsForDate"]
+          "affects": ["snapshotLineupsForTeam", "snapshotLineupsForGame"]
+        },
+        {
+          "name": "TypedResultNotUnit",
+          "what": "snapshotLineupsForTeam returns PerTeamResult and snapshotLineupsForGame returns SnapshotResult; both are aggregates that surface counts (teams snapshotted vs already-done, rows inserted)",
+          "why": [
+            "An earlier sketch had snapshotLineupsForGame return (); operators couldn't tell whether anything happened.",
+            "PerTeamResult has two constructors: TeamSnapshotted Int (n rows submitted to the snapshot table for this team — the number reflects rows attempted; under concurrent snapshot jobs ON CONFLICT DO NOTHING could silently drop duplicates so n may overstate actual inserts in that case) and TeamAlreadyHasSnapshot (snapshotExistsForTeamGame returned True; nothing was written).",
+            "SnapshotResult is a record { snapTeamsSnapshotted, snapTeamsAlreadyDone, snapRowsInserted } with a Monoid instance: mempty is all zeros and (<>) is pointwise addition, so the per-league aggregation is just mconcat."
+          ],
+          "affects": ["snapshotLineupsForTeam", "snapshotLineupsForGame"]
         },
         {
           "name": "ModuleLivesInLineupNotEffects",
           "what": "snapshot orchestration lives at Pelotero.Lineup.Snapshot, not under Pelotero.Effects",
           "why": [
-            "This module composes multiple effects (LineupSlot, LineupSnapshot, LeagueTeam, Clock, Logging) to do a piece of business logic; it is not itself an effect definition.",
+            "This module composes multiple effects (LineupSlot, LineupSnapshot, LeagueConfig, LeagueTeam, Logging) to do a piece of business logic; it is not itself an effect definition.",
             "Pelotero.Effects.LineupSnapshot is the dispatch interface; Pelotero.Lineup.Snapshot is the orchestration layer that uses it.",
             "Mirrors the layering between Pelotero.Sync.* (orchestration) and Pelotero.Effects.* (dispatch)."
           ],
           "affects": []
+        },
+        {
+          "name": "EmptyLineupCornerCase",
+          "what": "If a team has no lineup_slot rows at snapshot time, snapshotLineupsForTeam writes zero rows and returns TeamSnapshotted 0; the snapshotExistsForTeamGame query will subsequently return False (no rows), so a re-run with a non-empty lineup will write a fresh snapshot",
+          "why": [
+            "This is a deliberate quirk: empty-lineup snapshots and 'no snapshot taken' are indistinguishable at the storage level.",
+            "In practice this is desirable — a team that joins late and has no lineup at the first snapshot should still get scored once they set one — but it does mean 'TeamSnapshotted 0' is operationally meaningful."
+          ],
+          "affects": ["snapshotLineupsForTeam"]
         }
       ],
       "invariants": {
-        "snapshotLineupsForGame": {
-          "intent": "For one game id, copy each active league team's current lineup_slot rows into lineup_snapshot keyed by (league_team_id, game_id)",
-          "effects": ["LineupSlot", "LineupSnapshot", "LeagueTeam", "Clock", "Logging"],
+        "snapshotLineupsForTeam": {
+          "intent": "Snapshot one team's current lineup for one game; idempotent on (team, game)",
+          "effects": ["LineupSlot", "LineupSnapshot", "Logging"],
           "notes": [
-            "iterates all league_team rows whose league is currently active; reads each team's lineup_slot via LS.getSlotsForTeam and writes via LineupSnapshot.upsertSnapshot",
-            "idempotent: ON CONFLICT (league_team_id, game_id, slot, player_id) DO NOTHING",
-            "logs a structured snapshot-written event per team per game"
+            "first calls LSnap.snapshotExistsForTeamGame; if True, returns TeamAlreadyHasSnapshot without touching lineup_slot",
+            "if False, reads the team's lineup via LS.getSlotsForTeam, projects each slot row to a LineupSnapshotRow tagged with the game id, and writes via LSnap.writeSnapshots",
+            "logs an InfoS event with team/game/row count on the success path"
           ]
         },
-        "snapshotLineupsForDate": {
-          "intent": "For all games on a given Day, run snapshotLineupsForGame against each",
-          "effects": ["LineupSlot", "LineupSnapshot", "LeagueTeam", "Games", "Clock", "Logging"],
+        "snapshotLineupsForGame": {
+          "intent": "Snapshot every team in every active league for one game",
+          "effects": ["LeagueConfig", "LeagueTeam", "LineupSlot", "LineupSnapshot", "Logging"],
           "notes": [
-            "the CLI entry point used by 'pelotero snapshot lineups --on-date YYYY-MM-DD'",
-            "should run before the earliest game start of the day; cron schedules typically pre-date by a few hours"
+            "loads all LeagueConfig rows via LC.getAll, filters to those with lcStatus == \"active\"",
+            "for each active league, fetches league teams via LT.getForLeague and snapshots each via snapshotLineupsForTeam",
+            "aggregates per-team results into a SnapshotResult and logs an InfoS summary"
           ]
-        }
+        },
+        "toSnapshot": [
+          "internal helper; projects (DbGameId, LineupSlotRow) into a LineupSnapshotRow"
+        ]
       }
     },
 
@@ -454,16 +371,6 @@
           "affects": ["syncRosters"]
         },
         {
-          "name": "IdempotencyByPayloadChecksum",
-          "what": "syncRosters guards at the top: if getLastFetch returns a row whose payload_sha256 matches the inbound sha, return early with zero-counts and no DB writes",
-          "why": [
-            "Phase C.1 wired the short-circuit. Re-running sync on an unchanged upstream is now a single getLastFetch call instead of ~700 player upserts plus ~30 team upserts.",
-            "The fetch-log row written previously is reused as the comparison anchor; this is exactly what the SHA was being captured for all along.",
-            "Returns SyncResult with both counts at zero and the inbound SHA echoed; callers can detect the no-op via length-checks and a Logging.logFM info message records the skip."
-          ],
-          "affects": ["syncRosters"]
-        },
-        {
           "name": "ExternalIdViaCentralisedHelper",
           "what": "upsertAllTeams and upsertAllPlayers call Pelotero.Provider.ExternalId.externalIdFromTeamId / externalIdFromPlayerId, never inline T.pack . show",
           "why": [
@@ -486,15 +393,14 @@
       ],
       "invariants": {
         "syncRosters": {
-          "intent": "Provider-agnostic upsert pipeline: idempotency check, teams, then players, then fetch-log entry, returning a small summary",
-          "effects": ["Players", "Teams", "FetchLog", "Clock", "Logging"],
+          "intent": "Provider-agnostic upsert pipeline: teams, then players, then fetch-log entry, returning a small summary",
+          "effects": ["Players", "Teams", "FetchLog", "Clock"],
           "notes": [
-            "FIRST ACTION: getLastFetch provider 'active-rosters' scope; if previous payload_sha256 == inbound payloadSha, return SyncResult { syncTeamsUpserted = 0, syncPlayersUpserted = 0, syncFetchSha256 = payloadSha } and emit a Logging info event",
             "single Clock.now call shared by both team and player upserts; both rows get identical last_synced_at",
             "fetchLogResource hardcoded to 'active-rosters'; scope is supplied by the caller (typically the season as Text)",
             "fetchLogRecordCount is the player count, NOT the team count; teams are bookkeeping",
             "fetchLogId and fetchLogFetchedAt are Nothing on the inbound row; the DB layer fills them via DEFAULT",
-            "syncTeamsUpserted / syncPlayersUpserted are the input list lengths when work was done, or both 0 on the idempotent skip path"
+            "no idempotency short-circuit today: every call performs full upsert work regardless of whether the inbound payload SHA matches the previous fetch (planned C.1 work)"
           ],
           "consumes": [
             "CLI sync command (process startup or scheduled run)"
@@ -537,15 +443,6 @@
           "affects": ["syncSchedule"]
         },
         {
-          "name": "IdempotencyByPayloadChecksum",
-          "what": "syncSchedule short-circuits at the top when the inbound payload SHA matches the previous schedule fetch for the same scope",
-          "why": [
-            "Phase C.1 wired the same short-circuit pattern as syncRosters. Schedule sync was actually the more expensive of the two (more rows, more team-resolution work), so the win is bigger.",
-            "Returns ScheduleSyncResult { schedGamesUpserted = 0, schedGamesSkipped = 0, schedFetchSha256 = payloadSha } on the skip path with a Logging info event."
-          ],
-          "affects": ["syncSchedule"]
-        },
-        {
           "name": "ExternalIdViaCentralisedHelper",
           "what": "upsertOneGame and resolveTeam call Pelotero.Provider.ExternalId helpers; no inline encoding",
           "why": [
@@ -557,14 +454,14 @@
       ],
       "invariants": {
         "syncSchedule": {
-          "intent": "Provider-agnostic upsert pipeline for already-converted [Game] domain values, with idempotency short-circuit",
-          "effects": ["Games", "Teams", "FetchLog", "Clock", "Logging"],
+          "intent": "Provider-agnostic upsert pipeline for already-converted [Game] domain values",
+          "effects": ["Games", "Teams", "FetchLog", "Clock"],
           "notes": [
-            "FIRST ACTION: getLastFetch provider 'schedule' scope; if previous SHA matches inbound, return zero-count ScheduleSyncResult and skip work",
-            "writes one fetch-log row per non-skipped call with resource = 'schedule', scope supplied by caller (typically a date-range string like '2025-04-01..2025-04-07')",
+            "writes one fetch-log row per call with resource = 'schedule', scope supplied by caller (typically a date-range string like '2025-04-01..2025-04-07')",
             "fetchLogRecordCount is the total games count, NOT just upserted games; matches the input list length so an operator can compare against schedGamesUpserted to detect skip-rate",
             "single Clock.now call shared across all game upserts in this run",
-            "iteration order is the input list order"
+            "iteration order is the input list order",
+            "no idempotency short-circuit today (planned C.1 work)"
           ]
         },
         "upsertOneGame": [
@@ -616,7 +513,7 @@
           "what": "Conversion to outs happens in Pelotero.MLB.Convert.convertPitching at the wire boundary; pitchingRowFor in this module just copies pitOuts straight through",
           "why": [
             "Phase B.1 moved the parse to convertPitching, where the wire string and the wire pitOuts are reconciled and a WireFieldDiscrepancy warning is emitted on disagreement. The sync layer no longer carries the redundancy; it sees a single Maybe Int.",
-            "Previously inningsPitchedOuts here did the prefer-IP-string-then-fall-back-to-outs dance. That logic is gone; this module is now a mechanical Int → Int32 narrowing per field."
+            "Previously inningsPitchedOuts here did the prefer-IP-string-then-fall-back-to-outs dance. That logic is gone; this module is now a mechanical Int -> Int32 narrowing per field."
           ],
           "affects": ["pitchingRowFor"]
         },
@@ -632,7 +529,7 @@
       "invariants": {
         "syncBoxscores": {
           "intent": "Process a list of upstream GameIds: resolve each to DbGameId, fetch raw boxscore bytes, decode, convert, and upsert per-player batting and pitching rows",
-          "effects": ["BoxscoreEntry", "Games", "Players", "Teams", "MLBClient", "FetchLog", "Logging"],
+          "effects": ["BoxscoreEntry", "Games", "Players", "Teams", "MLBClient", "FetchLog"],
           "notes": [
             "iterates input order; no concurrency at this layer",
             "accumulates per-game results into a BoxscoreSyncResult so partial failures don't abort the batch",
@@ -647,20 +544,20 @@
         ],
         "upsertEntries": [
           "fold over [BoxscoreEntry] producing (battingCount, pitchingCount)",
-          "missing player → skip entry (counts unchanged); missing team → degrade team_id to NULL",
-          "boxBatting Nothing → no batting row written; boxPitching Nothing → no pitching row written"
+          "missing player -> skip entry (counts unchanged); missing team -> degrade team_id to NULL",
+          "boxBatting Nothing -> no batting row written; boxPitching Nothing -> no pitching row written"
         ],
         "battingRowFor": [
-          "mechanical Maybe Int → Maybe Int32 widening for every stat field"
+          "mechanical Maybe Int -> Maybe Int32 widening for every stat field"
         ],
         "pitchingRowFor": [
           "same as battingRowFor; pitOuts is passed straight through (no IP string reconciliation here post Phase B.1)"
         ],
         "i32": [
-          "fmap fromIntegral; Int → Int32 narrowing"
+          "fmap fromIntegral; Int -> Int32 narrowing"
         ],
         "sha256Hex": [
-          "raw ByteString → hex-encoded Text via SHA-256"
+          "raw ByteString -> hex-encoded Text via SHA-256"
         ]
       }
     },
@@ -1115,7 +1012,7 @@
             "MISMATCH path: returns Left MigrationError with the filename",
             "ensures schema_migrations exists via a CREATE TABLE IF NOT EXISTS at the start of applyAll",
             "idempotent: safe to call on every process startup",
-            "Phase B.2 added V0030__order_index.sql; Phase B.3 added V0031__lineup_snapshot.sql (or whatever number is next at land time)"
+            "most recent migration: V0030__lineup_snapshot.sql (added in Phase B.3)"
           ]
         },
         "loadScript": [
@@ -1154,12 +1051,11 @@
           "affects": []
         },
         {
-          "name": "JsonbInstancesMovedToWrapperModule",
-          "what": "ToJSON / FromJSON instances for LeagueScoring / RosterLimits / LineupLimits / batting and pitching multipliers no longer live in Domain modules; they live on newtype wrappers in Pelotero.DB.JsonB",
+          "name": "JsonbInstancesOnDomainTypes",
+          "what": "ToJSON / FromJSON instances for LeagueScoring / RosterLimits / LineupLimits / batting and pitching multipliers live on the Domain types directly today; the rel8 JSONBEncoded deriving via dispatches through those instances",
           "why": [
-            "Phase A.4 moved them out of Domain. Domain types are now Aeson-free; the wrappers in Pelotero.DB.JsonB own the instances.",
-            "This module's JSONBEncoded deriving via still works because it dispatches on the wrapper's instance, not the underlying Domain type's.",
-            "Pelotero.DB.LeagueConfig now declares its JSONB columns at the wrapper type, making the encoded-as-JSON nature explicit at the schema level."
+            "This is the wrong-direction layering (Domain depends on Aeson) but is the current state. The planned A.4 work moves these instances onto newtype wrappers in a Pelotero.DB.JsonB module so Domain becomes Aeson-free.",
+            "Deferring A.4 keeps this module simple at the cost of the layering smell."
           ],
           "affects": []
         },
@@ -1184,7 +1080,7 @@
           "why": [
             "A player can have ids from multiple providers without schema gymnastics on the player table.",
             "If a player gets re-identified, the player row stays put; only the external_id rows update.",
-            "Cost: every upsert is two operations; the boilerplate now lives once in Pelotero.DB.Common.ProviderKeyed (Phase A.5)."
+            "Cost: every upsert is two operations; the boilerplate currently lives per-table here, in Pelotero.DB.Team, and in Pelotero.DB.Game (planned A.5 collapses this into a typeclass)."
           ],
           "affects": []
         },
@@ -1198,16 +1094,6 @@
             "Conversion API is now total at the Domain layer (handChar) post Phase A.6; this module only does the Text<->Char shuffle which remains structurally honest."
           ],
           "affects": ["charToText", "textToChar", "fromResult", "insertPlayerT", "updatePlayerT"]
-        },
-        {
-          "name": "ProviderKeyedInstance",
-          "what": "PlayerRow has an instance of Pelotero.DB.Common.ProviderKeyed; this module no longer defines linkExternalIdT / lookupByExternalIdT / getExternalIdT / upsertByExternalIdT directly",
-          "why": [
-            "Phase A.5 collapsed the boilerplate into a typeclass shared with Team and Game. The four boilerplate functions now live once in the ProviderKeyed module.",
-            "Player-specific reads (getActiveT, getAllT) remain here. The class only abstracts the external-id pattern; entity-specific selects stay where the entity lives.",
-            "The Pool-flavored wrappers and the effect dispatch in Pelotero.Effects.Players continue to work unchanged because the polymorphic functions resolve at the call site."
-          ],
-          "affects": []
         }
       ],
       "invariants": {
@@ -1237,23 +1123,39 @@
         "getByIdT": ["single-row select via WHERE; returns the first match or Nothing"],
         "getAllT": ["ORDER BY last_name, first_name; returns the entire table"],
         "getActiveT": ["ORDER BY last_name, first_name; WHERE active = TRUE"],
+        "linkExternalIdT": [
+          "INSERT ... ON CONFLICT DO NOTHING into player_external_id",
+          "idempotent; safe to call repeatedly during re-syncs"
+        ],
+        "lookupByExternalIdT": [
+          "SELECT player_id WHERE provider AND external_id; returns Maybe DbPlayerId"
+        ],
+        "getExternalIdT": [
+          "reverse lookup: given a DbPlayerId and provider, returns Maybe Text"
+        ],
+        "upsertByExternalIdT": [
+          "two-step: lookup via (provider, external_id); if found, update player; if not, insert and link",
+          "atomic within the caller's transaction"
+        ],
         "insertPlayer": ["Pool-flavored wrapper around insertPlayerT"],
         "updatePlayer": ["Pool-flavored wrapper around updatePlayerT"],
         "getById": ["Pool-flavored single-player read"],
         "getAll": ["Pool-flavored full table read"],
-        "getActive": ["Pool-flavored active-only read"]
+        "getActive": ["Pool-flavored active-only read"],
+        "linkExternalId": ["Pool-flavored wrapper"],
+        "lookupByExternalId": ["Pool-flavored wrapper"],
+        "getExternalId": ["Pool-flavored wrapper"],
+        "upsertByExternalId": ["Pool-flavored wrapper"]
       }
     },
 
     "Pelotero.DB.Team": {
       "decisions": [
         {
-          "name": "ProviderKeyedInstance",
-          "what": "TeamRow has an instance of Pelotero.DB.Common.ProviderKeyed; the link/lookup/get/upsert boilerplate moved out post Phase A.5",
+          "name": "MirrorsPlayerSchema",
+          "what": "team and team_external_id mirror the shape of player and player_external_id",
           "why": [
-            "Same rationale as Pelotero.DB.Player.ProviderKeyedInstance. The previous MirrorsPlayerSchema decision (which existed precisely to acknowledge the duplication) is no longer needed; the class IS the abstraction.",
-            "Team-specific operations (getAllT, etc.) remain here.",
-            "Effect dispatch in Pelotero.Effects.Teams continues to work via the polymorphic class members."
+            "Same provider-keyed pattern as Player. The duplication between this module and Pelotero.DB.Player is the structural cost of separate FK companion tables; planned A.5 work collapses the duplicate boilerplate into a typeclass."
           ],
           "affects": []
         }
@@ -1271,10 +1173,18 @@
         "updateTeamT": ["WHERE id = tid; updates everything except id"],
         "getByIdT": ["single-row select via WHERE id"],
         "getAllT": ["ORDER BY name; no pagination; 30 MLB teams"],
+        "linkExternalIdT": ["INSERT ... ON CONFLICT DO NOTHING into team_external_id"],
+        "lookupByExternalIdT": ["SELECT team_id WHERE provider AND external_id"],
+        "getExternalIdT": ["reverse lookup; (DbTeamId, ProviderName) -> Maybe Text"],
+        "upsertByExternalIdT": ["lookup-then-update or insert-and-link"],
         "insertTeam": ["Pool-flavored wrapper"],
         "updateTeam": ["Pool-flavored wrapper"],
         "getById": ["Pool-flavored single-team read"],
-        "getAll": ["Pool-flavored full table read"]
+        "getAll": ["Pool-flavored full table read"],
+        "linkExternalId": ["Pool-flavored wrapper"],
+        "lookupByExternalId": ["Pool-flavored wrapper"],
+        "getExternalId": ["Pool-flavored wrapper"],
+        "upsertByExternalId": ["Pool-flavored wrapper"]
       }
     },
 
@@ -1290,10 +1200,10 @@
           "affects": ["gameSchema", "getByDateT"]
         },
         {
-          "name": "ProviderKeyedInstance",
-          "what": "GameRow has an instance of Pelotero.DB.Common.ProviderKeyed",
+          "name": "MirrorsTeamSchema",
+          "what": "game and game_external_id mirror the shape of team and team_external_id",
           "why": [
-            "Same rationale as Player and Team. The previous MirrorsTeamSchema decision is subsumed by the class abstraction in Phase A.5."
+            "Same provider-keyed pattern as Player and Team. Planned A.5 work collapses the duplicate boilerplate."
           ],
           "affects": []
         }
@@ -1308,7 +1218,7 @@
         "getByDateRangeT": [
           "WHERE game_date BETWEEN startDay AND endDay (inclusive both ends)",
           "ORDER BY game_date ASC, id ASC for stable cross-day display",
-          "consumed by Pelotero.DB.BoxscoreEntry.getBattingForDateRangeT and getPitchingForDateRangeT (via JOIN)"
+          "consumed by Pelotero.Score.collectGameIds"
         ],
         "getByDateRange": ["Pool-flavored wrapper; inclusive on both ends"],
         "fromResult": ["private; rel8 Result -> public GameRow"],
@@ -1318,10 +1228,18 @@
         "getByDateT": [
           "WHERE game_date = ? ORDER BY id"
         ],
+        "linkExternalIdT": ["INSERT ... ON CONFLICT DO NOTHING into game_external_id"],
+        "lookupByExternalIdT": ["SELECT game_id WHERE provider AND external_id"],
+        "getExternalIdT": ["reverse lookup"],
+        "upsertByExternalIdT": ["lookup-then-update or insert-and-link"],
         "insertGame": ["Pool-flavored wrapper"],
         "updateGame": ["Pool-flavored wrapper"],
         "getById": ["Pool-flavored single-game read"],
-        "getByDate": ["Pool-flavored per-date read"]
+        "getByDate": ["Pool-flavored per-date read"],
+        "linkExternalId": ["Pool-flavored wrapper"],
+        "lookupByExternalId": ["Pool-flavored wrapper"],
+        "getExternalId": ["Pool-flavored wrapper"],
+        "upsertByExternalId": ["Pool-flavored wrapper"]
       }
     },
 
@@ -1341,7 +1259,7 @@
           "name": "RecordCountAsInt32",
           "what": "fetchLogRecordCount is Int32, not Int64 or Int",
           "why": [
-            "INTEGER (not BIGINT) in PostgreSQL; 2^31 ≈ 2 billion records per fetch is plenty.",
+            "INTEGER (not BIGINT) in PostgreSQL; 2^31 ~= 2 billion records per fetch is plenty.",
             "Using Int (machine-word) would silently widen on 64-bit platforms, then narrow at the wire boundary."
           ],
           "affects": ["fetchLogSchema", "recordFetchT"]
@@ -1359,8 +1277,7 @@
           "INSERT ... ON CONFLICT Abort; the fetch log is append-only"
         ],
         "getLastFetchT": [
-          "ORDER BY fetched_at DESC, id DESC LIMIT 1; the id-DESC tiebreaker handles same-millisecond fetches",
-          "consumed by Pelotero.Sync.Players.syncRosters and Pelotero.Sync.Schedule.syncSchedule for the idempotency check (Phase C.1)"
+          "ORDER BY fetched_at DESC, id DESC LIMIT 1; the id-DESC tiebreaker handles same-millisecond fetches"
         ],
         "getRecentFetchesT": [
           "same ORDER BY pattern, LIMIT lim; returns up to `lim` parseable rows"
@@ -1374,13 +1291,11 @@
     "Pelotero.DB.LeagueConfig": {
       "decisions": [
         {
-          "name": "ScoringAndLimitsAsJsonbColumnsViaWrappers",
-          "what": "scoring_config (JsonbScoring), roster_limits (JsonbRosterLimits), lineup_limits (JsonbLineupLimits) are JSONB columns declared at the wrapper type from Pelotero.DB.JsonB",
+          "name": "ScoringAndLimitsAsJsonbColumns",
+          "what": "scoring_config (JSONB), roster_limits (JSONB), and lineup_limits (JSONB) are columns whose Aeson instances live on the underlying Domain types (LeagueScoring, RosterLimits, LineupLimits)",
           "why": [
-            "Phase A.4 introduced the wrapper newtypes. The Column f declarations now use the wrapper types directly, making the JSON-encoded nature of those columns explicit at the schema level.",
-            "Domain types stay Aeson-free; only this module sees the wrappers, and only at row-construction / row-reading time.",
-            "fromResult unwraps; the public LeagueConfigRow exposes the underlying Domain types so consumers don't see the wrapper at all.",
-            "Cost: a schema change to the inner records still requires a JSONB data migration on every existing row, but that was true before."
+            "JSONB lets us evolve the inner record shape without a schema migration on every existing row.",
+            "Domain types currently carry the ToJSON/FromJSON instances directly. This is the wrong-direction layering (Domain depends on Aeson) and is the planned A.4 work to fix via newtype wrappers."
           ],
           "affects": ["leagueConfigSchema", "fromResult"]
         },
@@ -1389,22 +1304,20 @@
           "what": "_lcStatus is Column f Text, not the LeagueStatus domain sum",
           "why": [
             "Same rationale as ProviderName for the fetch log: tolerate legacy or unrecognised values without crashing reads.",
-            "However, the layered domain type LeagueStatus exists as the canonical render/parse pair; this column being Text is the persistence-layer trade-off."
+            "The layered domain type LeagueStatus exists as the canonical render/parse pair; this column being Text is the persistence-layer trade-off."
           ],
           "affects": ["leagueConfigSchema"]
         }
       ],
       "invariants": {
         "leagueConfigSchema": [
-          "table 'league_config' with surrogate id, league_id (Text), commissioner, status, JSONB scoring/roster/lineup (declared at wrapper types), draft params, scoring period bounds"
+          "table 'league_config' with surrogate id, league_id (Text), commissioner, status, JSONB scoring/roster/lineup, draft params, scoring period bounds"
         ],
         "fromResult": [
-          "private; rel8 Result -> public LeagueConfigRow",
-          "unwraps JsonbScoring / JsonbRosterLimits / JsonbLineupLimits into their underlying Domain types so callers don't see the wrappers"
+          "private; rel8 Result -> public LeagueConfigRow"
         ],
         "insertLeagueConfigT": [
-          "INSERT ... RETURNING id; Abort on conflict",
-          "JSONB columns serialize via the wrapper types' DBType instances"
+          "INSERT ... RETURNING id; Abort on conflict"
         ],
         "updateLeagueConfigT": [
           "WHERE id = lcid; updates everything except id"
@@ -1465,34 +1378,22 @@
             "Adding a player who's already on the roster moves them to the new slot rather than failing or duplicating."
           ],
           "affects": ["addSlotT"]
-        },
-        {
-          "name": "OrderIndexPersistsSlotPosition",
-          "what": "roster_slot has an order_index INTEGER NOT NULL DEFAULT 0 column added by Phase B.2 migration V0030__order_index.sql",
-          "why": [
-            "Previously the Seq-based domain ordering was thrown away on persistence; loading a roster lost slot-internal order.",
-            "addSlotT either takes the order_index from the caller or computes MAX(order_index) + 1 within the slot. getSlotsForTeamT now sorts by (slot, order_index, player_id) so reads are stable.",
-            "Today no consumer cares about the order; tomorrow when batting orders matter (lineup positioning, depth chart UI), the persistence is already there."
-          ],
-          "affects": ["rosterSlotSchema", "addSlotT", "getSlotsForTeamT"]
         }
       ],
       "invariants": {
         "rosterSlotSchema": [
-          "table 'roster_slot' with surrogate id, FK to league_team, slot (Text), FK to player, order_index INTEGER NOT NULL DEFAULT 0, created_at",
+          "table 'roster_slot' with surrogate id, FK to league_team, slot (Text), FK to player, created_at",
           "natural unique key: (league_team_id, player_id)",
-          "index roster_slot_order on (league_team_id, slot, order_index)"
+          "no order_index column today; planned B.2 work adds it for batting-order positional persistence"
         ],
         "fromResult": [
-          "private; drops the hidden surrogate id and created_at",
-          "EXPOSES rsOrderIndex (post Phase B.2)"
+          "private; drops the hidden surrogate id and created_at"
         ],
         "addSlotT": [
-          "INSERT ... ON CONFLICT (league_team_id, player_id) DO UPDATE SET slot, order_index",
-          "if RosterSlotRow.rsOrderIndex is supplied, uses that; otherwise computes MAX(order_index) + 1 for the (league_team, slot) pair"
+          "INSERT ... ON CONFLICT (league_team_id, player_id) DO UPDATE SET slot"
         ],
         "getSlotsForTeamT": [
-          "WHERE league_team_id; ORDER BY slot, order_index, player_id"
+          "WHERE league_team_id; ORDER BY slot, player_id"
         ],
         "removeSlotT": ["DELETE WHERE league_team_id AND player_id"],
         "removePlayerFromTeamT": ["alias for removeSlotT"],
@@ -1515,26 +1416,26 @@
     "Pelotero.DB.LineupSlot": {
       "decisions": [
         {
-          "name": "MirrorsRosterSlotShapeIncludingOrderIndex",
-          "what": "lineup_slot is structurally identical to roster_slot, including the new order_index column from Phase B.2",
+          "name": "MirrorsRosterSlotShape",
+          "what": "lineup_slot is structurally identical to roster_slot",
           "why": [
-            "Lineups and rosters remain different concepts but the storage shape stays parallel.",
-            "Both got order_index in the same migration; the index/sort behaviour mirrors roster_slot."
+            "Lineups and rosters are different concepts but the storage shape stays parallel.",
+            "Same caveat as roster_slot: no order_index today; planned B.2 work adds it on both tables in one migration."
           ],
           "affects": ["lineupSlotSchema", "addSlotT"]
         }
       ],
       "invariants": {
         "lineupSlotSchema": [
-          "table 'lineup_slot' with surrogate id, FK to league_team, slot (Text), FK to player, order_index INTEGER NOT NULL DEFAULT 0, created_at",
+          "table 'lineup_slot' with surrogate id, FK to league_team, slot (Text), FK to player, created_at",
           "structurally identical to roster_slot",
-          "index lineup_slot_order on (league_team_id, slot, order_index)"
+          "no order_index column today; see B.2 in RosterSlot"
         ],
-        "fromResult": ["private; same omission of id and created_at as RosterSlot.fromResult; exposes lsOrderIndex"],
+        "fromResult": ["private; same omission of id and created_at as RosterSlot.fromResult"],
         "addSlotT": [
-          "same upsert pattern as RosterSlot.addSlotT, including order_index handling"
+          "same upsert pattern as RosterSlot.addSlotT"
         ],
-        "getSlotsForTeamT": ["WHERE league_team_id; ORDER BY slot, order_index, player_id"],
+        "getSlotsForTeamT": ["WHERE league_team_id; ORDER BY slot, player_id"],
         "removeSlotT": ["DELETE WHERE league_team_id AND player_id"],
         "clearTeamLineupT": ["DELETE WHERE league_team_id"],
         "replaceTeamLineupT": ["clear-then-fill within the caller's transaction"],
@@ -1554,46 +1455,55 @@
           "why": [
             "Phase B.3 introduced the table to fix the correctness bug where scoring used current lineups against historical games.",
             "(league_team_id, game_id) is the lookup key for scoring; slot + player_id complete the row's identity.",
-            "snapshotted_at TIMESTAMPTZ DEFAULT NOW() records when the snapshot was actually taken; useful for debugging late-snapshot or out-of-order-snapshot scenarios."
+            "snapshotted_at TIMESTAMPTZ DEFAULT NOW() records when the snapshot was actually taken; useful for debugging late-snapshot or out-of-order-snapshot scenarios.",
+            "No order_index column today; if/when B.2 adds it to lineup_slot, the snapshot will need it too so that snapshots preserve the lineup ordering at snapshot time."
           ],
-          "affects": ["lineupSnapshotSchema", "upsertSnapshotT"]
+          "affects": ["lineupSnapshotSchema", "writeSnapshotsT"]
         },
         {
-          "name": "OrderIndexCarriesThrough",
-          "what": "lineup_snapshot also carries order_index (mirroring lineup_slot); snapshots preserve the within-slot ordering at snapshot time",
+          "name": "ImmutableSnapshotsViaOnConflictDoNothing",
+          "what": "writeSnapshotsT uses ON CONFLICT (league_team_id, game_id, slot, player_id) DO NOTHING; once a snapshot row exists, it is never overwritten",
           "why": [
-            "Per Phase B.2 + B.3 interaction: if order_index is going to matter for batting-order positional scoring, the snapshot must capture the order at snapshot time, not be re-derived from the current lineup_slot at scoring time.",
-            "Migration V0031__lineup_snapshot.sql includes order_index INTEGER NOT NULL DEFAULT 0 by analogy with lineup_slot."
+            "Snapshots model 'the lineup at game start' and must be immutable after that.",
+            "Combined with Lineup.Snapshot's pre-check via snapshotExistsForTeamGameT, this gives 'first snapshot wins' semantics for the (team, game) pair as a whole.",
+            "Re-running snapshot jobs is therefore a safe operational primitive."
           ],
-          "affects": ["lineupSnapshotSchema"]
+          "affects": ["writeSnapshotsT"]
         }
       ],
       "invariants": {
         "lineupSnapshotSchema": [
-          "table 'lineup_snapshot' with id (BIGSERIAL), league_team_id (FK), game_id (FK), slot (Text), player_id (FK), order_index (INTEGER NOT NULL DEFAULT 0), snapshotted_at (TIMESTAMPTZ DEFAULT NOW())",
+          "table 'lineup_snapshot' with id (BIGSERIAL), league_team_id (FK), game_id (FK), slot (Text), player_id (FK), snapshotted_at (TIMESTAMPTZ DEFAULT NOW())",
           "UNIQUE (league_team_id, game_id, slot, player_id)",
           "index lineup_snapshot_game on (game_id)",
-          "index lineup_snapshot_team_game on (league_team_id, game_id)"
+          "index lineup_snapshot_team_game on (league_team_id, game_id)",
+          "introduced by V0030__lineup_snapshot.sql (Phase B.3)"
         ],
         "fromResult": [
           "private; rel8 Result -> LineupSnapshotRow",
           "drops surrogate id and snapshotted_at from the public row type"
         ],
-        "upsertSnapshotT": [
-          "INSERT ... ON CONFLICT (league_team_id, game_id, slot, player_id) DO NOTHING",
-          "idempotent: re-running before game start is safe; running after game start does nothing (the snapshot is locked-in)"
+        "writeSnapshotsT": [
+          "INSERT [LineupSnapshotRow] ... ON CONFLICT DO NOTHING; returns ()",
+          "empty input returns immediately without hitting the database",
+          "callers track the count of attempted rows via 'length' on the input; the function does not return a count today"
         ],
         "getSnapshotForTeamGameT": [
-          "WHERE league_team_id AND game_id; ORDER BY slot, order_index, player_id",
-          "consumed by Pelotero.Score.scoreOneTeam (the canonical scoring read)"
+          "WHERE league_team_id AND game_id; no SQL-level ordering",
+          "consumed by Pelotero.Score.scoreTeamForGame (the canonical scoring read)"
         ],
-        "deleteSnapshotForGameT": [
-          "DELETE WHERE game_id",
-          "useful when re-snapshotting (e.g. correcting a bad snapshot during a regression)"
+        "snapshotExistsForTeamGameT": [
+          "SELECT ... LIMIT 1; returns True iff at least one row exists for the (team, game) pair",
+          "used by Pelotero.Lineup.Snapshot.snapshotLineupsForTeam as the 'is this snapshot already locked in?' guard"
         ],
-        "upsertSnapshot": ["Pool-flavored wrapper"],
+        "getSnapshotsForGameT": [
+          "WHERE game_id; returns every snapshot row across all teams for one game",
+          "useful for debugging or auditing; not on the scoring hot path"
+        ],
+        "writeSnapshots": ["Pool-flavored wrapper"],
         "getSnapshotForTeamGame": ["Pool-flavored wrapper"],
-        "deleteSnapshotForGame": ["Pool-flavored wrapper"]
+        "snapshotExistsForTeamGame": ["Pool-flavored wrapper"],
+        "getSnapshotsForGame": ["Pool-flavored wrapper"]
       }
     },
 
@@ -1629,7 +1539,7 @@
         ],
         "getRankingsForTeamT": [
           "WHERE league_team_id; ORDER BY rank_slot",
-          "consumed by Pelotero.Draft (Phase D.1) for MakePick validation and AutoPick selection"
+          "intended consumer is the planned Pelotero.Draft state machine (D.1); no consumer in tree today"
         ],
         "clearRankingsT": ["DELETE WHERE league_team_id"],
         "replaceRankingsT": [
@@ -1652,8 +1562,7 @@
           "why": [
             "Picks are historical events; once made, they don't get edited or undone.",
             "If a wrong pick needs correction, the convention is to insert a new pick at the next pick_number rather than mutating the prior row.",
-            "Audit trail integrity: a query at any point in time gives the actual sequence of picks made.",
-            "Pelotero.Draft state machine writes here on every PickRecorded event; reads support resuming an interrupted draft."
+            "Audit trail integrity: a query at any point in time gives the actual sequence of picks made."
           ],
           "affects": ["recordPickT"]
         }
@@ -1667,11 +1576,10 @@
         ],
         "recordPickT": [
           "INSERT ... RETURNING id; Abort on conflict",
-          "consumed by Pelotero.Draft.MakePick / AutoPick handlers"
+          "intended consumer is the planned Pelotero.Draft state machine (D.1); no consumer in tree today"
         ],
         "getPicksForLeagueT": [
-          "WHERE league_config_id; ORDER BY pick_number",
-          "consumed by Pelotero.Draft when resuming an in-progress draft"
+          "WHERE league_config_id; ORDER BY pick_number"
         ],
         "getPickCountT": [
           "COUNT(*) WHERE league_config_id",
@@ -1713,19 +1621,6 @@
             "Taking the timestamp client-side would risk skew between client and DB clocks."
           ],
           "affects": ["upsertBattingT", "upsertPitchingT"]
-        },
-        {
-          "name": "DateRangeQueriesAreTheScoringPath",
-          "what": "getBattingForDateRangeT and getPitchingForDateRangeT join game.game_date with the per-stat tables, returning Map DbPlayerId [BattingRow] / [PitchingRow] bucketed at the rel8 level",
-          "why": [
-            "Phase C.2 added these as the new canonical scoring read. Pelotero.Score.buildPlayerMaps now issues exactly two queries instead of 2*N for an N-game period.",
-            "The bucket-by-player-id transformation happens via Map.fromListWith (++) on the result; in-memory test interpreters do the same shape via filter+groupBy on the underlying List.",
-            "getBattingForGameT / getPitchingForGameT remain for boxscore-detail views (single game inspection) that don't want to scan a date range."
-          ],
-          "affects": [
-            "getBattingForDateRangeT",
-            "getPitchingForDateRangeT"
-          ]
         }
       ],
       "invariants": {
@@ -1755,37 +1650,26 @@
           "set: keeps id-like columns from old, takes stats from new, preserves created_at, sets updated_at = NOW()",
           "updateWhere = lit True (always update on conflict)"
         ],
-        "getBattingForGameT": ["WHERE game_id; ORDER BY player_id"],
+        "getBattingForGameT": [
+          "WHERE game_id; ORDER BY player_id",
+          "consumed by Pelotero.Score.buildPlayerMaps (one call per game id in the period)"
+        ],
         "deleteBattingForGameT": [
           "DELETE WHERE game_id",
           "useful when re-ingesting a corrected boxscore"
         ],
         "upsertPitchingT": ["mirror of upsertBattingT for pitching"],
-        "getPitchingForGameT": ["WHERE game_id; ORDER BY player_id"],
-        "deletePitchingForGameT": ["DELETE WHERE game_id"],
-        "getBattingForDateRangeT": {
-          "intent": "JOIN game.game_date with game_player_batting; return all batting rows for games in [startDay, endDay] bucketed by player_id",
-          "notes": [
-            "endpoints inclusive on both sides",
-            "result is Map DbPlayerId [BattingRow] via Map.fromListWith (++)",
-            "single transaction, single SELECT — replaces the per-game N+M pattern from before Phase C.2"
-          ],
-          "consumes": [
-            "Pelotero.Score.buildPlayerMaps (the only consumer; this is the scoring path)"
-          ]
-        },
-        "getPitchingForDateRangeT": [
-          "mirror of getBattingForDateRangeT for pitching",
+        "getPitchingForGameT": [
+          "WHERE game_id; ORDER BY player_id",
           "consumed by Pelotero.Score.buildPlayerMaps"
         ],
+        "deletePitchingForGameT": ["DELETE WHERE game_id"],
         "upsertBatting": ["Pool-flavored wrapper"],
         "upsertPitching": ["Pool-flavored wrapper"],
         "getBattingForGame": ["Pool-flavored read"],
         "getPitchingForGame": ["Pool-flavored read"],
         "deleteBattingForGame": ["Pool-flavored delete"],
-        "deletePitchingForGame": ["Pool-flavored delete"],
-        "getBattingForDateRange": ["Pool-flavored wrapper"],
-        "getPitchingForDateRange": ["Pool-flavored wrapper"]
+        "deletePitchingForGame": ["Pool-flavored delete"]
       }
     },
 
@@ -1803,12 +1687,13 @@
         },
         {
           "name": "DbErrorAsTypedCoEffect",
-          "what": "runDatabasePool requires an Error DBError co-effect; DBErrors flow through the effect system as typed errors, no longer thrown as IO exceptions",
+          "what": "runDatabasePool requires Logging and Error DBError co-effects; DBErrors flow through the effect system as typed errors and are also logged at ErrorS before throwing",
           "why": [
-            "Phase A.3 replaced the runOrThrow pattern. Callers that don't care about typed handling do `runError @DBError` at the top of the program and either crash or log on Left; callers that want to handle pool exhaustion specifically can pattern-match on PoolUsageError.",
+            "Phase A.3 replaced the runOrThrow pattern. Callers that don't care about typed handling do `runErrorNoCallStack @DBError` at the top of the program and either crash or log on Left; callers that want to handle pool exhaustion specifically can pattern-match on PoolUsageError.",
             "Removes the lossy `show` step that used to live in runOrThrow; structured error data now propagates intact.",
+            "Logging the error before throwing means a silently-discarded Left still leaves a trace.",
             "Every effect runner consuming Database (Players, Teams, Games, BoxscoreEntry, FetchLog, LeagueConfig, LeagueTeam, RosterSlot, LineupSlot, LineupSnapshot, PlayerRanking, DraftPick) threads `Error DBError` through.",
-            "Type signature: runDatabasePool :: (IOE :> es, Error DBError :> es) => Pool -> Eff (Database : es) a -> Eff es a"
+            "Type signature: runDatabasePool :: (IOE :> es, Logging :> es, Error DBError :> es) => Pool -> Eff (Database : es) a -> Eff es a"
           ],
           "affects": ["runDatabasePool"]
         }
@@ -1820,11 +1705,11 @@
           "writes commit on success; on Tx error, throwError @DBError is invoked rather than throwing IO"
         ],
         "runDatabasePool": {
-          "intent": "Production interpreter: runs each runTx via Pool.runTransaction; on Left DBError, calls throwError into the Error DBError co-effect",
-          "effects": ["IOE", "Error DBError"],
+          "intent": "Production interpreter: runs each runTx via Pool.runTransaction; on Left DBError, logs at ErrorS then calls throwError into the Error DBError co-effect",
+          "effects": ["IOE", "Logging", "Error DBError"],
           "notes": [
             "no longer throws userError; DBError flows through the effect system",
-            "callers compose with `runError @DBError` at whatever boundary they want to handle errors",
+            "callers compose with `runErrorNoCallStack @DBError` at whatever boundary they want to handle errors",
             "the rationale shift from throw-IO to typed-Error is captured in DbErrorAsTypedCoEffect"
           ]
         }
@@ -1918,26 +1803,15 @@
       "invariants": {
         "recordFetch": ["FetchLog send-only; records a new fetch row"],
         "getLastFetch": [
-          "FetchLog send-only; given (provider, resource, scope), returns the most recent fetch or Nothing",
-          "consumed by Pelotero.Sync.Players.syncRosters and Pelotero.Sync.Schedule.syncSchedule for the Phase C.1 idempotency check"
+          "FetchLog send-only; given (provider, resource, scope), returns the most recent fetch or Nothing"
         ],
         "runFetchLogDB": [
           "Database-backed interpreter; delegates to Pelotero.DB.FetchLog",
-          "now requires Error DBError in the effect stack (post Phase A.3)"
+          "requires Error DBError in the effect stack (post Phase A.3)"
         ],
         "runFetchLogInMemory": [
           "IO-backed test interpreter using an IORef [FetchLogRow]"
         ]
-      }
-    },
-
-    "Pelotero.Effects.Logging": {
-      "invariants": {
-        "logFM": ["Logging send-only; structured emission"],
-        "logItem": ["Logging send-only; structured payload emission"],
-        "katipNamespace": ["Logging operation; runs an inner Eff under a nested namespace"],
-        "runLoggingProd": ["IO-backed interpreter; broadcasts to stdout JSON + rotating file"],
-        "runLoggingPure": ["pure interpreter; collects logs into a [LogLine] return"]
       }
     },
 
@@ -1951,15 +1825,6 @@
             "Counter is per-IORef (per-runner-instance), so two concurrent test runs don't share ids."
           ],
           "affects": ["runPlayersInMemory", "emptyStore"]
-        },
-        {
-          "name": "DispatchesViaProviderKeyed",
-          "what": "runPlayersDB now dispatches the external-id operations through the ProviderKeyed class member functions, not through hand-rolled per-table helpers",
-          "why": [
-            "Phase A.5 collapsed the linkExternalIdT / lookupByExternalIdT / getExternalIdT / upsertByExternalIdT functions out of Pelotero.DB.Player into the class.",
-            "The interpreter now calls the polymorphic functions; behaviour is identical, but the implementation lives once in Pelotero.DB.Common.ProviderKeyed."
-          ],
-          "affects": ["runPlayersDB"]
         }
       ],
       "invariants": {
@@ -1968,7 +1833,7 @@
         "getPlayerById": ["Players send-only; DbPlayerId -> Maybe PlayerRow"],
         "getActivePlayers": ["Players send-only; all players where active=True"],
         "runPlayersDB": [
-          "Database-backed interpreter; dispatches via ProviderKeyed for the external-id pattern, calls Player module directly for getActiveT/getByIdT",
+          "Database-backed interpreter; delegates to Pelotero.DB.Player",
           "requires Error DBError post Phase A.3"
         ],
         "emptyStore": ["private; PlayerStore Map.empty Map.empty 1"],
@@ -1990,12 +1855,6 @@
             "Code duplication is acceptable at two test interpreters."
           ],
           "affects": ["runTeamsInMemory", "emptyTeamStore"]
-        },
-        {
-          "name": "DispatchesViaProviderKeyed",
-          "what": "runTeamsDB dispatches external-id operations through the ProviderKeyed class members (Phase A.5)",
-          "why": ["Same rationale as Pelotero.Effects.Players.DispatchesViaProviderKeyed."],
-          "affects": ["runTeamsDB"]
         }
       ],
       "invariants": {
@@ -2004,7 +1863,7 @@
         "getTeamById": ["Teams send-only"],
         "getAllTeams": ["Teams send-only"],
         "runTeamsDB": [
-          "Database-backed interpreter; dispatches via ProviderKeyed for external-id ops",
+          "Database-backed interpreter; delegates to Pelotero.DB.Team",
           "requires Error DBError post Phase A.3"
         ],
         "emptyTeamStore": ["private; TeamStore Map.empty Map.empty 1"],
@@ -2022,12 +1881,6 @@
             "Two maps cost twice the memory but make every lookup O(log n)."
           ],
           "affects": ["runGamesInMemory", "emptyGameStore"]
-        },
-        {
-          "name": "DispatchesViaProviderKeyed",
-          "what": "runGamesDB dispatches external-id operations through the ProviderKeyed class members (Phase A.5)",
-          "why": ["Same rationale as Players and Teams."],
-          "affects": ["runGamesDB"]
         }
       ],
       "invariants": {
@@ -2038,10 +1891,10 @@
         "getGamesByDate": ["Games send-only; per-date listing"],
         "getGamesByDateRange": [
           "Games send-only; range listing inclusive on both ends",
-          "consumed by Pelotero.Score.buildPlayerMaps via the date-range queries (post Phase C.2)"
+          "consumed by Pelotero.Score.collectGameIds to enumerate the games in the scoring period"
         ],
         "runGamesDB": [
-          "Database-backed interpreter; dispatches via ProviderKeyed",
+          "Database-backed interpreter; delegates to Pelotero.DB.Game",
           "requires Error DBError"
         ],
         "emptyGameStore": ["private; three empty Maps + nextId=1"],
@@ -2055,6 +1908,10 @@
         "updateLeagueConfig": ["LeagueConfig send-only"],
         "getById": ["LeagueConfig send-only"],
         "getByLeagueId": ["LeagueConfig send-only"],
+        "getAll": [
+          "LeagueConfig send-only",
+          "consumed by Pelotero.Lineup.Snapshot.snapshotLineupsForGame to enumerate active leagues"
+        ],
         "runLeagueConfigDB": [
           "Database-backed interpreter; delegates to Pelotero.DB.LeagueConfig",
           "requires Error DBError post Phase A.3"
@@ -2076,11 +1933,11 @@
 
     "Pelotero.Effects.RosterSlot": {
       "invariants": {
-        "addSlot": ["RosterSlot send-only; semantically an upsert; honours order_index when supplied"],
+        "addSlot": ["RosterSlot send-only; semantically an upsert"],
         "removeSlot": ["RosterSlot send-only"],
         "clearTeamRoster": ["RosterSlot send-only"],
         "replaceTeamRoster": ["RosterSlot send-only"],
-        "getSlotsForTeam": ["RosterSlot send-only; rows now include rsOrderIndex"],
+        "getSlotsForTeam": ["RosterSlot send-only"],
         "countBySlot": ["RosterSlot send-only"],
         "runRosterSlotDB": ["Database-backed interpreter; requires Error DBError"]
       }
@@ -2088,11 +1945,11 @@
 
     "Pelotero.Effects.LineupSlot": {
       "invariants": {
-        "addSlot": ["LineupSlot send-only; semantically an upsert; honours order_index when supplied"],
+        "addSlot": ["LineupSlot send-only; semantically an upsert"],
         "removeSlot": ["LineupSlot send-only"],
         "clearTeamLineup": ["LineupSlot send-only"],
         "replaceTeamLineup": ["LineupSlot send-only"],
-        "getSlotsForTeam": ["LineupSlot send-only; rows now include lsOrderIndex"],
+        "getSlotsForTeam": ["LineupSlot send-only"],
         "runLineupSlotDB": ["Database-backed interpreter; requires Error DBError"]
       }
     },
@@ -2111,12 +1968,19 @@
         }
       ],
       "invariants": {
-        "upsertSnapshot": ["LineupSnapshot send-only; idempotent ON CONFLICT DO NOTHING"],
+        "writeSnapshots": ["LineupSnapshot send-only; writes a list of LineupSnapshotRow with ON CONFLICT DO NOTHING; returns ()"],
         "getSnapshotForTeamGame": [
-          "LineupSnapshot send-only; (DbLeagueTeamId, DbGameId) -> [LineupSlotRow]",
-          "the only consumer in production is Pelotero.Score.scoreOneTeam"
+          "LineupSnapshot send-only; (DbLeagueTeamId, DbGameId) -> [LineupSnapshotRow]",
+          "consumed by Pelotero.Score.scoreTeamForGame"
         ],
-        "deleteSnapshotForGame": ["LineupSnapshot send-only; for re-snapshotting"],
+        "snapshotExistsForTeamGame": [
+          "LineupSnapshot send-only; (DbLeagueTeamId, DbGameId) -> Bool",
+          "consumed by Pelotero.Lineup.Snapshot.snapshotLineupsForTeam"
+        ],
+        "getSnapshotsForGame": [
+          "LineupSnapshot send-only; DbGameId -> [LineupSnapshotRow]",
+          "audit/inspection use; not on the scoring path"
+        ],
         "runLineupSnapshotDB": [
           "Database-backed interpreter; delegates to Pelotero.DB.LineupSnapshot",
           "requires Error DBError"
@@ -2128,7 +1992,7 @@
       "invariants": {
         "getRankingsForTeam": [
           "PlayerRanking send-only",
-          "consumed by Pelotero.Draft for MakePick validation and AutoPick selection"
+          "intended consumer is the planned Pelotero.Draft state machine (D.1); no consumer in tree today"
         ],
         "replaceRankings": ["PlayerRanking send-only"],
         "clearRankings": ["PlayerRanking send-only"],
@@ -2141,11 +2005,10 @@
       "invariants": {
         "recordPick": [
           "DraftPick send-only",
-          "consumed by Pelotero.Draft.MakePick / AutoPick handlers"
+          "intended consumer is the planned Pelotero.Draft state machine (D.1); no consumer in tree today"
         ],
         "getPicksForLeague": [
-          "DraftPick send-only",
-          "consumed by Pelotero.Draft when resuming an in-progress draft"
+          "DraftPick send-only"
         ],
         "getPickCount": ["DraftPick send-only"],
         "runDraftPickDB": [
@@ -2159,18 +2022,16 @@
       "invariants": {
         "upsertBatting": ["BoxscoreEntry send-only"],
         "upsertPitching": ["BoxscoreEntry send-only"],
-        "getBattingForGame": ["BoxscoreEntry send-only"],
-        "getPitchingForGame": ["BoxscoreEntry send-only"],
-        "deleteBattingForGame": ["BoxscoreEntry send-only"],
-        "deletePitchingForGame": ["BoxscoreEntry send-only"],
-        "getBattingForDateRange": [
-          "BoxscoreEntry send-only (added Phase C.2)",
-          "consumed by Pelotero.Score.buildPlayerMaps as the canonical scoring read"
+        "getBattingForGame": [
+          "BoxscoreEntry send-only",
+          "consumed by Pelotero.Score.buildPlayerMaps (one call per game in the period)"
         ],
-        "getPitchingForDateRange": [
-          "BoxscoreEntry send-only (added Phase C.2)",
+        "getPitchingForGame": [
+          "BoxscoreEntry send-only",
           "consumed by Pelotero.Score.buildPlayerMaps"
         ],
+        "deleteBattingForGame": ["BoxscoreEntry send-only"],
+        "deletePitchingForGame": ["BoxscoreEntry send-only"],
         "runBoxscoreEntryDB": [
           "Database-backed interpreter; requires Error DBError"
         ]
@@ -2345,7 +2206,7 @@
           "why": [
             "Order matters within a slot.",
             "Set would lose ordering; List has O(n) appends; Seq has O(log n).",
-            "The slot order itself doesn't matter (Map handles that), but the order within a slot does — and now persists via order_index columns post Phase B.2."
+            "The slot order itself doesn't matter (Map handles that), but the order within a slot does. Persistence of within-slot order via order_index columns is planned B.2 work."
           ],
           "affects": ["addToRoster", "addToLineup"]
         },
@@ -2357,16 +2218,6 @@
             "Order is: all size problems then all duplicate problems."
           ],
           "affects": ["validateRoster", "validateLineup"]
-        },
-        {
-          "name": "JsonInstancesMovedToWrapperModule",
-          "what": "RosterLimits / LineupLimits no longer have ToJSON / FromJSON instances in this module; the JSONB-encoded versions live on JsonbRosterLimits / JsonbLineupLimits in Pelotero.DB.JsonB",
-          "why": [
-            "Phase A.4 moved Aeson out of Domain. The Domain types are pure structural records; persistence-format concerns live in Pelotero.DB.JsonB.",
-            "The wrapper newtype owns the slot-key encoding via renderRosterSlot / parseRosterSlot.",
-            "Anyone needing JSON round-tripping wraps the value in JsonbRosterLimits at the boundary."
-          ],
-          "affects": []
         }
       ],
       "invariants": {
@@ -2375,12 +2226,10 @@
         ],
         "parseRosterSlot": [
           "case-sensitive; accepts 'catcher', 'first', 'second', 'third', 'shortstop', 'outfield', 'utility', 's_pitcher', 'r_pitcher'",
-          "the s_pitcher / r_pitcher names match legacy DB schema",
-          "consumed by Pelotero.DB.JsonB.JsonbRosterLimits and JsonbLineupLimits FromJSON instances"
+          "the s_pitcher / r_pitcher names match legacy DB schema"
         ],
         "renderRosterSlot": [
-          "exhaustive; produces the parse-target strings",
-          "consumed by Pelotero.DB.JsonB ToJSON instances"
+          "exhaustive; produces the parse-target strings"
         ],
         "isPitcherSlot": ["True for SlotStartingPitcher and SlotReliefPitcher"],
         "isBatterSlot": ["= not . isPitcherSlot; SlotUtility is a batter slot"],
@@ -2464,15 +2313,6 @@
             "Pre-rounding loses ~0.05 points per fractional inning, compounding over 150 starts."
           ],
           "affects": ["scorePitching"]
-        },
-        {
-          "name": "JsonInstancesMovedToWrapperModule",
-          "what": "BattingMultipliers / PitchingMultipliers / LeagueScoring no longer have ToJSON / FromJSON instances here; the JSONB-encoded versions live on Pelotero.DB.JsonB wrappers",
-          "why": [
-            "Phase A.4 moved Aeson out of Domain. The Domain types are pure value records.",
-            "Persistence-format concerns live in Pelotero.DB.JsonB; JsonbScoring / JsonbBattingMultipliers / JsonbPitchingMultipliers wrap the Domain types and own the instances."
-          ],
-          "affects": []
         }
       ],
       "invariants": {
@@ -2526,12 +2366,11 @@
           "affects": ["generateDraftOrder"]
         },
         {
-          "name": "PureModuleNoEffectfulMachine",
-          "what": "This module stays pure; the live state machine lives in Pelotero.Draft (Phase D.1)",
+          "name": "PureModuleByDesign",
+          "what": "This module stays pure; no effectful state machine lives here today, and a future Pelotero.Draft (planned D.1 work) will be the home of the live draft state machine when it lands",
           "why": [
-            "generateDraftOrder is pre-computation pure logic. Running an actual draft requires database writes per pick (DraftPick effect), which means the state machine has to live in a module with effect access.",
-            "Pelotero.Draft is the new home for the crem state machine; this module remains the structural foundation.",
-            "Splitting the modules keeps Pelotero.Domain.Draft testable without effects and Pelotero.Draft testable without writing to a database (the in-memory effect interpreters cover that)."
+            "generateDraftOrder is pre-computation pure logic. Running an actual draft requires database writes per pick, which means the live state machine has to live in a module with effect access.",
+            "Splitting the modules keeps Pelotero.Domain.Draft testable without effects; Pelotero.Draft (when implemented) will be testable via the in-memory effect interpreters."
           ],
           "affects": []
         }
@@ -2565,7 +2404,7 @@
         ],
         "extendRankingsWithUnranked": [
           "appends unranked players to the end of ranked, preserving universe order",
-          "consumed by Pelotero.Draft.AutoPick when a team's ranking is shorter than the player pool"
+          "intended consumer is the planned Pelotero.Draft AutoPick handler when a team's ranking is shorter than the player pool; no consumer in tree today"
         ]
       }
     },
@@ -2594,90 +2433,6 @@
       "invariants": {
         "parseLeagueStatus": ["case-sensitive; accepts 'draft', 'active', 'closed'"],
         "renderLeagueStatus": ["exhaustive over the sum"]
-      }
-    },
-
-    "Pelotero.Draft": {
-      "decisions": [
-        {
-          "name": "CremStateMachineForDraftLifecycle",
-          "what": "Pelotero.Draft uses a crem StateMachine with WaitingToStart | Drafting DraftContext | Complete DraftSummary states",
-          "why": [
-            "Phase D.1 replaces the legacy (state, Maybe String) referential-equality detector from old_src/League/Draft.hs with a proper finite state machine.",
-            "crem already used in Cheeblr for transaction/register lifecycle; same machinery, different domain. Generic-derivable singletons mean adding a state is a constructor + a transition case.",
-            "Transition function returns Either DraftError NewState rather than the legacy 'Maybe String' channel that conflated 'no transition happened' with 'transition failed'.",
-            "The state lives in DraftContext: league config id, full draft order, remaining picks, available players, count of picks made. Reading the database to resume gives a fresh DraftContext from the persisted DraftPick rows."
-          ],
-          "affects": [
-            "DraftState",
-            "DraftContext",
-            "DraftCommand",
-            "DraftEvent",
-            "DraftError"
-          ]
-        },
-        {
-          "name": "MakePickConsultsRanking",
-          "what": "MakePick validates that the chosen player is on the picker's PlayerRanking (or in the available pool); AutoPick chooses by PlayerRanking head with extendRankingsWithUnranked fallback",
-          "why": [
-            "Owners pre-set rankings before the draft; the auto-drafter respects them. Manual picks (MakePick) are sanity-checked against the ranking but not strictly required to follow it (an owner can deviate).",
-            "If a team's ranking is exhausted, extendRankingsWithUnranked appends the rest of the available pool in universe order. Auto-drafting an owner who didn't bother to set rankings still terminates."
-          ],
-          "affects": ["MakePick", "AutoPick"]
-        },
-        {
-          "name": "ModuleLivesOutsideOfDomain",
-          "what": "Pelotero.Draft is a top-level module under Pelotero, NOT under Pelotero.Domain",
-          "why": [
-            "Pelotero.Domain is pure; this module composes effects (LeagueConfig, LeagueTeam, PlayerRanking, DraftPick, Players, Logging, Clock) and therefore can't live there.",
-            "Mirrors the layering of Pelotero.Sync.* and Pelotero.Lineup.Snapshot.",
-            "Pelotero.Domain.Draft remains as the pure pre-computation home (generateDraftOrder, etc.)."
-          ],
-          "affects": []
-        }
-      ],
-      "invariants": {
-        "DraftState": [
-          "WaitingToStart: initial state; no draft context yet",
-          "Drafting !DraftContext: in progress; the context holds order, remaining picks, available players, picks-made counter",
-          "Complete !DraftSummary: terminal; the summary records total picks and the team rosters as built"
-        ],
-        "DraftCommand": [
-          "StartDraft DbLeagueConfigId: only valid from WaitingToStart",
-          "MakePick DbLeagueTeamId DbPlayerId: valid only from Drafting; the team must be the current picker, the player must be available",
-          "AutoPick DbLeagueTeamId: valid only from Drafting; uses the team's ranking head with extendRankingsWithUnranked fallback",
-          "EndDraft: forces a transition to Complete from Drafting"
-        ],
-        "DraftEvent": [
-          "DraftStarted DbLeagueConfigId [DbLeagueTeamId]: emitted once per draft",
-          "PickRecorded DbLeagueTeamId DbPlayerId DraftPickNumber: emitted on every successful pick; consumed by DraftPick.recordPick for persistence",
-          "DraftCompleted DraftSummary: emitted on transition to Complete"
-        ],
-        "transition": {
-          "intent": "Pure transition function: (DraftState, DraftCommand) -> Either DraftError (DraftState, [DraftEvent])",
-          "notes": [
-            "no IO; testable in isolation",
-            "DraftError carries structured failure info (NotPickersTurn, PlayerAlreadyDrafted, PlayerUnavailable, etc.)",
-            "events are emitted in the order they occur within a single transition (typically one event, but EndDraft emits both PickRecorded for any auto-completed pick and DraftCompleted)"
-          ]
-        },
-        "runDraft": {
-          "intent": "Effectful driver that loops command -> transition -> event-handler until the state machine reaches Complete",
-          "effects": [
-            "LeagueConfig",
-            "LeagueTeam",
-            "PlayerRanking",
-            "DraftPick",
-            "Players",
-            "Logging",
-            "Clock"
-          ],
-          "notes": [
-            "CLI entry point ('pelotero draft run --league-id ...') instantiates WaitingToStart, sends StartDraft, then loops AutoPick until Complete",
-            "PickRecorded events are persisted via DraftPick.recordPick within the loop",
-            "compares summary against legacy old_src/League/Draft.hs output as an acceptance test (Phase D.2)"
-          ]
-        }
       }
     }
 
