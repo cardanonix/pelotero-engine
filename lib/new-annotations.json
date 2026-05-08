@@ -148,7 +148,75 @@
         }
       }
     },
-
+    "Pelotero.Draft": {
+      "decisions": [
+        {
+          "name": "PureLogicNoEffects",
+          "what": "Pelotero.Draft is the pure transition logic for the draft state machine; no effect dependencies, all transitions return Either DraftError (DraftState, [DraftEvent])",
+          "why": [
+            "Phase D.1a separates the transition logic from the persistence layer so the state machine is testable with hedgehog without any DB or in-memory effect runner.",
+            "Pelotero.Draft.Run (Phase D.1c) is the effectful handler that wraps applyCommand with PlayerRanking / DraftPick / Players / Logging / Clock; that is where commands actually get persisted.",
+            "Pelotero.Domain.Draft remains the upstream-id-keyed pre-compute layer (order generation from a strategy + team list); this module is DB-id-keyed because the state machine talks to the persistence layer."
+          ],
+          "affects": ["applyCommand"]
+        },
+        {
+          "name": "AutoPickIsNotACommand",
+          "what": "DraftCommand has only StartDraft, MakePick, EndDraft; auto-picking is a wrapper at the effect layer (D.1c) that consults PlayerRanking, intersects with dcAvailable, and issues MakePick with the chosen player",
+          "why": [
+            "Keeps the pure logic with one place-a-player path rather than two; the strategy logic for which player gets picked stays separate from the how of recording it.",
+            "Means the state machine itself doesn't take a ranking source as input — the ranking lookup happens before MakePick is constructed.",
+            "If a future strategy variant emerges (round-specific overrides, drop-and-replace), it lives at the effect layer alongside the existing auto-pick wrapper, not as a new state-machine command."
+          ],
+          "affects": ["DraftCommand", "applyCommand"]
+        },
+        {
+          "name": "LastPickEmitsTwoEvents",
+          "what": "MakePick on the last remaining pick emits both PickRecorded and DraftCompleted in that order; EndDraft from Drafting emits only DraftCompleted",
+          "why": [
+            "The handler in Pelotero.Draft.Run persists both events in order: insert the DraftPick row first, then log the completion. The league_config status update is the orchestrator's job, not the state-machine handler's, per Pelotero.Draft.Run's StatusUpdateNotInScope decision.",
+            "Crash between events leaves the pick recorded with the in-memory machine state still consistent — the next run sees an empty dcRemaining and re-runs applyCommand to get DraftCompleted again; idempotent on the in-memory side. DB-level idempotency on partial-draft retries is documented separately under NoCrashRecovery.",
+            "Flipping the order would leave a 'completed' log line with the last pick missing from draft_pick — a worse partial state for anyone reading logs."
+          ],
+          "affects": ["applyCommand"]
+        },
+        {
+          "name": "PicksMadeListSnocAppend",
+          "what": "DraftContext.dcPicksMade is appended to in pick order (oldest first) using snoc; total cost is O(n²) across a full draft",
+          "why": [
+            "n is small — at most ~300 picks for a 25-team / 12-round league. 300² = 90,000 cons cells; not a perf concern.",
+            "Oldest-first ordering means the DraftSummary doesn't need a final reverse step, and the audit trail reads naturally in chronological order without calling reverse on every read.",
+            "If a much larger draft format appears (50-team dynasty with 30 rounds = 1500 picks), revisit; until then the simpler shape wins."
+          ],
+          "affects": ["applyCommand"]
+        }
+      ],
+      "invariants": {
+        "initialState": [
+          "WaitingToStart; the empty start of any draft"
+        ],
+        "applyCommand": {
+          "intent": "Single transition function: given a command and a state, return the next state plus events to persist, or the reason the command was refused.",
+          "notes": [
+            "Pure: same inputs -> same outputs.",
+            "Errors short-circuit without changing state.",
+            "MakePick on the last pick emits PickRecorded then DraftCompleted, in that order, and transitions to Complete.",
+            "EndDraft from Drafting transitions to Complete with the picks made so far; useful for early commissioner-driven termination.",
+            "An empty DraftPlan (dpOrder == []) returns EmptyDraftPlan rather than transitioning to a degenerate Complete state."
+          ]
+        },
+        "currentPicker": [
+          "Whose pick is up? Nothing if the draft hasn't started or has finished.",
+          "Used by Pelotero.Draft.Run's auto-pick wrapper (D.1c) to identify which team's ranking to consult."
+        ],
+        "picksRemaining": [
+          "Length of dcRemaining inside Drafting; 0 outside Drafting."
+        ],
+        "isPlayerAvailable": [
+          "Set membership in dcAvailable; False outside Drafting."
+        ]
+      }
+    },
     "Pelotero.Score": {
       "decisions": [
         {
@@ -192,12 +260,12 @@
           "affects": ["scoreLeague", "scoreTeam"]
         },
         {
-          "name": "PerGamePlayerMapBuilds",
-          "what": "buildPlayerMaps issues one BoxscoreEntry.getBattingForGame and one BoxscoreEntry.getPitchingForGame per game id and bucks the results into Map DbPlayerId [Row] in Haskell",
+          "name": "DateRangePlayerMapBuilds",
+          "what": "buildPlayerMaps issues exactly two BoxscoreEntry effect calls (getBattingForDateRange and getPitchingForDateRange) for the entire scoring period; the SQL joins game_player_batting/pitching against game on game_id and filters by game.game_date in [startDay, endDay]",
           "why": [
-            "BoxscoreEntry only exposes per-game queries today. A single date-range query would be the right shape (and is the planned C.2 work), but adding it requires extending both the DB module and the effect.",
-            "Per-game queries keep the Score module honest about its dependencies — it asks for what BoxscoreEntry actually offers — at the cost of N round-trips per scoring period.",
-            "Acceptable for current league sizes (a 30-day period is ~450 games for one MLB league) but explicitly a known performance gap; C.2 is the optimisation."
+            "Phase C.2 collapsed the per-game query loop. The previous shape did 2 * N transactions for an N-game period (~900 round-trips for a 30-day MLB period); the date-range version is exactly 2.",
+            "Correctness preserved: the date-range query joins against gameSchema and filters by game_date, which is exactly the predicate Games.getGamesByDateRange uses, so the fetched row set is identical to what the per-game loop produced.",
+            "The downstream per-game filter in scoreOnePlayerForGame is unchanged and load-bearing: each player's bucket now contains rows from every game in the period, and the filter narrows to just the game being scored. Removing the filter would silently score every player's full-period stats once per game."
           ],
           "affects": ["buildPlayerMaps"]
         },
@@ -271,7 +339,77 @@
         ]
       }
     },
-
+    "Pelotero.Draft.Run": {
+      "decisions": [
+        {
+          "name": "PerCommandPersistencePrimitive",
+          "what": "applyAndPersist is the per-command primitive: takes one command, runs it through runDraftCommand, persists whichever events come out, returns the new state and the result. Both runAutoDraft and any future manual-pick UI handler go through it.",
+          "why": [
+            "Keeps the persistence logic in one place; manual UI picks and auto-picks share the same code path.",
+            "Returns SomeDraftStateG so the caller threads state across calls explicitly — no IORef, no MVar, no state-holding effect. Makes the primitive fully testable with the existing in-memory effect interpreters.",
+            "DraftError flows through the Either; AutoDraftError is a strict superset for the loop-specific failures (no candidate, stuck, etc.)."
+          ],
+          "affects": ["applyAndPersist", "runAutoDraft"]
+        },
+        {
+          "name": "StatusUpdateNotInScope",
+          "what": "applyAndPersist requires only DraftPick + Clock + Logging; the league_config status transition from 'draft' to 'active' is NOT done here",
+          "why": [
+            "Pelotero.Draft.Run's job is recording picks. League lifecycle is a separate concern that belongs to whatever orchestrator started the draft.",
+            "Decoupling means a replay-pick CLI command can re-run picks without bumping league status, and league-status transitions are tested independently of draft picking.",
+            "Reverses the implication in D.1a's LastPickEmitsTwoEvents decision that DraftCompleted becomes a league_config status update; that annotation is being narrowed accordingly."
+          ],
+          "affects": ["applyAndPersist", "persistEvent", "runAutoDraft"]
+        },
+        {
+          "name": "AutoPickFallbackToLowestIdAvailable",
+          "what": "autoPickCommand falls back to Set.lookupMin (dcAvailable ctx) when the team's ranking has no available candidates",
+          "why": [
+            "Deterministic — same draft plan + same DB state always picks the same player, so the loop is reproducible across runs.",
+            "Position-aware fallback (e.g. fill the team's positional needs) is more sophisticated and is properly D.1d's concern when porting AutoDraft.hs from old_src/.",
+            "WarningS log line on every fallback so operators can see when ranking coverage is poor — the metric to watch is fallback-rate-per-draft."
+          ],
+          "affects": ["autoPickCommand"]
+        },
+        {
+          "name": "NoCrashRecovery",
+          "what": "If the auto-draft loop crashes mid-draft, the partially-inserted DraftPick rows must be manually cleaned up before retry; recordPickT's Abort-on-conflict means a naive retry will fail at the first already-recorded pick",
+          "why": [
+            "State-from-DB recovery (read existing picks, reconstruct DraftContext, resume from where we left off) is genuinely useful but well beyond D.1c's scope.",
+            "The Abort-on-conflict fail-fast is the correct default — silent retry of duplicate picks would mask real bugs (double-pick, race condition, stale state, draft-id reuse).",
+            "Operators retrying a partial draft DELETE FROM draft_pick WHERE league_config_id = X and re-run runAutoDraft. Not elegant, but the failure is rare enough that the explicit cleanup is acceptable for now."
+          ],
+          "affects": ["runAutoDraft"]
+        }
+      ],
+      "invariants": {
+        "applyAndPersist": [
+          "Takes (league, state, command); runs command through runDraftCommand; persists events for Right; logs at WarningS and returns Left for rejection.",
+          "Rejection cases leave state unchanged (relies on the topology's self-loops in Pelotero.Draft.Machine).",
+          "PickRecorded events become recordPick calls with picked_at = Clock.now; DraftStarted and DraftCompleted are log-only."
+        ],
+        "persistEvent": [
+          "PickRecorded -> recordPick with server-stamped picked_at and the league_config id from the caller.",
+          "DraftStarted -> InfoS log line with league id and team count.",
+          "DraftCompleted -> InfoS log line with league id and pick count."
+        ],
+        "autoPickCommand": [
+          "Reads PR.getRankingsForTeam for the team whose turn it is.",
+          "Filters rankings to dcAvailable; picks the head if any remain.",
+          "Falls back to Set.lookupMin (dcAvailable ctx) if the ranked-and-available list is empty; logs WarningS on fallback.",
+          "Returns Left (AutoDraftNoCandidate team) only if dcAvailable is empty AND rankings are exhausted."
+        ],
+        "runAutoDraft": {
+          "intent": "Drive a draft from initialMachineState to Complete via auto-picks; return the DraftSummary or an AutoDraftError.",
+          "notes": [
+            "Persists every pick as a DraftPickRow as it happens.",
+            "Single-process invocation; state lives only in this Eff stack — no IORef, no DB-state recovery on restart.",
+            "DraftPlan must be pre-built by the caller (Pelotero.Domain.Draft.generateDraftOrder + active player pool); this function does not construct the plan.",
+            "Future CLI command 'pelotero draft run --league=X' will live above this and own the plan construction."
+          ]
+        }
+      }
+    },
     "Pelotero.Lineup.Snapshot": {
       "decisions": [
         {
@@ -1141,7 +1279,42 @@
         "hexSha256": ["ByteString -> Text; SHA-256 then base16 then UTF-8 decode"]
       }
     },
-
+    "Pelotero.DB.JsonB": {
+      "decisions": [
+        {
+          "name": "WrappersOnlyAtTheDbBoundary",
+          "what": "JSONB-going Domain types (LeagueScoring, RosterLimits, LineupLimits) are wrapped by newtypes (JsonbScoring, JsonbRosterLimits, JsonbLineupLimits) only at the rel8 Column boundary; the public LeagueConfigRow API still carries the unwrapped Domain types",
+          "why": [
+            "Phase A.4 made Domain Aeson-free by moving every ToJSON / FromJSON instance off Domain.Scoring and Domain.Roster onto wrappers in this module.",
+            "Wrapping at the rel8 Column boundary localises the bridge to the persistence layer; callers who already hold a LeagueScoring keep getting one back from getById and friends, with the wrap/unwrap living entirely inside Pelotero.DB.LeagueConfig.",
+            "Wire format is byte-equivalent to the pre-A.4 instances (same field names, same key order, same Map-keyed encoding for limits), so existing JSONB rows round-trip without a data migration."
+          ],
+          "affects": []
+        },
+        {
+          "name": "InternalSubrecordWrappers",
+          "what": "JsonbBattingMultipliers and JsonbPitchingMultipliers are private to this module and used only inside JsonbScoring's ToJSON / FromJSON",
+          "why": [
+            "Each sub-record gets its own field-by-field encoding, mirroring the original split per type at the Domain layer.",
+            "Keeps the LeagueScoring wrapper instance short and locally readable — the inner records' encoding lives next to the inner records' wrappers.",
+            "Not exported because nothing outside JsonB needs to talk about the multipliers in JSONB form independently."
+          ],
+          "affects": []
+        }
+      ],
+      "invariants": {
+        "JsonbScoring": [
+          "newtype around LeagueScoring; (un)wrap at the rel8 Column boundary in Pelotero.DB.LeagueConfig",
+          "DBType derived via JSONBEncoded — same on-the-wire JSON as the pre-A.4 LeagueScoring instance"
+        ],
+        "JsonbRosterLimits": [
+          "newtype around RosterLimits; same on-the-wire JSON as pre-A.4"
+        ],
+        "JsonbLineupLimits": [
+          "newtype around LineupLimits; same on-the-wire JSON as pre-A.4"
+        ]
+      }
+    },
     "Pelotero.DB.Rel8Instances": {
       "decisions": [
         {
@@ -1156,11 +1329,11 @@
           "affects": []
         },
         {
-          "name": "JsonbInstancesOnDomainTypes",
-          "what": "ToJSON / FromJSON instances for LeagueScoring / RosterLimits / LineupLimits / batting and pitching multipliers live on the Domain types directly today; the rel8 JSONBEncoded deriving via dispatches through those instances",
+          "name": "JsonbInstancesLiveOnWrappers",
+          "what": "ToJSON / FromJSON for LeagueScoring, RosterLimits, LineupLimits live on newtype wrappers in Pelotero.DB.JsonB; this module no longer carries any DBType deriving for those Domain types",
           "why": [
-            "This is the wrong-direction layering (Domain depends on Aeson) but is the current state. The planned A.4 work moves these instances onto newtype wrappers in a Pelotero.DB.JsonB module so Domain becomes Aeson-free.",
-            "Deferring A.4 keeps this module simple at the cost of the layering smell."
+            "Phase A.4 moved Domain off Aeson. The Domain types no longer have ToJSON / FromJSON instances; the DBType-via-JSONBEncoded deriving therefore moved next to the wrappers in Pelotero.DB.JsonB, where it's non-orphan.",
+            "This module remains the home for orphan rel8 instances on Domain id newtypes; the JsonB wrappers' DBType instances are non-orphans because the wrappers are defined alongside them."
           ],
           "affects": []
         },
@@ -1397,12 +1570,12 @@
       "decisions": [
         {
           "name": "ScoringAndLimitsAsJsonbColumns",
-          "what": "scoring_config (JSONB), roster_limits (JSONB), and lineup_limits (JSONB) are columns whose Aeson instances live on the underlying Domain types (LeagueScoring, RosterLimits, LineupLimits)",
+          "what": "scoring_config (JSONB), roster_limits (JSONB), and lineup_limits (JSONB) are columns whose rel8 type is the Pelotero.DB.JsonB wrapper (JsonbScoring / JsonbRosterLimits / JsonbLineupLimits); the public LeagueConfigRow still carries the unwrapped Domain types",
           "why": [
             "JSONB lets us evolve the inner record shape without a schema migration on every existing row.",
-            "Domain types currently carry the ToJSON/FromJSON instances directly. This is the wrong-direction layering (Domain depends on Aeson) and is the planned A.4 work to fix via newtype wrappers."
+            "Phase A.4 moved the Aeson instances off Domain onto the wrappers; this module wraps in insertLeagueConfigT / updateLeagueConfigT and unwraps in fromResult, keeping the public API in Domain types and Domain itself Aeson-free."
           ],
-          "affects": ["leagueConfigSchema", "fromResult"]
+          "affects": ["leagueConfigSchema", "fromResult", "insertLeagueConfigT", "updateLeagueConfigT"]
         },
         {
           "name": "StatusAsTextNotEnum",

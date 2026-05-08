@@ -1,7 +1,7 @@
 %bundle chase v1
-%generated 2026-05-08T16:53:14Z
+%generated 2026-05-08T21:12:59Z
 %roots /home/bismuth/git/pelotero-engine/lib
-%files 58 ok, 0 failed
+%files 62 ok, 0 failed
 
 # This file is a chase bundle: structural skeletons of multiple
 # Haskell and PureScript source files concatenated into one document.
@@ -84,6 +84,7 @@ runApp :: Pool -> LogEnv -> Eff AppEffects a -> IO (Either DBError a)
 %uses qualified Rel8 as R
 %uses qualified Rel8.Expr.Time as RT
 %uses Pelotero.DB.Pool
+%uses qualified Pelotero.DB.Game as Game
 %uses Pelotero.DB.Rel8Instances
 %uses Pelotero.Domain.Id
 
@@ -285,6 +286,8 @@ getBattingForGameT :: DbGameId -> Tx.Transaction [BattingRow]
   ! WHERE game_id; ORDER BY player_id
   ! consumed by Pelotero.Score.buildPlayerMaps (one call per game id in the period)
 
+getBattingForDateRangeT :: Day -> Day -> Tx.Transaction [BattingRow]
+
 deleteBattingForGameT :: DbGameId -> Tx.Transaction ()
   ! DELETE WHERE game_id
   ! useful when re-ingesting a corrected boxscore
@@ -295,6 +298,8 @@ upsertPitchingT :: PitchingRow -> Tx.Transaction ()
 getPitchingForGameT :: DbGameId -> Tx.Transaction [PitchingRow]
   ! WHERE game_id; ORDER BY player_id
   ! consumed by Pelotero.Score.buildPlayerMaps
+
+getPitchingForDateRangeT :: Day -> Day -> Tx.Transaction [PitchingRow]
 
 deletePitchingForGameT :: DbGameId -> Tx.Transaction ()
   ! DELETE WHERE game_id
@@ -310,6 +315,10 @@ getBattingForGame :: Pool -> DbGameId -> IO (Either DBError [BattingRow])
 
 getPitchingForGame :: Pool -> DbGameId -> IO (Either DBError [PitchingRow])
   ! Pool-flavored read
+
+getBattingForDateRange :: Pool -> Day -> Day -> IO (Either DBError [BattingRow])
+
+getPitchingForDateRange :: Pool -> Day -> Day -> IO (Either DBError [PitchingRow])
 
 deleteBattingForGame :: Pool -> DbGameId -> IO (Either DBError ())
   ! Pool-flavored delete
@@ -608,6 +617,69 @@ upsertByExternalId :: Pool -> ProviderName -> Text -> GameRow -> IO (Either DBEr
   affects: 
 
 
+=== BEGIN Pelotero/DB/JsonB.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/JsonB.hs
+%mod Pelotero.DB.JsonB
+
+%ext DerivingStrategies, DerivingVia, OverloadedStrings, RecordWildCards, StandaloneDeriving
+
+%uses Data.Aeson
+%uses qualified Data.Aeson.Types as Aeson
+%uses Data.Map.Strict
+%uses qualified Data.Map.Strict as Map
+%uses Data.Text
+%uses qualified Data.Text as T
+%uses qualified Rel8 as R
+%uses Pelotero.Domain.Roster
+%uses Pelotero.Domain.Scoring
+
+newtype JsonbScoring = JsonbScoring { unJsonbScoring :: LeagueScoring }
+  deriving stock (Show, Eq)
+
+newtype JsonbBattingMultipliers
+  = JsonbBattingMultipliers BattingMultipliers
+
+newtype JsonbPitchingMultipliers
+  = JsonbPitchingMultipliers PitchingMultipliers
+
+instance ToJSON JsonbBattingMultipliers where
+
+instance FromJSON JsonbBattingMultipliers where
+
+instance ToJSON JsonbPitchingMultipliers where
+
+instance FromJSON JsonbPitchingMultipliers where
+
+instance ToJSON JsonbScoring where
+
+instance FromJSON JsonbScoring where
+
+newtype JsonbRosterLimits = JsonbRosterLimits { unJsonbRosterLimits :: RosterLimits }
+  deriving stock (Show, Eq)
+
+newtype JsonbLineupLimits = JsonbLineupLimits { unJsonbLineupLimits :: LineupLimits }
+  deriving stock (Show, Eq)
+
+instance ToJSON JsonbRosterLimits where
+
+instance FromJSON JsonbRosterLimits where
+
+instance ToJSON JsonbLineupLimits where
+
+instance FromJSON JsonbLineupLimits where
+
+%decision WrappersOnlyAtTheDbBoundary
+  what:    JSONB-going Domain types (LeagueScoring, RosterLimits, LineupLimits) are wrapped by newtypes (JsonbScoring, JsonbRosterLimits, JsonbLineupLimits) only at the rel8 Column boundary; the public LeagueConfigRow API still carries the unwrapped Domain types
+  why:     Phase A.4 made Domain Aeson-free by moving every ToJSON / FromJSON instance off Domain.Scoring and Domain.Roster onto wrappers in this module. Wrapping at the rel8 Column boundary localises the bridge to the persistence layer; callers who already hold a LeagueScoring keep getting one back from getById and friends, with the wrap/unwrap living entirely inside Pelotero.DB.LeagueConfig. Wire format is byte-equivalent to the pre-A.4 instances (same field names, same key order, same Map-keyed encoding for limits), so existing JSONB rows round-trip without a data migration.
+  affects: 
+
+%decision InternalSubrecordWrappers
+  what:    JsonbBattingMultipliers and JsonbPitchingMultipliers are private to this module and used only inside JsonbScoring's ToJSON / FromJSON
+  why:     Each sub-record gets its own field-by-field encoding, mirroring the original split per type at the Domain layer. Keeps the LeagueScoring wrapper instance short and locally readable — the inner records' encoding lives next to the inner records' wrappers. Not exported because nothing outside JsonB needs to talk about the multipliers in JSONB form independently.
+  affects: 
+
+
 === BEGIN Pelotero/DB/LeagueConfig.hs ===
 
 %file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/LeagueConfig.hs
@@ -622,6 +694,7 @@ upsertByExternalId :: Pool -> ProviderName -> Text -> GameRow -> IO (Either DBEr
 %uses qualified Hasql.Transaction as Tx
 %uses Rel8
 %uses qualified Rel8 as R
+%uses Pelotero.DB.JsonB
 %uses Pelotero.DB.Pool
 %uses Pelotero.DB.Rel8Instances
 %uses Pelotero.Domain.Id
@@ -633,9 +706,9 @@ data LeagueConfig f = LeagueConfig
   , _lcLeagueId      :: Column f Text
   , _lcCommissioner  :: Column f Text
   , _lcStatus        :: Column f Text
-  , _lcScoring       :: Column f LeagueScoring
-  , _lcRosterLimits  :: Column f RosterLimits
-  , _lcLineupLimits  :: Column f LineupLimits
+  , _lcScoring       :: Column f JsonbScoring
+  , _lcRosterLimits  :: Column f JsonbRosterLimits
+  , _lcLineupLimits  :: Column f JsonbLineupLimits
   , _lcDraftAuto     :: Column f Bool
   , _lcDraftStrategy :: Column f Text
   , _lcDraftAutoAt   :: Column f (Maybe UTCTime)
@@ -698,9 +771,9 @@ getAll :: Pool -> IO (Either DBError [LeagueConfigRow])
   ! Pool-flavored full read
 
 %decision ScoringAndLimitsAsJsonbColumns
-  what:    scoring_config (JSONB), roster_limits (JSONB), and lineup_limits (JSONB) are columns whose Aeson instances live on the underlying Domain types (LeagueScoring, RosterLimits, LineupLimits)
-  why:     JSONB lets us evolve the inner record shape without a schema migration on every existing row. Domain types currently carry the ToJSON/FromJSON instances directly. This is the wrong-direction layering (Domain depends on Aeson) and is the planned A.4 work to fix via newtype wrappers.
-  affects: leagueConfigSchema, fromResult
+  what:    scoring_config (JSONB), roster_limits (JSONB), and lineup_limits (JSONB) are columns whose rel8 type is the Pelotero.DB.JsonB wrapper (JsonbScoring / JsonbRosterLimits / JsonbLineupLimits); the public LeagueConfigRow still carries the unwrapped Domain types
+  why:     JSONB lets us evolve the inner record shape without a schema migration on every existing row. Phase A.4 moved the Aeson instances off Domain onto the wrappers; this module wraps in insertLeagueConfigT / updateLeagueConfigT and unwraps in fromResult, keeping the public API in Domain types and Domain itself Aeson-free.
+  affects: leagueConfigSchema, fromResult, insertLeagueConfigT, updateLeagueConfigT
 
 %decision StatusAsTextNotEnum
   what:    _lcStatus is Column f Text, not the LeagueStatus domain sum
@@ -1530,8 +1603,6 @@ upsertByExternalId
 %uses qualified Rel8 as R
 %uses Pelotero.Domain.Id
 %uses Pelotero.DB.Provider
-%uses Pelotero.Domain.Roster
-%uses Pelotero.Domain.Scoring
 
 instance R.DBType ProviderName where
 
@@ -1542,9 +1613,9 @@ instance R.DBEq ProviderName
   why:     Putting them in Pelotero.Domain.Id forces the domain layer to depend on rel8, which is the wrong direction. Putting them in each Pelotero.DB.* table module produces orphan-conflict warnings as soon as two table modules reference the same domain type. This module is the lowest place that already imports both the domain types and rel8. Importers use the empty-import idiom: 'import Pelotero.DB.Rel8Instances ()'.
   affects: 
 
-%decision JsonbInstancesOnDomainTypes
-  what:    ToJSON / FromJSON instances for LeagueScoring / RosterLimits / LineupLimits / batting and pitching multipliers live on the Domain types directly today; the rel8 JSONBEncoded deriving via dispatches through those instances
-  why:     This is the wrong-direction layering (Domain depends on Aeson) but is the current state. The planned A.4 work moves these instances onto newtype wrappers in a Pelotero.DB.JsonB module so Domain becomes Aeson-free. Deferring A.4 keeps this module simple at the cost of the layering smell.
+%decision JsonbInstancesLiveOnWrappers
+  what:    ToJSON / FromJSON for LeagueScoring, RosterLimits, LineupLimits live on newtype wrappers in Pelotero.DB.JsonB; this module no longer carries any DBType deriving for those Domain types
+  why:     Phase A.4 moved Domain off Aeson. The Domain types no longer have ToJSON / FromJSON instances; the DBType-via-JSONBEncoded deriving therefore moved next to the wrappers in Pelotero.DB.JsonB, where it's non-orphan. This module remains the home for orphan rel8 instances on Domain id newtypes; the JsonB wrappers' DBType instances are non-orphans because the wrappers are defined alongside them.
   affects: 
 
 %decision ProviderNameTextEnumDb
@@ -2107,8 +2178,6 @@ isOutfielder :: Position -> Bool
 %file /home/bismuth/git/pelotero-engine/lib/Pelotero/Domain/Roster.hs
 %mod Pelotero.Domain.Roster
 
-%uses Data.Aeson
-%uses qualified Data.Aeson.Types as Aeson
 %uses Data.Foldable
 %uses Data.List
 %uses Data.Map.Strict
@@ -2117,7 +2186,6 @@ isOutfielder :: Position -> Bool
 %uses Data.Sequence
 %uses qualified Data.Sequence as Seq
 %uses Data.Text
-%uses qualified Data.Text as T
 %uses Pelotero.Domain.Id
 
 data RosterSlot
@@ -2153,14 +2221,6 @@ data LineupError
   = LineupTooManyAt !RosterSlot !Int !Int
   | LineupDuplicatePlayer !PlayerId
   deriving stock (Show, Eq)
-
-instance ToJSON RosterLimits where
-
-instance FromJSON RosterLimits where
-
-instance ToJSON LineupLimits where
-
-instance FromJSON LineupLimits where
 
 allRosterSlots :: [RosterSlot]
   ! [minBound .. maxBound]; the canonical traversal order is the constructor order in RosterSlot
@@ -2265,7 +2325,6 @@ duplicates :: Ord a => [a] -> [a]
 
 %uses Data.Maybe
 %uses Pelotero.Domain.Stats
-%uses Data.Aeson
 
 newtype Points = Points { unPoints :: Rational }
   deriving stock (Show)
@@ -2290,7 +2349,7 @@ data PitchingMultipliers = PitchingMultipliers
   { pmWin           :: !Rational
   , pmSave          :: !Rational
   , pmQualityStart  :: !Rational
-  , pmInningPitched :: !Rational  -- per inning (one inning = 3 outs)
+  , pmInningPitched :: !Rational
   , pmStrikeOut     :: !Rational
   , pmCompleteGame  :: !Rational
   , pmShutout       :: !Rational
@@ -2307,18 +2366,6 @@ data LeagueScoring = LeagueScoring
   , lsPitching :: !PitchingMultipliers
   }
   deriving stock (Show, Eq)
-
-instance ToJSON BattingMultipliers where
-
-instance FromJSON BattingMultipliers where
-
-instance ToJSON PitchingMultipliers where
-
-instance FromJSON PitchingMultipliers where
-
-instance ToJSON LeagueScoring where
-
-instance FromJSON LeagueScoring where
 
 zeroPoints :: Points
   ! Points 0; identity for addPoints
@@ -2513,6 +2560,290 @@ data Team = Team
   deriving stock (Show, Eq)
 
 
+=== BEGIN Pelotero/Draft/Machine.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Draft/Machine.hs
+%mod Pelotero.Draft.Machine
+
+%ext DataKinds, EmptyCase, ExistentialQuantification, GADTs, LambdaCase, ScopedTypeVariables, StandaloneDeriving, StandaloneKindSignatures, TemplateHaskell, TypeApplications, InstanceSigs, TypeFamilies, UndecidableInstances
+
+%uses Crem.BaseMachine
+%uses Crem.Render.RenderableVertices
+%uses Crem.Topology
+%uses Data.Functor.Identity
+%uses Data.List
+%uses qualified Data.Set as Set
+%uses Data.Singletons.Base.TH
+%uses Pelotero.Draft
+
+instance RenderableVertices DraftVertex where
+
+type DraftTopology =
+  'Topology
+    '[ '( 'WaitingToStartV, '[ 'WaitingToStartV, 'DraftingV ])
+     , '( 'DraftingV,       '[ 'DraftingV,       'CompleteV ])
+     , '( 'CompleteV,       '[ 'CompleteV ])
+     ]
+
+data DraftStateG (v :: DraftVertex) where
+  WaitingToStartG :: DraftStateG 'WaitingToStartV
+  DraftingG       :: !DraftContext -> DraftStateG 'DraftingV
+  CompleteG       :: !DraftSummary -> DraftStateG 'CompleteV
+
+data SomeDraftStateG = forall v.
+  SomeDraftStateG (SDraftVertex v) (DraftStateG v)
+
+initialMachineState :: SomeDraftStateG
+
+draftStateVertex :: SomeDraftStateG -> DraftVertex
+
+toSomeDraftStateG :: DraftStateG v -> SomeDraftStateG
+
+fromDraftState :: DraftState -> SomeDraftStateG
+
+toDraftState :: DraftStateG v -> DraftState
+
+draftAction
+  :: DraftStateG v
+  -> DraftCommand
+  -> ActionResult Identity DraftTopology DraftStateG v (Either DraftError [DraftEvent])
+
+runDraftCommand
+  :: SomeDraftStateG
+  -> DraftCommand
+  -> (Either DraftError [DraftEvent], SomeDraftStateG)
+
+
+=== BEGIN Pelotero/Draft/Run.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Draft/Run.hs
+%mod Pelotero.Draft.Run
+
+%ext DataKinds, FlexibleContexts, GADTs, LambdaCase, OverloadedStrings, RecordWildCards, ScopedTypeVariables, TypeOperators
+
+%uses Data.Foldable
+%uses qualified Data.Set as Set
+%uses qualified Data.Text as T
+%uses Effectful
+%uses qualified Katip as K
+%uses Pelotero.DB.DraftPick
+%uses Pelotero.DB.PlayerRanking
+%uses Pelotero.Domain.Id
+%uses Pelotero.Draft
+%uses Pelotero.Draft.Machine
+%uses Pelotero.Effects.Clock
+%uses qualified Pelotero.Effects.Clock as Clock
+%uses Pelotero.Effects.DraftPick
+%uses qualified Pelotero.Effects.DraftPick as DP
+%uses Pelotero.Effects.Logging
+%uses qualified Pelotero.Effects.Logging as Logging
+%uses Pelotero.Effects.PlayerRanking
+%uses qualified Pelotero.Effects.PlayerRanking as PR
+
+data AutoDraftError
+  = AutoDraftRejected    !DraftError
+    -- ^ State machine rejected a command issued by the loop itself —
+    --   indicates a bug in this module, not a user-facing problem.
+  | AutoDraftNoCandidate !DbLeagueTeamId
+    -- ^ Team's ranking is empty AND no player remains in the
+    --   available pool. Genuine end-of-draft if it happens before
+    --   the pick order runs out.
+  | AutoDraftStuck       !DraftVertex
+    -- ^ Loop saw the state machine in an unexpected vertex
+    --   (e.g. 'WaitingToStartV' after StartDraft was supposed to
+    --   succeed). Should be unreachable; included as a defensive
+    --   catch.
+  deriving stock (Show, Eq)
+
+applyAndPersist
+  :: ( DraftPick :> es
+     , Clock     :> es
+     , Logging   :> es
+     )
+  => DbLeagueConfigId
+  -> SomeDraftStateG
+  -> DraftCommand
+  -> Eff es (Either DraftError [DraftEvent], SomeDraftStateG)
+  ! Takes (league, state, command); runs command through runDraftCommand; persists events for Right; logs at WarningS and returns Left for rejection.
+  ! Rejection cases leave state unchanged (relies on the topology's self-loops in Pelotero.Draft.Machine).
+  ! PickRecorded events become recordPick calls with picked_at = Clock.now; DraftStarted and DraftCompleted are log-only.
+
+persistEvent
+  :: ( DraftPick :> es
+     , Clock     :> es
+     , Logging   :> es
+     )
+  => DbLeagueConfigId
+  -> DraftEvent
+  -> Eff es ()
+  ! PickRecorded -> recordPick with server-stamped picked_at and the league_config id from the caller.
+  ! DraftStarted -> InfoS log line with league id and team count.
+  ! DraftCompleted -> InfoS log line with league id and pick count.
+
+runAutoDraft
+  :: forall es.
+     ( DraftPick     :> es
+     , PlayerRanking :> es
+     , Clock         :> es
+     , Logging       :> es
+     )
+  => DraftPlan
+  -> Eff es (Either AutoDraftError DraftSummary)
+  ! intent: Drive a draft from initialMachineState to Complete via auto-picks; return the DraftSummary or an AutoDraftError.
+  ! Persists every pick as a DraftPickRow as it happens.
+  ! Single-process invocation; state lives only in this Eff stack — no IORef, no DB-state recovery on restart.
+  ! DraftPlan must be pre-built by the caller (Pelotero.Domain.Draft.generateDraftOrder + active player pool); this function does not construct the plan.
+  ! Future CLI command 'pelotero draft run --league=X' will live above this and own the plan construction.
+
+autoPickCommand
+  :: ( PlayerRanking :> es
+     , Logging       :> es
+     )
+  => DraftContext
+  -> Eff es (Either AutoDraftError DraftCommand)
+  ! Reads PR.getRankingsForTeam for the team whose turn it is.
+  ! Filters rankings to dcAvailable; picks the head if any remain.
+  ! Falls back to Set.lookupMin (dcAvailable ctx) if the ranked-and-available list is empty; logs WarningS on fallback.
+  ! Returns Left (AutoDraftNoCandidate team) only if dcAvailable is empty AND rankings are exhausted.
+
+tshow :: Show a => a -> T.Text
+
+%decision PerCommandPersistencePrimitive
+  what:    applyAndPersist is the per-command primitive: takes one command, runs it through runDraftCommand, persists whichever events come out, returns the new state and the result. Both runAutoDraft and any future manual-pick UI handler go through it.
+  why:     Keeps the persistence logic in one place; manual UI picks and auto-picks share the same code path. Returns SomeDraftStateG so the caller threads state across calls explicitly — no IORef, no MVar, no state-holding effect. Makes the primitive fully testable with the existing in-memory effect interpreters. DraftError flows through the Either; AutoDraftError is a strict superset for the loop-specific failures (no candidate, stuck, etc.).
+  affects: applyAndPersist, runAutoDraft
+
+%decision StatusUpdateNotInScope
+  what:    applyAndPersist requires only DraftPick + Clock + Logging; the league_config status transition from 'draft' to 'active' is NOT done here
+  why:     Pelotero.Draft.Run's job is recording picks. League lifecycle is a separate concern that belongs to whatever orchestrator started the draft. Decoupling means a replay-pick CLI command can re-run picks without bumping league status, and league-status transitions are tested independently of draft picking. Reverses the implication in D.1a's LastPickEmitsTwoEvents decision that DraftCompleted becomes a league_config status update; that annotation is being narrowed accordingly.
+  affects: applyAndPersist, persistEvent, runAutoDraft
+
+%decision AutoPickFallbackToLowestIdAvailable
+  what:    autoPickCommand falls back to Set.lookupMin (dcAvailable ctx) when the team's ranking has no available candidates
+  why:     Deterministic — same draft plan + same DB state always picks the same player, so the loop is reproducible across runs. Position-aware fallback (e.g. fill the team's positional needs) is more sophisticated and is properly D.1d's concern when porting AutoDraft.hs from old_src/. WarningS log line on every fallback so operators can see when ranking coverage is poor — the metric to watch is fallback-rate-per-draft.
+  affects: autoPickCommand
+
+%decision NoCrashRecovery
+  what:    If the auto-draft loop crashes mid-draft, the partially-inserted DraftPick rows must be manually cleaned up before retry; recordPickT's Abort-on-conflict means a naive retry will fail at the first already-recorded pick
+  why:     State-from-DB recovery (read existing picks, reconstruct DraftContext, resume from where we left off) is genuinely useful but well beyond D.1c's scope. The Abort-on-conflict fail-fast is the correct default — silent retry of duplicate picks would mask real bugs (double-pick, race condition, stale state, draft-id reuse). Operators retrying a partial draft DELETE FROM draft_pick WHERE league_config_id = X and re-run runAutoDraft. Not elegant, but the failure is rare enough that the explicit cleanup is acceptable for now.
+  affects: runAutoDraft
+
+
+=== BEGIN Pelotero/Draft.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Draft.hs
+%mod Pelotero.Draft
+
+%ext LambdaCase, OverloadedStrings
+
+%uses Data.List
+%uses Data.Set
+%uses qualified Data.Set as Set
+%uses Pelotero.Domain.Id
+
+data DraftState
+  = WaitingToStart
+  | Drafting !DraftContext
+  | Complete !DraftSummary
+  deriving stock (Show, Eq)
+
+data DraftContext = DraftContext
+  { dcLeague    :: !DbLeagueConfigId
+  , dcOrder     :: ![(DbLeagueTeamId, DraftPickNumber)]
+  , dcRemaining :: ![(DbLeagueTeamId, DraftPickNumber)]
+  , dcAvailable :: !(Set DbPlayerId)
+  , dcPicksMade :: ![DraftPickEntry]
+  }
+  deriving stock (Show, Eq)
+
+data DraftPickEntry = DraftPickEntry
+  { dpePickNumber :: !DraftPickNumber
+  , dpeTeam       :: !DbLeagueTeamId
+  , dpePlayer     :: !DbPlayerId
+  }
+  deriving stock (Show, Eq)
+
+data DraftSummary = DraftSummary
+  { dsLeague :: !DbLeagueConfigId
+  , dsPicks  :: ![DraftPickEntry]
+  }
+  deriving stock (Show, Eq)
+
+data DraftPlan = DraftPlan
+  { dpLeague    :: !DbLeagueConfigId
+  , dpOrder     :: ![(DbLeagueTeamId, DraftPickNumber)]
+  , dpAvailable :: !(Set DbPlayerId)
+  }
+  deriving stock (Show, Eq)
+
+data DraftCommand
+  = StartDraft !DraftPlan
+  | MakePick   !DbLeagueTeamId !DbPlayerId
+  | EndDraft
+  deriving stock (Show, Eq)
+
+data DraftEvent
+  = DraftStarted   !DbLeagueConfigId ![DbLeagueTeamId]
+  | PickRecorded   !DraftPickEntry
+  | DraftCompleted !DraftSummary
+  deriving stock (Show, Eq)
+
+data DraftError
+  = DraftNotStarted
+  | DraftAlreadyStarted
+  | DraftAlreadyComplete
+  | EmptyDraftPlan
+  | NotYourTurn          !DbLeagueTeamId !DbLeagueTeamId
+    -- ^ expected, actual
+  | PlayerAlreadyDrafted !DbPlayerId
+  | PlayerNotInPool      !DbPlayerId
+  deriving stock (Show, Eq)
+
+initialState :: DraftState
+  ! WaitingToStart; the empty start of any draft
+
+applyCommand
+  :: DraftCommand
+  -> DraftState
+  -> Either DraftError (DraftState, [DraftEvent])
+  ! intent: Single transition function: given a command and a state, return the next state plus events to persist, or the reason the command was refused.
+  ! Pure: same inputs -> same outputs.
+  ! Errors short-circuit without changing state.
+  ! MakePick on the last pick emits PickRecorded then DraftCompleted, in that order, and transitions to Complete.
+  ! EndDraft from Drafting transitions to Complete with the picks made so far; useful for early commissioner-driven termination.
+  ! An empty DraftPlan (dpOrder == []) returns EmptyDraftPlan rather than transitioning to a degenerate Complete state.
+
+currentPicker :: DraftState -> Maybe (DbLeagueTeamId, DraftPickNumber)
+  ! Whose pick is up? Nothing if the draft hasn't started or has finished.
+  ! Used by Pelotero.Draft.Run's auto-pick wrapper (D.1c) to identify which team's ranking to consult.
+
+picksRemaining :: DraftState -> Int
+  ! Length of dcRemaining inside Drafting; 0 outside Drafting.
+
+isPlayerAvailable :: DbPlayerId -> DraftState -> Bool
+  ! Set membership in dcAvailable; False outside Drafting.
+
+%decision PureLogicNoEffects
+  what:    Pelotero.Draft is the pure transition logic for the draft state machine; no effect dependencies, all transitions return Either DraftError (DraftState, [DraftEvent])
+  why:     Phase D.1a separates the transition logic from the persistence layer so the state machine is testable with hedgehog without any DB or in-memory effect runner. Pelotero.Draft.Run (Phase D.1c) is the effectful handler that wraps applyCommand with PlayerRanking / DraftPick / Players / Logging / Clock; that is where commands actually get persisted. Pelotero.Domain.Draft remains the upstream-id-keyed pre-compute layer (order generation from a strategy + team list); this module is DB-id-keyed because the state machine talks to the persistence layer.
+  affects: applyCommand
+
+%decision AutoPickIsNotACommand
+  what:    DraftCommand has only StartDraft, MakePick, EndDraft; auto-picking is a wrapper at the effect layer (D.1c) that consults PlayerRanking, intersects with dcAvailable, and issues MakePick with the chosen player
+  why:     Keeps the pure logic with one place-a-player path rather than two; the strategy logic for which player gets picked stays separate from the how of recording it. Means the state machine itself doesn't take a ranking source as input — the ranking lookup happens before MakePick is constructed. If a future strategy variant emerges (round-specific overrides, drop-and-replace), it lives at the effect layer alongside the existing auto-pick wrapper, not as a new state-machine command.
+  affects: DraftCommand, applyCommand
+
+%decision LastPickEmitsTwoEvents
+  what:    MakePick on the last remaining pick emits both PickRecorded and DraftCompleted in that order; EndDraft from Drafting emits only DraftCompleted
+  why:     The handler in Pelotero.Draft.Run persists both events in order: insert the DraftPick row first, then log the completion. The league_config status update is the orchestrator's job, not the state-machine handler's, per Pelotero.Draft.Run's StatusUpdateNotInScope decision. Crash between events leaves the pick recorded with the in-memory machine state still consistent — the next run sees an empty dcRemaining and re-runs applyCommand to get DraftCompleted again; idempotent on the in-memory side. DB-level idempotency on partial-draft retries is documented separately under NoCrashRecovery. Flipping the order would leave a 'completed' log line with the last pick missing from draft_pick — a worse partial state for anyone reading logs.
+  affects: applyCommand
+
+%decision PicksMadeListSnocAppend
+  what:    DraftContext.dcPicksMade is appended to in pick order (oldest first) using snoc; total cost is O(n²) across a full draft
+  why:     n is small — at most ~300 picks for a 25-team / 12-round league. 300² = 90,000 cons cells; not a perf concern. Oldest-first ordering means the DraftSummary doesn't need a final reverse step, and the audit trail reads naturally in chronological order without calling reverse on every read. If a much larger draft format appears (50-team dynasty with 30 rounds = 1500 picks), revisit; until then the simpler shape wins.
+  affects: applyCommand
+
+
 === BEGIN Pelotero/Effects/BoxscoreEntry.hs ===
 
 %file /home/bismuth/git/pelotero-engine/lib/Pelotero/Effects/BoxscoreEntry.hs
@@ -2520,6 +2851,7 @@ data Team = Team
 
 %ext DataKinds, FlexibleContexts, GADTs, LambdaCase, TypeFamilies, TypeOperators
 
+%uses Data.Time.Calendar
 %uses Effectful
 %uses qualified Effectful as E
 %uses Effectful.Dispatch.Dynamic
@@ -2529,12 +2861,14 @@ data Team = Team
 %uses Pelotero.Effects.Database
 
 data BoxscoreEntry :: Effect where
-  UpsertBatting         :: BattingRow  -> BoxscoreEntry m ()
-  UpsertPitching        :: PitchingRow -> BoxscoreEntry m ()
-  GetBattingForGame     :: DbGameId    -> BoxscoreEntry m [BattingRow]
-  GetPitchingForGame    :: DbGameId    -> BoxscoreEntry m [PitchingRow]
-  DeleteBattingForGame  :: DbGameId    -> BoxscoreEntry m ()
-  DeletePitchingForGame :: DbGameId    -> BoxscoreEntry m ()
+  UpsertBatting           :: BattingRow  -> BoxscoreEntry m ()
+  UpsertPitching          :: PitchingRow -> BoxscoreEntry m ()
+  GetBattingForGame       :: DbGameId    -> BoxscoreEntry m [BattingRow]
+  GetPitchingForGame      :: DbGameId    -> BoxscoreEntry m [PitchingRow]
+  GetBattingForDateRange  :: Day -> Day  -> BoxscoreEntry m [BattingRow]
+  GetPitchingForDateRange :: Day -> Day  -> BoxscoreEntry m [PitchingRow]
+  DeleteBattingForGame    :: DbGameId    -> BoxscoreEntry m ()
+  DeletePitchingForGame   :: DbGameId    -> BoxscoreEntry m ()
 
 upsertBatting :: BoxscoreEntry E.:> es => BattingRow -> E.Eff es ()
   ! BoxscoreEntry send-only
@@ -2551,6 +2885,12 @@ getPitchingForGame
   :: BoxscoreEntry E.:> es => DbGameId -> E.Eff es [PitchingRow]
   ! BoxscoreEntry send-only
   ! consumed by Pelotero.Score.buildPlayerMaps
+
+getBattingForDateRange
+  :: BoxscoreEntry E.:> es => Day -> Day -> E.Eff es [BattingRow]
+
+getPitchingForDateRange
+  :: BoxscoreEntry E.:> es => Day -> Day -> E.Eff es [PitchingRow]
 
 deleteBattingForGame :: BoxscoreEntry E.:> es => DbGameId -> E.Eff es ()
   ! BoxscoreEntry send-only
@@ -4310,7 +4650,7 @@ collectGameIds
 
 buildPlayerMaps
   :: BoxscoreEntry :> es
-  => [DbGameId]
+  => Day -> Day
   -> Eff es ( Map.Map DbPlayerId [BattingRow]
             , Map.Map DbPlayerId [PitchingRow]
             )
@@ -4373,9 +4713,9 @@ mergePlayerScores :: PlayerScore -> PlayerScore -> PlayerScore
   why:     league_config stores UTCTime instants because lineup-lock cutoffs are timezone-sensitive (see Pelotero.Domain.League decision ScoringPeriodAsUtcTime), but the DB game.game_date is Day, so the query needs Day bounds. Truncating UTCTime to Day in UTC is correct only because game_date is also stored in UTC at write time. A change to either column's timezone semantics would break this silently. The two utctDay calls happen once per scoreLeague invocation; not a perf concern.
   affects: scoreLeague, scoreTeam
 
-%decision PerGamePlayerMapBuilds
-  what:    buildPlayerMaps issues one BoxscoreEntry.getBattingForGame and one BoxscoreEntry.getPitchingForGame per game id and bucks the results into Map DbPlayerId [Row] in Haskell
-  why:     BoxscoreEntry only exposes per-game queries today. A single date-range query would be the right shape (and is the planned C.2 work), but adding it requires extending both the DB module and the effect. Per-game queries keep the Score module honest about its dependencies — it asks for what BoxscoreEntry actually offers — at the cost of N round-trips per scoring period. Acceptable for current league sizes (a 30-day period is ~450 games for one MLB league) but explicitly a known performance gap; C.2 is the optimisation.
+%decision DateRangePlayerMapBuilds
+  what:    buildPlayerMaps issues exactly two BoxscoreEntry effect calls (getBattingForDateRange and getPitchingForDateRange) for the entire scoring period; the SQL joins game_player_batting/pitching against game on game_id and filters by game.game_date in [startDay, endDay]
+  why:     Phase C.2 collapsed the per-game query loop. The previous shape did 2 * N transactions for an N-game period (~900 round-trips for a 30-day MLB period); the date-range version is exactly 2. Correctness preserved: the date-range query joins against gameSchema and filters by game_date, which is exactly the predicate Games.getGamesByDateRange uses, so the fetched row set is identical to what the per-game loop produced. The downstream per-game filter in scoreOnePlayerForGame is unchanged and load-bearing: each player's bucket now contains rows from every game in the period, and the filter narrows to just the game being scored. Removing the filter would silently score every player's full-period stats once per game.
   affects: buildPlayerMaps
 
 %decision ScoringReadsFromLineupSnapshots

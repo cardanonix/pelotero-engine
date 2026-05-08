@@ -12,6 +12,8 @@ module Pelotero.Effects.BoxscoreEntry
   , upsertPitching
   , getBattingForGame
   , getPitchingForGame
+  , getBattingForDateRange
+  , getPitchingForDateRange
   , deleteBattingForGame
   , deletePitchingForGame
     -- * Interpreters
@@ -19,6 +21,7 @@ module Pelotero.Effects.BoxscoreEntry
   , runBoxscoreEntryNever
   ) where
 
+import Data.Time.Calendar (Day)
 import Effectful
 import qualified Effectful as E
 import Effectful.Dispatch.Dynamic (interpret, send)
@@ -28,15 +31,17 @@ import qualified Pelotero.DB.BoxscoreEntry as BoxRepo
 import Pelotero.Domain.Id (DbGameId)
 import Pelotero.Effects.Database (Database, runTx)
 
--- | The boxscore-entry effect: per-game upserts, reads, and deletes
--- for batting and pitching rows.
+-- | The boxscore-entry effect: per-game upserts, reads, deletes, and
+-- date-range bulk reads for batting and pitching rows.
 data BoxscoreEntry :: Effect where
-  UpsertBatting         :: BattingRow  -> BoxscoreEntry m ()
-  UpsertPitching        :: PitchingRow -> BoxscoreEntry m ()
-  GetBattingForGame     :: DbGameId    -> BoxscoreEntry m [BattingRow]
-  GetPitchingForGame    :: DbGameId    -> BoxscoreEntry m [PitchingRow]
-  DeleteBattingForGame  :: DbGameId    -> BoxscoreEntry m ()
-  DeletePitchingForGame :: DbGameId    -> BoxscoreEntry m ()
+  UpsertBatting           :: BattingRow  -> BoxscoreEntry m ()
+  UpsertPitching          :: PitchingRow -> BoxscoreEntry m ()
+  GetBattingForGame       :: DbGameId    -> BoxscoreEntry m [BattingRow]
+  GetPitchingForGame      :: DbGameId    -> BoxscoreEntry m [PitchingRow]
+  GetBattingForDateRange  :: Day -> Day  -> BoxscoreEntry m [BattingRow]
+  GetPitchingForDateRange :: Day -> Day  -> BoxscoreEntry m [PitchingRow]
+  DeleteBattingForGame    :: DbGameId    -> BoxscoreEntry m ()
+  DeletePitchingForGame   :: DbGameId    -> BoxscoreEntry m ()
 
 type instance DispatchOf BoxscoreEntry = Dynamic
 
@@ -54,6 +59,14 @@ getPitchingForGame
   :: BoxscoreEntry E.:> es => DbGameId -> E.Eff es [PitchingRow]
 getPitchingForGame = send . GetPitchingForGame
 
+getBattingForDateRange
+  :: BoxscoreEntry E.:> es => Day -> Day -> E.Eff es [BattingRow]
+getBattingForDateRange s e = send (GetBattingForDateRange s e)
+
+getPitchingForDateRange
+  :: BoxscoreEntry E.:> es => Day -> Day -> E.Eff es [PitchingRow]
+getPitchingForDateRange s e = send (GetPitchingForDateRange s e)
+
 deleteBattingForGame :: BoxscoreEntry E.:> es => DbGameId -> E.Eff es ()
 deleteBattingForGame = send . DeleteBattingForGame
 
@@ -68,12 +81,14 @@ runBoxscoreEntryDB
   => E.Eff (BoxscoreEntry : es) a
   -> E.Eff es a
 runBoxscoreEntryDB = interpret $ \_ -> \case
-  UpsertBatting br          -> runTx (BoxRepo.upsertBattingT br)
-  UpsertPitching pr         -> runTx (BoxRepo.upsertPitchingT pr)
-  GetBattingForGame gid     -> runTx (BoxRepo.getBattingForGameT gid)
-  GetPitchingForGame gid    -> runTx (BoxRepo.getPitchingForGameT gid)
-  DeleteBattingForGame gid  -> runTx (BoxRepo.deleteBattingForGameT gid)
-  DeletePitchingForGame gid -> runTx (BoxRepo.deletePitchingForGameT gid)
+  UpsertBatting br             -> runTx (BoxRepo.upsertBattingT br)
+  UpsertPitching pr            -> runTx (BoxRepo.upsertPitchingT pr)
+  GetBattingForGame gid        -> runTx (BoxRepo.getBattingForGameT gid)
+  GetPitchingForGame gid       -> runTx (BoxRepo.getPitchingForGameT gid)
+  GetBattingForDateRange s e   -> runTx (BoxRepo.getBattingForDateRangeT s e)
+  GetPitchingForDateRange s e  -> runTx (BoxRepo.getPitchingForDateRangeT s e)
+  DeleteBattingForGame gid     -> runTx (BoxRepo.deleteBattingForGameT gid)
+  DeletePitchingForGame gid    -> runTx (BoxRepo.deletePitchingForGameT gid)
 
 -- | Test interpreter that errors on every operation. Useful for tests
 -- that need 'BoxscoreEntry' present in the effect stack but exercise
@@ -87,15 +102,19 @@ runBoxscoreEntryNever
   :: E.Eff (BoxscoreEntry : es) a
   -> E.Eff es a
 runBoxscoreEntryNever = interpret $ \_ -> \case
-  UpsertBatting _         ->
+  UpsertBatting _             ->
     error "runBoxscoreEntryNever: UpsertBatting was unexpectedly invoked"
-  UpsertPitching _        ->
+  UpsertPitching _            ->
     error "runBoxscoreEntryNever: UpsertPitching was unexpectedly invoked"
-  GetBattingForGame _     ->
+  GetBattingForGame _         ->
     error "runBoxscoreEntryNever: GetBattingForGame was unexpectedly invoked"
-  GetPitchingForGame _    ->
+  GetPitchingForGame _        ->
     error "runBoxscoreEntryNever: GetPitchingForGame was unexpectedly invoked"
-  DeleteBattingForGame _  ->
+  GetBattingForDateRange _ _  ->
+    error "runBoxscoreEntryNever: GetBattingForDateRange was unexpectedly invoked"
+  GetPitchingForDateRange _ _ ->
+    error "runBoxscoreEntryNever: GetPitchingForDateRange was unexpectedly invoked"
+  DeleteBattingForGame _      ->
     error "runBoxscoreEntryNever: DeleteBattingForGame was unexpectedly invoked"
-  DeletePitchingForGame _ ->
+  DeletePitchingForGame _     ->
     error "runBoxscoreEntryNever: DeletePitchingForGame was unexpectedly invoked"

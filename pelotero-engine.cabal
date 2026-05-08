@@ -44,8 +44,12 @@ library
     Pelotero.Prelude
     Pelotero.Score
     Pelotero.App
+    Pelotero.Draft
     -- Providers
     Pelotero.Provider.ExternalId
+    -- Draft
+    Pelotero.Draft.Machine
+    Pelotero.Draft.Run
     -- Domain
     Pelotero.Domain.Id
     Pelotero.Domain.Position
@@ -83,6 +87,7 @@ library
     Pelotero.DB.PlayerRanking
     Pelotero.DB.LineupSnapshot
     Pelotero.DB.ProviderKeyed
+    Pelotero.DB.JsonB
     -- Effects
     Pelotero.Effects.Database
     Pelotero.Effects.Clock
@@ -133,6 +138,9 @@ library
                   , rel8               >= 1.7   && < 1.8
                   , katip
                   , effectful
+                  , crem
+                  , singletons
+                  , singletons-base
   ghc-options:      -O2
 
 executable pelotero
@@ -177,10 +185,12 @@ test-suite pelotero-test
     Pelotero.MLB.ConvertSpec
     Pelotero.Effects.PlayersSpec
     Pelotero.ScoreSpec
+    Pelotero.DraftSpec
     Pelotero.Provider.ExternalIdSpec
     Pelotero.Sync.PlayersSpec
     Pelotero.Sync.ScheduleSpec
     Pelotero.Sync.BoxscoresSpec 
+    Pelotero.Draft.MachineSpec
   build-depends:    base
                   , pelotero-engine
                   , aeson

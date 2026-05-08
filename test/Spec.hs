@@ -2,11 +2,13 @@ module Main (main) where
 
 import Test.Hspec
 
-import qualified Pelotero.Domain.DraftSpec        as Draft
+import qualified Pelotero.Domain.DraftSpec        as DomainDraft
 import qualified Pelotero.Domain.PlayerSpec       as DomainPlayer
 import qualified Pelotero.Domain.PositionSpec     as Position
 import qualified Pelotero.Domain.RosterSpec       as Roster
 import qualified Pelotero.Domain.ScoringSpec      as Scoring
+import qualified Pelotero.Draft.MachineSpec       as DraftMachine
+import qualified Pelotero.DraftSpec               as Draft
 import qualified Pelotero.Effects.PlayersSpec     as PlayersEff
 import qualified Pelotero.MLB.ConvertSpec         as Convert
 import qualified Pelotero.Provider.ExternalIdSpec as ExternalId
@@ -20,12 +22,15 @@ main = hspec $ do
   Position.spec
   Roster.spec
   Scoring.spec
-  Draft.spec
+  DomainDraft.spec
   DomainPlayer.spec
 
   ExternalId.spec
 
   Convert.spec
+
+  Draft.spec
+  DraftMachine.spec
 
   PlayersEff.spec
 

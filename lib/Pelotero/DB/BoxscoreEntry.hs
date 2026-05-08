@@ -16,19 +16,23 @@ module Pelotero.DB.BoxscoreEntry
   , upsertPitchingT
   , getBattingForGameT
   , getPitchingForGameT
+  , getBattingForDateRangeT
+  , getPitchingForDateRangeT
   , deleteBattingForGameT
   , deletePitchingForGameT
   , upsertBatting
   , upsertPitching
   , getBattingForGame
   , getPitchingForGame
+  , getBattingForDateRange
+  , getPitchingForDateRange
   , deleteBattingForGame
   , deletePitchingForGame
   ) where
 
 import           Data.Functor.Contravariant ((>$<))
 import           Data.Int                   (Int32)
-import           Data.Time                  (UTCTime)
+import           Data.Time                  (Day, UTCTime)
 import           GHC.Generics               (Generic)
 
 import qualified Hasql.Transaction          as Tx
@@ -40,11 +44,14 @@ import           Rel8                       ( Column
                                             , Result
                                             , TableSchema(..)
                                             , (==.)
+                                            , (<=.)
+                                            , (>=.)
                                             )
 import qualified Rel8                       as R
 import qualified Rel8.Expr.Time             as RT
 
 import Pelotero.DB.Pool      (DBError, Pool, runTransaction)
+import qualified Pelotero.DB.Game           as Game
 import Pelotero.DB.Rel8Instances ()
 import Pelotero.Domain.Id    (DbGameId(..), DbPlayerId(..), DbTeamId(..))
 
@@ -548,6 +555,22 @@ getBattingForGameT gid = do
       pure r
   pure (map fromBattingResult rows)
 
+-- | Fetch every batting row for games whose 'game_date' falls within
+-- @[startDay, endDay]@ inclusive. One SQL query joining
+-- 'game_player_batting' against 'game' on 'game_id'. Replaces the
+-- per-game loop in 'Pelotero.Score.buildPlayerMaps' (Phase C.2).
+getBattingForDateRangeT :: Day -> Day -> Tx.Transaction [BattingRow]
+getBattingForDateRangeT startDay endDay = do
+  rows <- Tx.statement () $ R.run $ R.select $
+    R.orderBy ((_bPlayerId >$< R.asc) <> (_bGameId >$< R.asc)) $ do
+      g <- R.each Game.gameSchema
+      b <- R.each battingSchema
+      R.where_ (Game._gameId       g ==. _bGameId b)
+      R.where_ (Game._gameGameDate g >=. R.lit startDay)
+      R.where_ (Game._gameGameDate g <=. R.lit endDay)
+      pure b
+  pure (map fromBattingResult rows)
+
 deleteBattingForGameT :: DbGameId -> Tx.Transaction ()
 deleteBattingForGameT gid = Tx.statement () $ R.run_ $ R.delete R.Delete
   { R.from        = battingSchema
@@ -630,6 +653,19 @@ getPitchingForGameT gid = do
       pure r
   pure (map fromPitchingResult rows)
 
+-- | Mirror of 'getBattingForDateRangeT' for pitching. Phase C.2.
+getPitchingForDateRangeT :: Day -> Day -> Tx.Transaction [PitchingRow]
+getPitchingForDateRangeT startDay endDay = do
+  rows <- Tx.statement () $ R.run $ R.select $
+    R.orderBy ((_pPlayerId >$< R.asc) <> (_pGameId >$< R.asc)) $ do
+      g <- R.each Game.gameSchema
+      p <- R.each pitchingSchema
+      R.where_ (Game._gameId       g ==. _pGameId p)
+      R.where_ (Game._gameGameDate g >=. R.lit startDay)
+      R.where_ (Game._gameGameDate g <=. R.lit endDay)
+      pure p
+  pure (map fromPitchingResult rows)
+
 deletePitchingForGameT :: DbGameId -> Tx.Transaction ()
 deletePitchingForGameT gid = Tx.statement () $ R.run_ $ R.delete R.Delete
   { R.from        = pitchingSchema
@@ -653,6 +689,12 @@ getBattingForGame pool gid = runTransaction pool (getBattingForGameT gid)
 
 getPitchingForGame :: Pool -> DbGameId -> IO (Either DBError [PitchingRow])
 getPitchingForGame pool gid = runTransaction pool (getPitchingForGameT gid)
+
+getBattingForDateRange :: Pool -> Day -> Day -> IO (Either DBError [BattingRow])
+getBattingForDateRange pool s e = runTransaction pool (getBattingForDateRangeT s e)
+
+getPitchingForDateRange :: Pool -> Day -> Day -> IO (Either DBError [PitchingRow])
+getPitchingForDateRange pool s e = runTransaction pool (getPitchingForDateRangeT s e)
 
 deleteBattingForGame :: Pool -> DbGameId -> IO (Either DBError ())
 deleteBattingForGame pool gid = runTransaction pool (deleteBattingForGameT gid)

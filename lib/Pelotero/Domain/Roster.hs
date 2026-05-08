@@ -1,5 +1,3 @@
--- lib/Pelotero/Domain/Roster.hs
-
 module Pelotero.Domain.Roster
   (
     RosterSlot(..)
@@ -39,8 +37,6 @@ module Pelotero.Domain.Roster
   , validateLineup
   ) where
 
-import           Data.Aeson         (FromJSON(..), ToJSON(..))
-import qualified Data.Aeson.Types   as Aeson
 import           Data.Foldable      (toList)
 import           Data.List          (group, sort)
 import           Data.Map.Strict    (Map)
@@ -49,7 +45,6 @@ import           Data.Maybe         (mapMaybe)
 import           Data.Sequence      (Seq)
 import qualified Data.Sequence      as Seq
 import           Data.Text          (Text)
-import qualified Data.Text          as T
 
 import Pelotero.Domain.Id (PlayerId)
 
@@ -215,29 +210,3 @@ duplicates = mapMaybe firstOfRepeat . group . sort
   where
     firstOfRepeat (x : _ : _) = Just x
     firstOfRepeat _           = Nothing
-
-instance ToJSON RosterLimits where
-  toJSON (RosterLimits m) = toJSON (Map.mapKeys renderRosterSlot m)
-
-instance FromJSON RosterLimits where
-  parseJSON v = do
-    raw    <- parseJSON v :: Aeson.Parser (Map.Map Text Int)
-    parsed <- Map.fromList <$> traverse parsePair (Map.toList raw)
-    pure (RosterLimits parsed)
-    where
-      parsePair (k, n) = case parseRosterSlot k of
-        Just slot -> pure (slot, n)
-        Nothing   -> fail ("RosterLimits: unknown slot key " <> T.unpack k)
-
-instance ToJSON LineupLimits where
-  toJSON (LineupLimits m) = toJSON (Map.mapKeys renderRosterSlot m)
-
-instance FromJSON LineupLimits where
-  parseJSON v = do
-    raw    <- parseJSON v :: Aeson.Parser (Map.Map Text Int)
-    parsed <- Map.fromList <$> traverse parsePair (Map.toList raw)
-    pure (LineupLimits parsed)
-    where
-      parsePair (k, n) = case parseRosterSlot k of
-        Just slot -> pure (slot, n)
-        Nothing   -> fail ("LineupLimits: unknown slot key " <> T.unpack k)

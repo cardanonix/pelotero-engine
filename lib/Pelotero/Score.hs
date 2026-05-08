@@ -207,7 +207,7 @@ scoreLeague lcid = do
           scoring  = lcScoring config
       gameIds  <- collectGameIds startDay endDay
       teams    <- LT.getForLeague lcid
-      (bm, pm) <- buildPlayerMaps gameIds
+      (bm, pm) <- buildPlayerMaps startDay endDay
       teamScores <- traverse (scoreOneTeam scoring bm pm gameIds) teams
       pure $ Just LeagueScore
         { lscLeague      = lcid
@@ -235,7 +235,7 @@ scoreTeam lcid ltid = do
           endDay   = utctDay (lcScoringEnd   config)
           scoring  = lcScoring config
       gameIds  <- collectGameIds startDay endDay
-      (bm, pm) <- buildPlayerMaps gameIds
+      (bm, pm) <- buildPlayerMaps startDay endDay
       Just <$> scoreOneTeam scoring bm pm gameIds team
     _ -> pure Nothing
 
@@ -246,27 +246,26 @@ collectGameIds startDay endDay = do
   games <- G.getGamesByDateRange startDay endDay
   pure (mapMaybe gameRowId games)
 
--- | Bucket batting and pitching rows for the given games into
--- per-player lists. One round-trip per game; aggregating into a
--- single date-range query is a separate optimization (C.2).
+-- | Bucket batting and pitching rows for the period into per-player
+-- lists. Two effect calls total: one date-range SELECT for batting
+-- joined against 'gameSchema' on 'game_date' (and the pitching mirror).
+-- Independent of period length, so an N-day backfill is two round
+-- trips, not @2N@. Pre-C.2 this was per-game. The downstream filter
+-- in 'scoreOnePlayerForGame' is unchanged: each row carries its own
+-- 'battingGameId' / 'pitchingGameId', so per-game scoring against the
+-- bucketed maps still works.
 buildPlayerMaps
   :: BoxscoreEntry :> es
-  => [DbGameId]
+  => Day -> Day
   -> Eff es ( Map.Map DbPlayerId [BattingRow]
             , Map.Map DbPlayerId [PitchingRow]
             )
-buildPlayerMaps gameIds = do
-  perGame <- traverse fetchGame gameIds
-  let bm = Map.fromListWith (++)
-             [(battingPlayerId  r, [r]) | (bs, _) <- perGame, r <- bs]
-      pm = Map.fromListWith (++)
-             [(pitchingPlayerId r, [r]) | (_, ps) <- perGame, r <- ps]
+buildPlayerMaps startDay endDay = do
+  bs <- Box.getBattingForDateRange  startDay endDay
+  ps <- Box.getPitchingForDateRange startDay endDay
+  let bm = Map.fromListWith (++) [(battingPlayerId  r, [r]) | r <- bs]
+      pm = Map.fromListWith (++) [(pitchingPlayerId r, [r]) | r <- ps]
   pure (bm, pm)
-  where
-    fetchGame gid = do
-      bs <- Box.getBattingForGame  gid
-      ps <- Box.getPitchingForGame gid
-      pure (bs, ps)
 
 scoreOneTeam
   :: LineupSnapshot :> es

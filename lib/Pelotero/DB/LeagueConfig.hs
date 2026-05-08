@@ -39,24 +39,25 @@ import           Rel8                       ( Column
                                             )
 import qualified Rel8                       as R
 
+import Pelotero.DB.JsonB
+                     ( JsonbLineupLimits (..)
+                     , JsonbRosterLimits (..)
+                     , JsonbScoring (..)
+                     )
 import Pelotero.DB.Pool       (DBError, Pool, runTransaction)
 import Pelotero.DB.Rel8Instances  ()
 import Pelotero.Domain.Id     (DbLeagueConfigId(..))
 import Pelotero.Domain.Roster (LineupLimits, RosterLimits)
 import Pelotero.Domain.Scoring (LeagueScoring)
 
--- ============================================================================
--- league_config
--- ============================================================================
-
 data LeagueConfig f = LeagueConfig
   { _lcId            :: Column f DbLeagueConfigId
   , _lcLeagueId      :: Column f Text
   , _lcCommissioner  :: Column f Text
   , _lcStatus        :: Column f Text
-  , _lcScoring       :: Column f LeagueScoring
-  , _lcRosterLimits  :: Column f RosterLimits
-  , _lcLineupLimits  :: Column f LineupLimits
+  , _lcScoring       :: Column f JsonbScoring
+  , _lcRosterLimits  :: Column f JsonbRosterLimits
+  , _lcLineupLimits  :: Column f JsonbLineupLimits
   , _lcDraftAuto     :: Column f Bool
   , _lcDraftStrategy :: Column f Text
   , _lcDraftAutoAt   :: Column f (Maybe UTCTime)
@@ -88,10 +89,6 @@ leagueConfigSchema = TableSchema
       }
   }
 
--- ============================================================================
--- Public row type (API compatibility with old hasql module)
--- ============================================================================
-
 data LeagueConfigRow = LeagueConfigRow
   { lcId            :: !(Maybe DbLeagueConfigId)
   , lcLeagueId      :: !Text
@@ -114,19 +111,15 @@ fromResult LeagueConfig{..} = LeagueConfigRow
   , lcLeagueId      = _lcLeagueId
   , lcCommissioner  = _lcCommissioner
   , lcStatus        = _lcStatus
-  , lcScoring       = _lcScoring
-  , lcRosterLimits  = _lcRosterLimits
-  , lcLineupLimits  = _lcLineupLimits
+  , lcScoring       = unJsonbScoring      _lcScoring
+  , lcRosterLimits  = unJsonbRosterLimits _lcRosterLimits
+  , lcLineupLimits  = unJsonbLineupLimits _lcLineupLimits
   , lcDraftAuto     = _lcDraftAuto
   , lcDraftStrategy = _lcDraftStrategy
   , lcDraftAutoAt   = _lcDraftAutoAt
   , lcScoringStart  = _lcScoringStart
   , lcScoringEnd    = _lcScoringEnd
   }
-
--- ============================================================================
--- Transaction-flavored CRUD
--- ============================================================================
 
 insertLeagueConfigT :: LeagueConfigRow -> Tx.Transaction DbLeagueConfigId
 insertLeagueConfigT row = Tx.statement () $ R.run1 $ R.insert R.Insert
@@ -137,9 +130,9 @@ insertLeagueConfigT row = Tx.statement () $ R.run1 $ R.insert R.Insert
           , _lcLeagueId      = R.lit (lcLeagueId row)
           , _lcCommissioner  = R.lit (lcCommissioner row)
           , _lcStatus        = R.lit (lcStatus row)
-          , _lcScoring       = R.lit (lcScoring row)
-          , _lcRosterLimits  = R.lit (lcRosterLimits row)
-          , _lcLineupLimits  = R.lit (lcLineupLimits row)
+          , _lcScoring       = R.lit (JsonbScoring      (lcScoring       row))
+          , _lcRosterLimits  = R.lit (JsonbRosterLimits (lcRosterLimits  row))
+          , _lcLineupLimits  = R.lit (JsonbLineupLimits (lcLineupLimits  row))
           , _lcDraftAuto     = R.lit (lcDraftAuto row)
           , _lcDraftStrategy = R.lit (lcDraftStrategy row)
           , _lcDraftAutoAt   = R.lit (lcDraftAutoAt row)
@@ -159,9 +152,9 @@ updateLeagueConfigT lcid row = Tx.statement () $ R.run_ $ R.update R.Update
       { _lcLeagueId      = R.lit (lcLeagueId row)
       , _lcCommissioner  = R.lit (lcCommissioner row)
       , _lcStatus        = R.lit (lcStatus row)
-      , _lcScoring       = R.lit (lcScoring row)
-      , _lcRosterLimits  = R.lit (lcRosterLimits row)
-      , _lcLineupLimits  = R.lit (lcLineupLimits row)
+      , _lcScoring       = R.lit (JsonbScoring      (lcScoring       row))
+      , _lcRosterLimits  = R.lit (JsonbRosterLimits (lcRosterLimits  row))
+      , _lcLineupLimits  = R.lit (JsonbLineupLimits (lcLineupLimits  row))
       , _lcDraftAuto     = R.lit (lcDraftAuto row)
       , _lcDraftStrategy = R.lit (lcDraftStrategy row)
       , _lcDraftAutoAt   = R.lit (lcDraftAutoAt row)
@@ -197,10 +190,6 @@ getAllT = do
   rows <- Tx.statement () $ R.run $ R.select $
     R.orderBy (_lcLeagueId >$< R.asc) (R.each leagueConfigSchema)
   pure (map fromResult rows)
-
--- ============================================================================
--- Pool-flavored CRUD
--- ============================================================================
 
 insertLeagueConfig :: Pool -> LeagueConfigRow -> IO (Either DBError DbLeagueConfigId)
 insertLeagueConfig pool row = runTransaction pool (insertLeagueConfigT row)
