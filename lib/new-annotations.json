@@ -946,7 +946,7 @@
             "Adding a fourth provider-keyed table is one TableSchema literal plus one ProviderKeyed instance; no new entity record needed.",
             "Cost: one Rel8able instance with a (DBType i, DBEq i) constraint, plus standalone-deriving ergonomics. Acceptable for the consolidation."
           ],
-          "affects": ["ExternalIdE"]
+          "affects": []
         },
         {
           "name": "TypeclassOverRecordOfFunctions",
@@ -956,7 +956,7 @@
             "Type applications (linkExternalIdT @PlayerRow) at the few sites where row is otherwise ambiguous from the value-level args; explicit and greppable.",
             "A Proxy-based or record-of-functions variant would push that disambiguation to value-level boilerplate at every call site."
           ],
-          "affects": ["ProviderKeyed"]
+          "affects": []
         },
         {
           "name": "InsertAndUpdateAreInstanceMethods",
@@ -966,7 +966,7 @@
             "Each instance's insertRowT and updateRowByIdT are literally one-liners that point at the existing per-table insertXxxT and updateXxxT functions, so no real boilerplate is added.",
             "If a fourth provider-keyed table arrives, this design extends cleanly: write the per-table insert/update, declare the instance."
           ],
-          "affects": ["ProviderKeyed.insertRowT", "ProviderKeyed.updateRowByIdT"]
+          "affects": []
         },
         {
           "name": "FacadesPreserveCallSites",
@@ -1185,7 +1185,7 @@
           "why": [
             "A player can have ids from multiple providers without schema gymnastics on the player table.",
             "If a player gets re-identified, the player row stays put; only the external_id rows update.",
-            "Cost: every upsert is two operations; the boilerplate currently lives per-table here, in Pelotero.DB.Team, and in Pelotero.DB.Game (planned A.5 collapses this into a typeclass)."
+            "Cost: every upsert is two operations. Phase A.5 collapsed the link / lookup / getExternalId / upsert boilerplate into Pelotero.DB.ProviderKeyed; this module retains the per-table schema, row, and entity-specific reads, plus a one-line ProviderKeyed instance and four facades around the polymorphic helpers."
           ],
           "affects": []
         },
@@ -1260,7 +1260,7 @@
           "name": "MirrorsPlayerSchema",
           "what": "team and team_external_id mirror the shape of player and player_external_id",
           "why": [
-            "Same provider-keyed pattern as Player. The duplication between this module and Pelotero.DB.Player is the structural cost of separate FK companion tables; planned A.5 work collapses the duplicate boilerplate into a typeclass."
+            "Same provider-keyed pattern as Player. Phase A.5 collapsed the four external-id helpers (link / lookup / getExternalId / upsert, plus their Pool wrappers) into Pelotero.DB.ProviderKeyed; this module retains the per-table schema, row, and reads, plus a one-line ProviderKeyed instance and facades."
           ],
           "affects": []
         }
@@ -1308,7 +1308,7 @@
           "name": "MirrorsTeamSchema",
           "what": "game and game_external_id mirror the shape of team and team_external_id",
           "why": [
-            "Same provider-keyed pattern as Player and Team. Planned A.5 work collapses the duplicate boilerplate."
+            "Same provider-keyed pattern as Player and Team. Phase A.5 collapsed the external-id boilerplate into Pelotero.DB.ProviderKeyed; this module is now a per-table schema + row + entity-specific reads (getByDateT, getByDateRangeT) plus a one-line ProviderKeyed instance and four facades."
           ],
           "affects": []
         }

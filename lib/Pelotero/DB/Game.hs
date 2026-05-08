@@ -3,14 +3,20 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Pelotero.DB.Game
-  ( GameRow(..)
+  ( Game (..)
+  , gameSchema
+  , gameExternalIdSchema
+  , GameRow (..)
   , insertGameT
   , updateGameT
   , getByIdT
@@ -31,33 +37,23 @@ module Pelotero.DB.Game
   , upsertByExternalId
   ) where
 
-import           Data.Functor.Contravariant ((>$<))
-import           Data.Text                  (Text)
-import           Data.Time                  (Day, UTCTime)
-import           GHC.Generics               (Generic)
+import Data.Functor.Contravariant ((>$<))
+import Data.Text (Text)
+import Data.Time (Day, UTCTime)
+import GHC.Generics (Generic)
+import qualified Hasql.Transaction as Tx
+import Rel8 hiding (fromResult)
 
-import qualified Hasql.Transaction          as Tx
-
-import           Rel8                       ( Column
-                                            , Name
-                                            , Rel8able
-                                            , Result
-                                            , TableSchema(..)
-                                            , (==.)
-                                            , (<=.)
-                                            , (>=.)
-                                            , (&&.)
-                                            )
-import qualified Rel8                       as R
-
-import Pelotero.DB.Pool      (DBError, Pool, runTransaction)
-import Pelotero.DB.Provider  (ProviderName)
+import Pelotero.DB.Pool (DBError, Pool, runTransaction)
+import qualified Pelotero.DB.ProviderKeyed as PK
+import Pelotero.DB.ProviderKeyed (ExternalIdE (..), ProviderKeyed (..))
+import Pelotero.DB.Provider (ProviderName)
 import Pelotero.DB.Rel8Instances ()
-import Pelotero.Domain.Id    (DbGameId(..), DbTeamId(..))
+import Pelotero.Domain.Id (DbGameId, DbTeamId)
 
--- ============================================================================
--- game
--- ============================================================================
+-- ---------------------------------------------------------------------
+-- Rel8 entity
+-- ---------------------------------------------------------------------
 
 data Game f = Game
   { _gameId                 :: Column f DbGameId
@@ -70,8 +66,23 @@ data Game f = Game
   deriving stock    (Generic)
   deriving anyclass (Rel8able)
 
-deriving stock instance f ~ Result => Show (Game f)
-deriving stock instance f ~ Result => Eq   (Game f)
+-- ---------------------------------------------------------------------
+-- Public row type
+-- ---------------------------------------------------------------------
+
+data GameRow = GameRow
+  { gameRowId                 :: !(Maybe DbGameId)
+  , gameRowGameDate           :: !Day
+  , gameRowAwayTeamId         :: !DbTeamId
+  , gameRowHomeTeamId         :: !DbTeamId
+  , gameRowLastSyncedProvider :: !(Maybe ProviderName)
+  , gameRowLastSyncedAt       :: !(Maybe UTCTime)
+  }
+  deriving stock (Show, Eq)
+
+-- ---------------------------------------------------------------------
+-- Schemas
+-- ---------------------------------------------------------------------
 
 gameSchema :: TableSchema (Game Name)
 gameSchema = TableSchema
@@ -86,43 +97,20 @@ gameSchema = TableSchema
       }
   }
 
--- ============================================================================
--- game_external_id
--- ============================================================================
-
-data GameExternalId f = GameExternalId
-  { _geidGameId     :: Column f DbGameId
-  , _geidProvider   :: Column f ProviderName
-  , _geidExternalId :: Column f Text
-  , _geidFetchedAt  :: Column f UTCTime
-  }
-  deriving stock    (Generic)
-  deriving anyclass (Rel8able)
-
-gameExternalIdSchema :: TableSchema (GameExternalId Name)
+gameExternalIdSchema :: TableSchema (ExternalIdE DbGameId Name)
 gameExternalIdSchema = TableSchema
   { name    = "game_external_id"
-  , columns = GameExternalId
-      { _geidGameId     = "game_id"
-      , _geidProvider   = "provider"
-      , _geidExternalId = "external_id"
-      , _geidFetchedAt  = "fetched_at"
+  , columns = ExternalIdE
+      { _eidEntityId   = "game_id"
+      , _eidProvider   = "provider"
+      , _eidExternalId = "external_id"
+      , _eidFetchedAt  = "fetched_at"
       }
   }
 
--- ============================================================================
--- Public row type (API compatibility with old hasql module)
--- ============================================================================
-
-data GameRow = GameRow
-  { gameRowId                 :: !(Maybe DbGameId)
-  , gameRowGameDate           :: !Day
-  , gameRowAwayTeamId         :: !DbTeamId
-  , gameRowHomeTeamId         :: !DbTeamId
-  , gameRowLastSyncedProvider :: !(Maybe ProviderName)
-  , gameRowLastSyncedAt       :: !(Maybe UTCTime)
-  }
-  deriving stock (Show, Eq)
+-- ---------------------------------------------------------------------
+-- Result <-> public row
+-- ---------------------------------------------------------------------
 
 fromResult :: Game Result -> GameRow
 fromResult Game{..} = GameRow
@@ -134,47 +122,50 @@ fromResult Game{..} = GameRow
   , gameRowLastSyncedAt       = _gameLastSyncedAt
   }
 
--- ============================================================================
--- Transaction-flavored CRUD
--- ============================================================================
+gameRowToExpr :: GameRow -> Game Expr
+gameRowToExpr GameRow{..} = Game
+  { _gameId                 = case gameRowId of
+                                Nothing  -> unsafeDefault
+                                Just gid -> lit gid
+  , _gameGameDate           = lit gameRowGameDate
+  , _gameAwayTeamId         = lit gameRowAwayTeamId
+  , _gameHomeTeamId         = lit gameRowHomeTeamId
+  , _gameLastSyncedProvider = lit gameRowLastSyncedProvider
+  , _gameLastSyncedAt       = lit gameRowLastSyncedAt
+  }
+
+-- ---------------------------------------------------------------------
+-- Insert / Update
+-- ---------------------------------------------------------------------
 
 insertGameT :: GameRow -> Tx.Transaction DbGameId
-insertGameT row = Tx.statement () $ R.run1 $ R.insert R.Insert
-  { R.into       = gameSchema
-  , R.rows       = R.values
-      [ Game
-          { _gameId                 = R.unsafeDefault
-          , _gameGameDate           = R.lit (gameRowGameDate row)
-          , _gameAwayTeamId         = R.lit (gameRowAwayTeamId row)
-          , _gameHomeTeamId         = R.lit (gameRowHomeTeamId row)
-          , _gameLastSyncedProvider = R.lit (gameRowLastSyncedProvider row)
-          , _gameLastSyncedAt       = R.lit (gameRowLastSyncedAt row)
-          }
-      ]
-  , R.onConflict = R.Abort
-  , R.returning  = R.Returning _gameId
-  }
+insertGameT row =
+  Tx.statement () $ run1 $ insert Insert
+    { into       = gameSchema
+    , rows       = values [gameRowToExpr row]
+    , onConflict = Abort
+    , returning  = Returning _gameId
+    }
 
 updateGameT :: DbGameId -> GameRow -> Tx.Transaction ()
-updateGameT gid row = Tx.statement () $ R.run_ $ R.update R.Update
-  { R.target      = gameSchema
-  , R.from        = pure ()
-  , R.set         = \_ g -> g
-      { _gameGameDate           = R.lit (gameRowGameDate row)
-      , _gameAwayTeamId         = R.lit (gameRowAwayTeamId row)
-      , _gameHomeTeamId         = R.lit (gameRowHomeTeamId row)
-      , _gameLastSyncedProvider = R.lit (gameRowLastSyncedProvider row)
-      , _gameLastSyncedAt       = R.lit (gameRowLastSyncedAt row)
-      }
-  , R.updateWhere = \_ g -> _gameId g ==. R.lit gid
-  , R.returning   = R.NoReturning
-  }
+updateGameT gid row =
+  Tx.statement () $ run_ $ update Update
+    { target      = gameSchema
+    , from        = pure ()
+    , set         = \_ _ -> (gameRowToExpr row) { _gameId = lit gid }
+    , updateWhere = \_ g -> _gameId g ==. lit gid
+    , returning   = NoReturning
+    }
+
+-- ---------------------------------------------------------------------
+-- Reads
+-- ---------------------------------------------------------------------
 
 getByIdT :: DbGameId -> Tx.Transaction (Maybe GameRow)
 getByIdT gid = do
-  rows <- Tx.statement () $ R.run $ R.select $ do
-    g <- R.each gameSchema
-    R.where_ (_gameId g ==. R.lit gid)
+  rows <- Tx.statement () $ run $ select $ do
+    g <- each gameSchema
+    where_ $ _gameId g ==. lit gid
     pure g
   pure $ case rows of
     (g : _) -> Just (fromResult g)
@@ -182,10 +173,10 @@ getByIdT gid = do
 
 getByDateT :: Day -> Tx.Transaction [GameRow]
 getByDateT d = do
-  rows <- Tx.statement () $ R.run $ R.select $
-    R.orderBy (_gameId >$< R.asc) $ do
-      g <- R.each gameSchema
-      R.where_ (_gameGameDate g ==. R.lit d)
+  rows <- Tx.statement () $ run $ select $
+    orderBy (_gameId >$< asc) $ do
+      g <- each gameSchema
+      where_ $ _gameGameDate g ==. lit d
       pure g
   pure (map fromResult rows)
 
@@ -193,69 +184,49 @@ getByDateT d = do
 -- iterating 'getByDateT' day-by-day.
 getByDateRangeT :: Day -> Day -> Tx.Transaction [GameRow]
 getByDateRangeT startDay endDay = do
-  rows <- Tx.statement () $ R.run $ R.select $
-    R.orderBy ((_gameGameDate >$< R.asc) <> (_gameId >$< R.asc)) $ do
-      g <- R.each gameSchema
-      R.where_
-        ( _gameGameDate g >=. R.lit startDay
-       &&. _gameGameDate g <=. R.lit endDay
+  rows <- Tx.statement () $ run $ select $
+    orderBy ((_gameGameDate >$< asc) <> (_gameId >$< asc)) $ do
+      g <- each gameSchema
+      where_
+        ( _gameGameDate g >=. lit startDay
+       &&. _gameGameDate g <=. lit endDay
         )
       pure g
   pure (map fromResult rows)
 
+-- ---------------------------------------------------------------------
+-- ProviderKeyed instance
+-- ---------------------------------------------------------------------
+
+instance ProviderKeyed GameRow where
+  type RowEntity GameRow = Game
+  type RowId     GameRow = DbGameId
+
+  rowSchema        = gameSchema
+  externalIdSchema = gameExternalIdSchema
+  rowIdColumn      = _gameId
+  insertRowT       = insertGameT
+  updateRowByIdT   = updateGameT
+
+-- ---------------------------------------------------------------------
+-- External-id facades
+-- ---------------------------------------------------------------------
+
 linkExternalIdT :: DbGameId -> ProviderName -> Text -> Tx.Transaction ()
-linkExternalIdT gid provider extId = Tx.statement () $ R.run_ $ R.insert R.Insert
-  { R.into       = gameExternalIdSchema
-  , R.rows       = R.values
-      [ GameExternalId
-          { _geidGameId     = R.lit gid
-          , _geidProvider   = R.lit provider
-          , _geidExternalId = R.lit extId
-          , _geidFetchedAt  = R.unsafeDefault
-          }
-      ]
-  , R.onConflict = R.DoNothing
-  , R.returning  = R.NoReturning
-  }
+linkExternalIdT = PK.linkExternalIdT @GameRow
 
 lookupByExternalIdT :: ProviderName -> Text -> Tx.Transaction (Maybe DbGameId)
-lookupByExternalIdT provider extId = do
-  rows <- Tx.statement () $ R.run $ R.select $ do
-    e <- R.each gameExternalIdSchema
-    R.where_ (_geidProvider   e ==. R.lit provider)
-    R.where_ (_geidExternalId e ==. R.lit extId)
-    pure (_geidGameId e)
-  pure $ case rows of
-    (gid : _) -> Just gid
-    []        -> Nothing
+lookupByExternalIdT = PK.lookupByExternalIdT @GameRow
 
 getExternalIdT :: DbGameId -> ProviderName -> Tx.Transaction (Maybe Text)
-getExternalIdT gid provider = do
-  rows <- Tx.statement () $ R.run $ R.select $ do
-    e <- R.each gameExternalIdSchema
-    R.where_ (_geidGameId   e ==. R.lit gid)
-    R.where_ (_geidProvider e ==. R.lit provider)
-    pure (_geidExternalId e)
-  pure $ case rows of
-    (extId : _) -> Just extId
-    []          -> Nothing
+getExternalIdT = PK.getExternalIdT @GameRow
 
-upsertByExternalIdT
-  :: ProviderName -> Text -> GameRow -> Tx.Transaction DbGameId
-upsertByExternalIdT provider extId row = do
-  found <- lookupByExternalIdT provider extId
-  case found of
-    Just gid -> do
-      updateGameT gid row
-      pure gid
-    Nothing -> do
-      gid <- insertGameT row
-      linkExternalIdT gid provider extId
-      pure gid
+upsertByExternalIdT :: ProviderName -> Text -> GameRow -> Tx.Transaction DbGameId
+upsertByExternalIdT = PK.upsertByExternalIdT @GameRow
 
--- ============================================================================
--- Pool-flavored CRUD
--- ============================================================================
+-- ---------------------------------------------------------------------
+-- Pool-flavored wrappers
+-- ---------------------------------------------------------------------
 
 insertGame :: Pool -> GameRow -> IO (Either DBError DbGameId)
 insertGame pool row = runTransaction pool (insertGameT row)
@@ -273,18 +244,13 @@ getByDateRange :: Pool -> Day -> Day -> IO (Either DBError [GameRow])
 getByDateRange pool s e = runTransaction pool (getByDateRangeT s e)
 
 linkExternalId :: Pool -> DbGameId -> ProviderName -> Text -> IO (Either DBError ())
-linkExternalId pool gid provider extId =
-  runTransaction pool (linkExternalIdT gid provider extId)
+linkExternalId = PK.linkExternalId @GameRow
 
 lookupByExternalId :: Pool -> ProviderName -> Text -> IO (Either DBError (Maybe DbGameId))
-lookupByExternalId pool provider extId =
-  runTransaction pool (lookupByExternalIdT provider extId)
+lookupByExternalId = PK.lookupByExternalId @GameRow
 
 getExternalId :: Pool -> DbGameId -> ProviderName -> IO (Either DBError (Maybe Text))
-getExternalId pool gid provider =
-  runTransaction pool (getExternalIdT gid provider)
+getExternalId = PK.getExternalId @GameRow
 
-upsertByExternalId
-  :: Pool -> ProviderName -> Text -> GameRow -> IO (Either DBError DbGameId)
-upsertByExternalId pool provider extId row =
-  runTransaction pool (upsertByExternalIdT provider extId row)
+upsertByExternalId :: Pool -> ProviderName -> Text -> GameRow -> IO (Either DBError DbGameId)
+upsertByExternalId = PK.upsertByExternalId @GameRow
