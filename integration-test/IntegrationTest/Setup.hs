@@ -1,19 +1,7 @@
--- | Shared setup for integration tests.
---
--- Two isolation strategies live here:
---
---   * 'runRolledBack' — for tests that talk to repos directly via
---     'Tx.Transaction'. Wraps the work in a single transaction that is
---     unconditionally rolled back via 'Tx.condemn'. Nothing commits.
---
---   * 'cleanDatabase' — for tests that commit (because they go through
---     the effect interpreters, which run each operation as its own
---     transaction). Truncates the tables those tests touch so each run
---     starts from a known state. Tests must call this before doing
---     anything else.
 module IntegrationTest.Setup
   ( withTestPool
   , runRolledBack
+  , runEffectsOrFail
   , cleanDatabase
   ) where
 
@@ -24,7 +12,7 @@ import qualified Hasql.Decoders    as Decoders
 import qualified Hasql.Encoders    as Encoders
 import qualified Hasql.Transaction as Tx
 
-import           Pelotero.DB.Pool (Pool)
+import           Pelotero.DB.Pool (DBError, Pool)
 import qualified Pelotero.DB.Pool as DBPool
 
 withTestPool :: (Pool -> IO a) -> IO a
@@ -42,13 +30,17 @@ runRolledBack pool tx = do
     Right a  -> pure a
     Left err -> throwIO (userError ("DB error in test: " <> show err))
 
--- | Truncate every table that effect-using tests might touch, so each
--- run starts from a known empty state. Identity sequences reset so DB
--- ids are stable across runs (mostly cosmetic; tests look up by
--- external id, not sequence-allocated id).
---
--- CASCADE is required because most of these tables have FK references
--- to each other.
+-- | For tests that go through the effect stack: takes the result of
+-- a fully-discharged @runEff . runErrorNoCallStack @DBError . ...@
+-- chain and turns 'Left' into a thrown exception. Tests then assert
+-- against the bare success value.
+runEffectsOrFail :: IO (Either DBError a) -> IO a
+runEffectsOrFail io = do
+  r <- io
+  case r of
+    Right a  -> pure a
+    Left err -> throwIO (userError ("DB error in test: " <> show err))
+
 cleanDatabase :: Pool -> IO ()
 cleanDatabase pool = do
   r <- DBPool.runSession pool $ Session.statement () truncateStmt

@@ -30,6 +30,12 @@ import           Pelotero.Provider.ExternalId
                      ( externalIdFromPlayerId
                      , externalIdFromTeamId
                      )
+import qualified Pelotero.MLB.Convert      as Convert
+import           Pelotero.Effects.Logging  (Logging, Severity (..), logFM)
+
+logConvertWarnings :: Logging :> es => [Convert.ConvertWarning] -> Eff es ()
+logConvertWarnings = mapM_ (logFM WarningS . Convert.renderWarning)
+
 
 -- | Result of a single sync run.
 --

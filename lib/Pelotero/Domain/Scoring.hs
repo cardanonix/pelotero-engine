@@ -28,7 +28,6 @@ import Data.Maybe (fromMaybe)
 import Pelotero.Domain.Stats
   ( BattingStats(..)
   , PitchingStats(..)
-  , parseInningsPitched
   )
 import Data.Aeson (FromJSON(..), ToJSON(..), object, withObject, (.:), (.=))
 
@@ -147,29 +146,24 @@ scoreBatting m s = sumPoints
 -- Quality start is the only derived stat: 6.0+ IP and 3 or fewer earned runs.
 scorePitching :: PitchingMultipliers -> PitchingStats -> Points
 scorePitching m s = sumPoints
-  [ scalePoints (pmWin m)           (rationalPts (zeroIfNothing pitWins))
-  , scalePoints (pmSave m)          (rationalPts (zeroIfNothing pitSaves))
-  , scalePoints (pmQualityStart m)  (rationalPts qualityStarts)
-  , Points (pmInningPitched m * inningsRational)
-  , scalePoints (pmStrikeOut m)     (rationalPts (zeroIfNothing pitStrikeOuts))
-  , scalePoints (pmCompleteGame m)  (rationalPts (zeroIfNothing pitCompleteGames))
-  , scalePoints (pmShutout m)       (rationalPts (zeroIfNothing pitShutouts))
-  , scalePoints (pmBaseOnBalls m)   (rationalPts (zeroIfNothing pitBaseOnBalls))
-  , scalePoints (pmHitsAllowed m)   (rationalPts (zeroIfNothing pitHits))
-  , scalePoints (pmEarnedRun m)     (rationalPts (zeroIfNothing pitEarnedRuns))
-  , scalePoints (pmHitBatsman m)    (rationalPts (zeroIfNothing pitHitBatsmen))
-  , scalePoints (pmLoss m)          (rationalPts (zeroIfNothing pitLosses))
+  [ scalePoints (pmWin m)          (rationalPts (i (pitWins s)))
+  , scalePoints (pmSave m)         (rationalPts (i (pitSaves s)))
+  , scalePoints (pmQualityStart m) (rationalPts qs)
+  , Points (pmInningPitched m * toRational outs / 3)
+  , scalePoints (pmStrikeOut m)    (rationalPts (i (pitStrikeOuts s)))
+  , scalePoints (pmCompleteGame m) (rationalPts (i (pitCompleteGames s)))
+  , scalePoints (pmShutout m)      (rationalPts (i (pitShutouts s)))
+  , scalePoints (pmBaseOnBalls m)  (rationalPts (i (pitBaseOnBalls s)))
+  , scalePoints (pmHitsAllowed m)  (rationalPts (i (pitHits s)))
+  , scalePoints (pmEarnedRun m)    (rationalPts (i (pitEarnedRuns s)))
+  , scalePoints (pmHitBatsman m)   (rationalPts (i (pitHitBatsmen s)))
+  , scalePoints (pmLoss m)         (rationalPts (i (pitLosses s)))
   ]
   where
-    outs            = fromMaybe 0 (parseInningsPitched =<< pitInningsPitched s)
-    inningsRational = toRational outs / 3
-
-    qualityStarts
-      | outs >= 18 && zeroIfNothing pitEarnedRuns <= 3 = 1
-      | otherwise                                      = 0
-
-    zeroIfNothing :: (PitchingStats -> Maybe Int) -> Int
-    zeroIfNothing f = fromMaybe 0 (f s)
+    i    = maybe 0 id
+    outs = i (pitOuts s)
+    er   = i (pitEarnedRuns s)
+    qs   = if outs >= 18 && er <= 3 then 1 else 0
 
 rationalPts :: Int -> Points
 rationalPts = Points . toRational

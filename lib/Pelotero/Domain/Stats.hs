@@ -1,22 +1,18 @@
--- | Per-game player statistics. 'Maybe Int' fields distinguish "stat absent"
--- (e.g. a pitcher's batting line on a day they didn't bat) from "stat present
--- and zero" (a hitter who went 0-for-3).
+{-# LANGUAGE OverloadedStrings #-}
+
 module Pelotero.Domain.Stats
-  ( BattingStats(..)
-  , PitchingStats(..)
+  ( BattingStats (..)
+  , PitchingStats (..)
   , emptyBatting
   , emptyPitching
-    -- * Innings pitched
   , parseInningsPitched
   , renderInningsPitched
   ) where
 
-import Data.Text (Text)
-import qualified Data.Text as T
-import qualified Data.Text.Read as TR
+import           Data.Text       (Text)
+import qualified Data.Text       as T
+import qualified Data.Text.Read  as TR
 
--- | Per-game batting line. Fields are 'Maybe' to preserve "did this player
--- bat at all?" information from the upstream feed.
 data BattingStats = BattingStats
   { batGamesPlayed          :: Maybe Int
   , batPlateAppearances     :: Maybe Int
@@ -46,40 +42,10 @@ data BattingStats = BattingStats
   }
   deriving stock (Show, Eq)
 
--- | A batting line with every field absent. Useful as a parser default.
-emptyBatting :: BattingStats
-emptyBatting = BattingStats
-  { batGamesPlayed          = Nothing
-  , batPlateAppearances     = Nothing
-  , batAtBats               = Nothing
-  , batRuns                 = Nothing
-  , batHits                 = Nothing
-  , batDoubles              = Nothing
-  , batTriples              = Nothing
-  , batHomeRuns             = Nothing
-  , batRbi                  = Nothing
-  , batBaseOnBalls          = Nothing
-  , batIntentionalWalks     = Nothing
-  , batStrikeOuts           = Nothing
-  , batStolenBases          = Nothing
-  , batCaughtStealing       = Nothing
-  , batHitByPitch           = Nothing
-  , batSacBunts             = Nothing
-  , batSacFlies             = Nothing
-  , batGroundIntoDoublePlay = Nothing
-  , batGroundIntoTriplePlay = Nothing
-  , batLeftOnBase           = Nothing
-  , batTotalBases           = Nothing
-  , batFlyOuts              = Nothing
-  , batGroundOuts           = Nothing
-  , batCatchersInterference = Nothing
-  , batPickoffs             = Nothing
-  }
-
--- | Per-game pitching line. 'pitInningsPitched' is text because MLB reports
--- it as a fractional string (\"6.2\" = six and two-thirds innings) which is
--- *not* a decimal — converting blindly to Double silently corrupts data.
--- Use 'parseInningsPitched' to obtain an exact out-count.
+-- | Per-pitcher per-game stats. 'pitOuts' is the canonical source of
+-- truth for innings pitched; the wire-format Text representation is
+-- parsed and discarded at convert time. Phase B.1 dropped the prior
+-- 'pitInningsPitched :: Maybe Text' redundancy.
 data PitchingStats = PitchingStats
   { pitGamesPlayed             :: Maybe Int
   , pitGamesStarted            :: Maybe Int
@@ -92,7 +58,6 @@ data PitchingStats = PitchingStats
   , pitSaveOpportunities       :: Maybe Int
   , pitHolds                   :: Maybe Int
   , pitBlownSaves              :: Maybe Int
-  , pitInningsPitched          :: Maybe Text  -- e.g. "6.2"
   , pitOuts                    :: Maybe Int
   , pitBattersFaced            :: Maybe Int
   , pitNumberOfPitches         :: Maybe Int
@@ -127,6 +92,35 @@ data PitchingStats = PitchingStats
   }
   deriving stock (Show, Eq)
 
+emptyBatting :: BattingStats
+emptyBatting = BattingStats
+  { batGamesPlayed          = Nothing
+  , batPlateAppearances     = Nothing
+  , batAtBats               = Nothing
+  , batRuns                 = Nothing
+  , batHits                 = Nothing
+  , batDoubles              = Nothing
+  , batTriples              = Nothing
+  , batHomeRuns             = Nothing
+  , batRbi                  = Nothing
+  , batBaseOnBalls          = Nothing
+  , batIntentionalWalks     = Nothing
+  , batStrikeOuts           = Nothing
+  , batStolenBases          = Nothing
+  , batCaughtStealing       = Nothing
+  , batHitByPitch           = Nothing
+  , batSacBunts             = Nothing
+  , batSacFlies             = Nothing
+  , batGroundIntoDoublePlay = Nothing
+  , batGroundIntoTriplePlay = Nothing
+  , batLeftOnBase           = Nothing
+  , batTotalBases           = Nothing
+  , batFlyOuts              = Nothing
+  , batGroundOuts           = Nothing
+  , batCatchersInterference = Nothing
+  , batPickoffs             = Nothing
+  }
+
 emptyPitching :: PitchingStats
 emptyPitching = PitchingStats
   { pitGamesPlayed             = Nothing
@@ -140,7 +134,6 @@ emptyPitching = PitchingStats
   , pitSaveOpportunities       = Nothing
   , pitHolds                   = Nothing
   , pitBlownSaves              = Nothing
-  , pitInningsPitched          = Nothing
   , pitOuts                    = Nothing
   , pitBattersFaced            = Nothing
   , pitNumberOfPitches         = Nothing
@@ -174,36 +167,31 @@ emptyPitching = PitchingStats
   , pitPassedBall              = Nothing
   }
 
---------------------------------------------------------------------------------
--- Innings pitched
-
--- | Parse MLB's "innings pitched" string format. The number after the dot is
--- /outs/, not a decimal: \"6.2\" means 6 innings + 2 outs = 20 outs total.
--- Reading it as 'Double' (as the legacy code did) is a real bug — 6.2 as a
--- 'Double' is 6.2, but 6.2 IP as outs is 20\/3 ≈ 6.667.
---
--- The result is in /outs/ rather than innings so that arithmetic on totals
--- stays exact. Use 'renderInningsPitched' to go the other way for display.
+-- | Parse the MLB wire IP convention into outs.
+-- "6.2" -> 20 (six innings + two outs), "6" -> 18, "6.0" -> 18.
+-- The fractional component must be 0, 1, or 2; anything else fails.
 parseInningsPitched :: Text -> Maybe Int
-parseInningsPitched raw =
-  let t = T.strip raw
-  in case T.splitOn "." t of
-       [whole]       -> (* 3) <$> readNonNeg whole
-       [whole, frac] -> do
-         inns <- readNonNeg whole
-         outs <- readNonNeg frac
-         if outs > 2 then Nothing else Just (inns * 3 + outs)
-       _ -> Nothing
+parseInningsPitched t = case T.splitOn "." t of
+  [whole]       -> outsFrom whole 0
+  [whole, frac] -> do
+    f <- parseNonNegInt frac
+    if f <= 2 then outsFrom whole f else Nothing
+  _ -> Nothing
   where
-    readNonNeg s = case TR.decimal s of
-      Right (n :: Int, rest) | T.null rest, n >= 0 -> Just n
-      _                                            -> Nothing
+    outsFrom whole f = do
+      w <- parseNonNegInt whole
+      Just (w * 3 + f)
 
--- | Render an out-count back to MLB IP notation (\"6.2\" for 20 outs).
--- Negative inputs render as @"0.0"@ rather than producing garbage.
+parseNonNegInt :: Text -> Maybe Int
+parseNonNegInt s = case TR.decimal s of
+  Right (n, rest) | T.null rest && n >= 0 -> Just n
+  _                                       -> Nothing
+
+-- | Inverse of 'parseInningsPitched' for human display. 20 -> "6.2".
+-- Negative input rounds up to "0.0".
 renderInningsPitched :: Int -> Text
-renderInningsPitched outs
-  | outs < 0  = "0.0"
-  | otherwise =
-      let (i, r) = outs `divMod` 3
-      in T.pack (show i) <> "." <> T.pack (show r)
+renderInningsPitched n
+  | n < 0     = "0.0"
+  | otherwise = T.pack (show innings) <> "." <> T.pack (show outs)
+  where
+    (innings, outs) = n `divMod` 3

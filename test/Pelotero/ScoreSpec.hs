@@ -35,7 +35,7 @@ import           Pelotero.Score
 
 spec :: Spec
 spec = do
-  describe "Domain.Stats innings round-trip (covered here because Score depends on it)" $
+  describe "Domain.Stats innings round-trip" $
     it "parseInningsPitched . renderInningsPitched == id for outs >= 0" $
       hedgehog $ do
         outs <- forAll (Gen.int (Range.linear 0 999))
@@ -47,13 +47,12 @@ spec = do
       rowToBattingStats (statsToBattingRow s) === s
 
   describe "rowToPitchingStats" $
-    it "preserves outs and synthesizes a parseable IP text" $ hedgehog $ do
+    it "preserves outs straight from the row" $ hedgehog $ do
       outs <- forAll (Gen.int (Range.linear 0 60))
       let row = zeroPitchingRow
             { pitchingInningsPitchedOuts = Just (fromIntegral outs) }
           got = rowToPitchingStats row
-      pitOuts got                                     === Just outs
-      (parseInningsPitched =<< pitInningsPitched got) === Just outs
+      pitOuts got === Just outs
 
   describe "sumBattingPoints" $ do
     it "is zero for an empty list" $
@@ -101,8 +100,7 @@ spec = do
             res = scorePlayerPure standardScoring [row] [] (DbPlayerId 1)
         psBattingPoints res === scoreBatting (lsBatting standardScoring) s
 
-    it "credits a quality start through a PitchingRow: 6.0 IP, 3 ER" $ do
-      -- 18 outs * pmInningPitched (3) + pmQualityStart (4) - 3 ER = 19
+    it "credits a quality start through a PitchingRow: 18 outs, 3 ER" $ do
       let row = zeroPitchingRow
             { pitchingInningsPitchedOuts = Just 18
             , pitchingEarnedRuns         = Just 3
@@ -111,8 +109,6 @@ spec = do
       psPitchingPoints res `shouldBe` Points 19
       psTotalPoints    res `shouldBe` Points 19
 
---------------------------------------------------------------------------------
--- Fixtures (mirrors Pelotero.Domain.ScoringSpec)
 
 standardScoring :: LeagueScoring
 standardScoring = LeagueScoring
@@ -151,8 +147,6 @@ standardPitching = PitchingMultipliers
   , pmLoss          = -3
   }
 
---------------------------------------------------------------------------------
--- Generators and helpers
 
 genBattingLine :: Gen BattingStats
 genBattingLine = do

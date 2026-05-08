@@ -1,48 +1,66 @@
-{-# LANGUAGE TypeFamilies      #-}
-{-# LANGUAGE DataKinds         #-}
-{-# LANGUAGE TypeOperators     #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE GADTs             #-}
-{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 
--- | Database effect.
+-- |
+-- Module      : Pelotero.Effects.Database
+-- Description : Database transaction effect.
 --
--- One operation: 'runTx', which runs a 'Tx.Transaction' against the
--- database. Each call is one independent transaction acquired from the
--- pool: writes commit on success, roll back on error or thrown exception.
--- This matches the semantics of 'Pelotero.DB.Pool.runTransaction' exactly.
+-- Each 'runTx' is its own atomic unit. Composing two 'runTx' calls
+-- is /not/ one transaction; for multi-step atomicity build a single
+-- 'Tx.Transaction' and pass it to one 'runTx'.
+--
+-- 'runDatabasePool' threads 'DBError' through the typed 'Error'
+-- channel and logs the failure at 'ErrorS' before re-raising via
+-- 'throwError', so a caller that discards the 'Left' still leaves a
+-- record in the log stream.
 module Pelotero.Effects.Database
-  ( Database(..)
+  ( Database
   , runTx
   , runDatabasePool
   ) where
 
-import qualified Hasql.Transaction as Tx
-
-import           Effectful (Effect, IOE, Dispatch(Dynamic), DispatchOf)
-import qualified Effectful as E
-import           Effectful.Dispatch.Dynamic (interpret_, send)
-
-import           Pelotero.DB.Pool (Pool, DBError(..))
-import qualified Pelotero.DB.Pool as Pool
+import qualified Hasql.Transaction          as Tx
+import           Effectful
+import           Effectful.Dispatch.Dynamic
+import           Effectful.Error.Static     (Error, throwError)
+import qualified Pelotero.DB.Pool           as Pool
+import           Pelotero.DB.Pool           (DBError, Pool)
+import           Pelotero.Effects.Logging   (Logging, Severity (..), logFM)
 
 data Database :: Effect where
   RunTx :: Tx.Transaction a -> Database m a
 
-type instance DispatchOf Database = 'Dynamic
+type instance DispatchOf Database = Dynamic
 
-runTx :: Database E.:> es => Tx.Transaction a -> E.Eff es a
-runTx = send . RunTx
+runTx :: Database :> es => Tx.Transaction a -> Eff es a
+runTx tx = send (RunTx tx)
 
+-- | Production interpreter. On a failed transaction:
+--
+--  1. logs the rendered error at 'ErrorS', then
+--  2. raises the error via 'throwError'.
+--
+-- The repository runners ('runFetchLogDB', 'runPlayersDB', etc.) do
+-- not need to mention 'Logging' or 'Error' 'DBError' in their own
+-- signatures; the constraint only appears here, and propagates to
+-- the action via the type-level closure of the effect stack.
 runDatabasePool
-  :: IOE E.:> es
+  :: ( IOE :> es
+     , Logging :> es
+     , Error DBError :> es
+     )
   => Pool
-  -> E.Eff (Database : es) a
-  -> E.Eff es a
-runDatabasePool pool = interpret_ $ \case
-  RunTx tx -> runOrThrow (Pool.runTransaction pool tx)
-
-runOrThrow :: IOE E.:> es' => IO (Either DBError a) -> E.Eff es' a
-runOrThrow io = E.liftIO io >>= \case
-  Right a  -> pure a
-  Left err -> E.liftIO (ioError (userError ("DB error: " <> show err)))
+  -> Eff (Database : es) a
+  -> Eff es a
+runDatabasePool pool = interpret $ \_ -> \case
+  RunTx tx -> do
+    result <- liftIO $ Pool.runTransaction pool tx
+    case result of
+      Right a  -> pure a
+      Left err -> do
+        logFM ErrorS (Pool.renderDBError err)
+        throwError err

@@ -43,6 +43,7 @@ library
   exposed-modules:
     Pelotero.Prelude
     Pelotero.Score
+    Pelotero.App
     -- Providers
     Pelotero.Provider.ExternalId
     -- Domain
@@ -80,6 +81,7 @@ library
     Pelotero.DB.LineupSlot
     Pelotero.DB.DraftPick
     Pelotero.DB.PlayerRanking
+    Pelotero.DB.LineupSnapshot
     -- Effects
     Pelotero.Effects.Database
     Pelotero.Effects.Clock
@@ -95,10 +97,13 @@ library
     Pelotero.Effects.LineupSlot
     Pelotero.Effects.PlayerRanking
     Pelotero.Effects.DraftPick
+    Pelotero.Effects.Logging
+    Pelotero.Effects.LineupSnapshot
     -- Sync (provider-agnostic)
     Pelotero.Sync.Players
     Pelotero.Sync.Schedule
     Pelotero.Sync.Boxscores
+    Pelotero.Lineup.Snapshot
   build-depends:    base       >= 4.11 && < 4.22
                   , aeson
                   , bytestring
@@ -125,6 +130,8 @@ library
                   , http-conduit
                   , http-types         >= 0.12  && < 0.13
                   , rel8               >= 1.7   && < 1.8
+                  , katip
+                  , effectful
   ghc-options:      -O2
 
 executable pelotero

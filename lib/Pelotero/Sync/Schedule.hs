@@ -21,6 +21,8 @@ import           Pelotero.Effects.Clock    (Clock, now)
 import           Pelotero.Effects.FetchLog (FetchLog, recordFetch)
 import           Pelotero.Effects.Games    (Games, upsertGameByExternalId)
 import           Pelotero.Effects.Teams    (Teams, lookupTeamByExternalId)
+import qualified Pelotero.MLB.Convert      as Convert
+import           Pelotero.Effects.Logging  (Logging, Severity (..), logFM)
 
 import           Pelotero.Provider.ExternalId
                      ( externalIdFromGameId
@@ -101,3 +103,7 @@ resolveTeam
   -> Eff es (Maybe DbTeamId)
 resolveTeam provider tid =
   lookupTeamByExternalId provider (externalIdFromTeamId tid)
+
+
+logConvertWarnings :: Logging :> es => [Convert.ConvertWarning] -> Eff es ()
+logConvertWarnings = mapM_ (logFM WarningS . Convert.renderWarning)

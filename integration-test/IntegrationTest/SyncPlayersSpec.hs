@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications  #-}
 {-# LANGUAGE TypeOperators     #-}
 {-# LANGUAGE FlexibleContexts  #-}
 
@@ -9,19 +10,22 @@ import           Test.Hspec
 import           Data.Text                  (Text)
 import           Data.Time                  (UTCTime(..), fromGregorian, secondsToDiffTime)
 
-import           Effectful   (runEff)
-import qualified Effectful   as E
+import           Effectful                  (runEff)
+import qualified Effectful                  as E
+import           Effectful.Error.Static     (runErrorNoCallStack)
 
 import qualified Pelotero.DB.FetchLog       as FL
 import qualified Pelotero.DB.Player         as P
 import qualified Pelotero.DB.Team           as Tm
 import           Pelotero.DB.FetchLog       (FetchLogRow(..))
 import           Pelotero.DB.Player         (PlayerRow(..))
+import           Pelotero.DB.Pool           (DBError)
 import           Pelotero.DB.Team           (TeamRow(..))
 import           Pelotero.DB.Provider       (ProviderName(..))
 import           Pelotero.Effects.Clock     (runClockFixed)
 import           Pelotero.Effects.Database  (Database, runDatabasePool, runTx)
 import           Pelotero.Effects.FetchLog  (runFetchLogDB)
+import           Pelotero.Effects.Logging   (runLoggingDiscard)
 import           Pelotero.Effects.MLBClient
   ( defaultFixture, fetchRosters, runMLBClientFixture )
 import           Pelotero.Effects.Players   (runPlayersDB)
@@ -29,7 +33,11 @@ import           Pelotero.Effects.Teams     (runTeamsDB)
 import           Pelotero.MLB.Fetch         (FetchedRosters(..))
 import qualified Pelotero.Sync.Players      as Sync
 
-import           IntegrationTest.Setup      (cleanDatabase, withTestPool)
+import           IntegrationTest.Setup
+                   ( cleanDatabase
+                   , runEffectsOrFail
+                   , withTestPool
+                   )
 
 spec :: Spec
 spec = around withTestPool $
@@ -38,7 +46,10 @@ spec = around withTestPool $
     it "syncs teams and players from a fixture into the database" $ \pool -> do
       cleanDatabase pool
 
-      result <- runEff
+      result <- runEffectsOrFail
+              . runEff
+              . runErrorNoCallStack @DBError
+              . runLoggingDiscard
               . runClockFixed fixedTime
               . runDatabasePool pool
               . runFetchLogDB

@@ -1,7 +1,7 @@
 %bundle chase v1
-%generated 2026-05-07T16:07:41Z
+%generated 2026-05-08T11:35:12Z
 %roots /home/bismuth/git/pelotero-engine/lib
-%files 52 ok, 0 failed
+%files 57 ok, 0 failed
 
 # This file is a chase bundle: structural skeletons of multiple
 # Haskell and PureScript source files concatenated into one document.
@@ -14,6 +14,58 @@
 # errors. Function bodies are deliberately omitted; the lines
 # beginning with ! after a signature are the behavioral facts you
 # would otherwise have to infer from reading the source.
+
+
+=== BEGIN Pelotero/App.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/App.hs
+%mod Pelotero.App
+
+%ext DataKinds, FlexibleContexts, TypeApplications, TypeOperators
+
+%uses Effectful
+%uses Effectful.Error.Static
+%uses Pelotero.DB.Pool
+%uses qualified Pelotero.Effects.BoxscoreEntry as Box
+%uses qualified Pelotero.Effects.Clock as Clock
+%uses qualified Pelotero.Effects.Database as DB
+%uses qualified Pelotero.Effects.DraftPick as DraftPick
+%uses qualified Pelotero.Effects.FetchLog as FetchLog
+%uses qualified Pelotero.Effects.Games as Games
+%uses qualified Pelotero.Effects.LeagueConfig as LC
+%uses qualified Pelotero.Effects.LeagueTeam as LT
+%uses qualified Pelotero.Effects.LineupSlot as LS
+%uses Pelotero.Effects.Logging
+%uses qualified Pelotero.Effects.Logging as Logging
+%uses qualified Pelotero.Effects.MLBClient as MLB
+%uses qualified Pelotero.Effects.PlayerRanking as PR
+%uses qualified Pelotero.Effects.Players as Players
+%uses qualified Pelotero.Effects.RosterSlot as RS
+%uses qualified Pelotero.Effects.Teams as Teams
+%uses qualified Pelotero.Effects.LineupSnapshot as LSnap
+
+type AppEffects =
+  '[ Players.Players
+   , Teams.Teams
+   , Games.Games
+   , Box.BoxscoreEntry
+   , FetchLog.FetchLog
+   , LS.LineupSlot
+   , LSnap.LineupSnapshot
+   , RS.RosterSlot
+   , LC.LeagueConfig
+   , LT.LeagueTeam
+   , PR.PlayerRanking
+   , DraftPick.DraftPick
+   , DB.Database
+   , Clock.Clock
+   , MLB.MLBClient
+   , Logging.Logging
+   , Error DBError
+   , IOE
+   ]
+
+runApp :: Pool -> LogEnv -> Eff AppEffects a -> IO (Either DBError a)
 
 
 === BEGIN Pelotero/DB/BoxscoreEntry.hs ===
@@ -826,6 +878,91 @@ replaceTeamLineup :: Pool -> DbLeagueTeamId -> [LineupSlotRow] -> IO (Either DBE
   what:    lineup_slot is structurally identical to roster_slot, including the new order_index column from Phase B.2
   why:     Lineups and rosters remain different concepts but the storage shape stays parallel. Both got order_index in the same migration; the index/sort behaviour mirrors roster_slot.
   affects: lineupSlotSchema, addSlotT
+
+
+=== BEGIN Pelotero/DB/LineupSnapshot.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/DB/LineupSnapshot.hs
+%mod Pelotero.DB.LineupSnapshot
+
+%ext DataKinds, DeriveAnyClass, DeriveGeneric, DerivingStrategies, DuplicateRecordFields, OverloadedStrings, RecordWildCards, StandaloneDeriving, TypeFamilies, TypeOperators, UndecidableInstances
+
+%uses Data.Int
+%uses Data.Text
+%uses Data.Time
+%uses GHC.Generics
+%uses qualified Hasql.Transaction as Tx
+%uses Rel8
+%uses qualified Rel8 as R
+%uses Pelotero.DB.Pool
+%uses Pelotero.DB.Rel8Instances
+%uses Pelotero.Domain.Id
+
+data LineupSnapshot f = LineupSnapshot
+  { _lsnapId            :: Column f Int64
+  , _lsnapLeagueTeamId  :: Column f DbLeagueTeamId
+  , _lsnapGameId        :: Column f DbGameId
+  , _lsnapSlot          :: Column f Text
+  , _lsnapPlayerId      :: Column f DbPlayerId
+  , _lsnapSnapshottedAt :: Column f UTCTime
+  }
+  deriving stock    (Generic)
+  deriving anyclass (Rel8able)
+
+data LineupSnapshotRow = LineupSnapshotRow
+  { lsnapLeagueTeamId :: !DbLeagueTeamId
+  , lsnapGameId       :: !DbGameId
+  , lsnapSlot         :: !Text
+  , lsnapPlayerId     :: !DbPlayerId
+  }
+  deriving stock (Show, Eq)
+
+lineupSnapshotSchema :: TableSchema (LineupSnapshot Name)
+  ! table 'lineup_snapshot' with id (BIGSERIAL), league_team_id (FK), game_id (FK), slot (Text), player_id (FK), order_index (INTEGER NOT NULL DEFAULT 0), snapshotted_at (TIMESTAMPTZ DEFAULT NOW())
+  ! UNIQUE (league_team_id, game_id, slot, player_id)
+  ! index lineup_snapshot_game on (game_id)
+  ! index lineup_snapshot_team_game on (league_team_id, game_id)
+
+fromResult :: LineupSnapshot Result -> LineupSnapshotRow
+  ! private; rel8 Result -> LineupSnapshotRow
+  ! drops surrogate id and snapshotted_at from the public row type
+
+writeSnapshotsT :: [LineupSnapshotRow] -> Tx.Transaction ()
+
+getSnapshotForTeamGameT
+  :: DbLeagueTeamId -> DbGameId -> Tx.Transaction [LineupSnapshotRow]
+  ! WHERE league_team_id AND game_id; ORDER BY slot, order_index, player_id
+  ! consumed by Pelotero.Score.scoreOneTeam (the canonical scoring read)
+
+snapshotExistsForTeamGameT
+  :: DbLeagueTeamId -> DbGameId -> Tx.Transaction Bool
+
+getSnapshotsForGameT :: DbGameId -> Tx.Transaction [LineupSnapshotRow]
+
+writeSnapshots :: Pool -> [LineupSnapshotRow] -> IO (Either DBError ())
+
+getSnapshotForTeamGame
+  :: Pool
+  -> DbLeagueTeamId
+  -> DbGameId
+  -> IO (Either DBError [LineupSnapshotRow])
+  ! Pool-flavored wrapper
+
+snapshotExistsForTeamGame
+  :: Pool -> DbLeagueTeamId -> DbGameId -> IO (Either DBError Bool)
+
+getSnapshotsForGame
+  :: Pool -> DbGameId -> IO (Either DBError [LineupSnapshotRow])
+
+%decision SnapshotKeyedByLeagueTeamAndGame
+  what:    lineup_snapshot has UNIQUE (league_team_id, game_id, slot, player_id); a snapshot is the team's lineup-as-of-this-specific-game
+  why:     Phase B.3 introduced the table to fix the correctness bug where scoring used current lineups against historical games. (league_team_id, game_id) is the lookup key for scoring; slot + player_id complete the row's identity. snapshotted_at TIMESTAMPTZ DEFAULT NOW() records when the snapshot was actually taken; useful for debugging late-snapshot or out-of-order-snapshot scenarios.
+  affects: lineupSnapshotSchema, upsertSnapshotT
+
+%decision OrderIndexCarriesThrough
+  what:    lineup_snapshot also carries order_index (mirroring lineup_slot); snapshots preserve the within-slot ordering at snapshot time
+  why:     Per Phase B.2 + B.3 interaction: if order_index is going to matter for batting-order positional scoring, the snapshot must capture the order at snapshot time, not be re-derived from the current lineup_slot at scoring time. Migration V0031__lineup_snapshot.sql includes order_index INTEGER NOT NULL DEFAULT 0 by analogy with lineup_slot.
+  affects: lineupSnapshotSchema
 
 
 === BEGIN Pelotero/DB/Migration.hs ===
@@ -2145,6 +2282,8 @@ rationalPts :: Int -> Points
 %file /home/bismuth/git/pelotero-engine/lib/Pelotero/Domain/Stats.hs
 %mod Pelotero.Domain.Stats
 
+%ext OverloadedStrings
+
 %uses Data.Text
 %uses qualified Data.Text as T
 %uses qualified Data.Text.Read as TR
@@ -2190,7 +2329,6 @@ data PitchingStats = PitchingStats
   , pitSaveOpportunities       :: Maybe Int
   , pitHolds                   :: Maybe Int
   , pitBlownSaves              :: Maybe Int
-  , pitInningsPitched          :: Maybe Text  -- e.g. "6.2"
   , pitOuts                    :: Maybe Int
   , pitBattersFaced            :: Maybe Int
   , pitNumberOfPitches         :: Maybe Int
@@ -2240,6 +2378,8 @@ parseInningsPitched :: Text -> Maybe Int
   ! negative whole or fractional parts return Nothing
   ! non-numeric input returns Nothing
   ! consumed only by Pelotero.MLB.Convert.convertPitching at the wire boundary
+
+parseNonNegInt :: Text -> Maybe Int
 
 renderInningsPitched :: Int -> Text
   ! inverse of parseInningsPitched; outs -> Text
@@ -2359,35 +2499,37 @@ runClockFixed :: UTCTime -> E.Eff (Clock : es) a -> E.Eff es a
 %file /home/bismuth/git/pelotero-engine/lib/Pelotero/Effects/Database.hs
 %mod Pelotero.Effects.Database
 
-%ext TypeFamilies, DataKinds, TypeOperators, FlexibleContexts, GADTs, LambdaCase
+%ext DataKinds, FlexibleContexts, GADTs, LambdaCase, TypeFamilies, TypeOperators
 
 %uses qualified Hasql.Transaction as Tx
 %uses Effectful
-%uses qualified Effectful as E
 %uses Effectful.Dispatch.Dynamic
-%uses Pelotero.DB.Pool
+%uses Effectful.Error.Static
 %uses qualified Pelotero.DB.Pool as Pool
+%uses Pelotero.DB.Pool
+%uses Pelotero.Effects.Logging
 
 data Database :: Effect where
   RunTx :: Tx.Transaction a -> Database m a
 
-runTx :: Database E.:> es => Tx.Transaction a -> E.Eff es a
+runTx :: Database :> es => Tx.Transaction a -> Eff es a
   ! the only public operation; takes a Tx.Transaction a and returns Eff es a
   ! each call is one independent transaction; no nesting, no batching
   ! writes commit on success; on Tx error, throwError @DBError is invoked rather than throwing IO
 
 runDatabasePool
-  :: IOE E.:> es
+  :: ( IOE :> es
+     , Logging :> es
+     , Error DBError :> es
+     )
   => Pool
-  -> E.Eff (Database : es) a
-  -> E.Eff es a
+  -> Eff (Database : es) a
+  -> Eff es a
   ! intent: Production interpreter: runs each runTx via Pool.runTransaction; on Left DBError, calls throwError into the Error DBError co-effect
   ! effects: IOE, Error DBError
   ! no longer throws userError; DBError flows through the effect system
   ! callers compose with `runError @DBError` at whatever boundary they want to handle errors
   ! the rationale shift from throw-IO to typed-Error is captured in DbErrorAsTypedCoEffect
-
-runOrThrow :: IOE E.:> es' => IO (Either DBError a) -> E.Eff es' a
 
 %decision OneOperationOneTransaction
   what:    Database has a single operation, runTx, which acquires a connection and runs the transaction in isolation
@@ -2585,11 +2727,10 @@ runGamesInMemory
 %file /home/bismuth/git/pelotero-engine/lib/Pelotero/Effects/LeagueConfig.hs
 %mod Pelotero.Effects.LeagueConfig
 
-%ext TypeFamilies, DataKinds, TypeOperators, FlexibleContexts, GADTs, LambdaCase
+%ext DataKinds, FlexibleContexts, GADTs, LambdaCase, TypeFamilies, TypeOperators
 
 %uses Data.Text
 %uses Effectful
-%uses qualified Effectful as E
 %uses Effectful.Dispatch.Dynamic
 %uses qualified Pelotero.DB.LeagueConfig as LCRepo
 %uses Pelotero.DB.LeagueConfig
@@ -2597,27 +2738,43 @@ runGamesInMemory
 %uses Pelotero.Effects.Database
 
 data LeagueConfig :: Effect where
-  InsertLeagueConfig :: LeagueConfigRow                       -> LeagueConfig m DbLeagueConfigId
-  UpdateLeagueConfig :: DbLeagueConfigId -> LeagueConfigRow   -> LeagueConfig m ()
-  GetById            :: DbLeagueConfigId                      -> LeagueConfig m (Maybe LeagueConfigRow)
-  GetByLeagueId      :: Text                                  -> LeagueConfig m (Maybe LeagueConfigRow)
+  InsertLeagueConfig :: LeagueConfigRow                     -> LeagueConfig m DbLeagueConfigId
+  UpdateLeagueConfig :: DbLeagueConfigId -> LeagueConfigRow -> LeagueConfig m ()
+  GetById            :: DbLeagueConfigId                    -> LeagueConfig m (Maybe LeagueConfigRow)
+  GetByLeagueId      :: Text                                -> LeagueConfig m (Maybe LeagueConfigRow)
+  GetAll             ::                                        LeagueConfig m [LeagueConfigRow]
 
-insertLeagueConfig :: LeagueConfig E.:> es => LeagueConfigRow -> E.Eff es DbLeagueConfigId
+insertLeagueConfig
+  :: LeagueConfig :> es
+  => LeagueConfigRow
+  -> Eff es DbLeagueConfigId
   ! LeagueConfig send-only
 
-updateLeagueConfig :: LeagueConfig E.:> es => DbLeagueConfigId -> LeagueConfigRow -> E.Eff es ()
+updateLeagueConfig
+  :: LeagueConfig :> es
+  => DbLeagueConfigId
+  -> LeagueConfigRow
+  -> Eff es ()
   ! LeagueConfig send-only
 
-getById :: LeagueConfig E.:> es => DbLeagueConfigId -> E.Eff es (Maybe LeagueConfigRow)
+getById
+  :: LeagueConfig :> es
+  => DbLeagueConfigId
+  -> Eff es (Maybe LeagueConfigRow)
   ! LeagueConfig send-only
 
-getByLeagueId :: LeagueConfig E.:> es => Text -> E.Eff es (Maybe LeagueConfigRow)
+getByLeagueId
+  :: LeagueConfig :> es
+  => Text
+  -> Eff es (Maybe LeagueConfigRow)
   ! LeagueConfig send-only
+
+getAll :: LeagueConfig :> es => Eff es [LeagueConfigRow]
 
 runLeagueConfigDB
-  :: Database E.:> es
-  => E.Eff (LeagueConfig : es) a
-  -> E.Eff es a
+  :: Database :> es
+  => Eff (LeagueConfig : es) a
+  -> Eff es a
   ! Database-backed interpreter; delegates to Pelotero.DB.LeagueConfig
   ! requires Error DBError post Phase A.3
 
@@ -2719,6 +2876,144 @@ runLineupSlotDB
   => E.Eff (LineupSlot : es) a
   -> E.Eff es a
   ! Database-backed interpreter; requires Error DBError
+
+
+=== BEGIN Pelotero/Effects/LineupSnapshot.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Effects/LineupSnapshot.hs
+%mod Pelotero.Effects.LineupSnapshot
+
+%ext DataKinds, FlexibleContexts, GADTs, LambdaCase, TypeFamilies, TypeOperators
+
+%uses Effectful
+%uses Effectful.Dispatch.Dynamic
+%uses qualified Pelotero.DB.LineupSnapshot as Repo
+%uses Pelotero.DB.LineupSnapshot
+%uses Pelotero.Domain.Id
+%uses Pelotero.Effects.Database
+
+data LineupSnapshot :: Effect where
+  WriteSnapshots            :: [LineupSnapshotRow] -> LineupSnapshot m ()
+  GetSnapshotForTeamGame    :: DbLeagueTeamId -> DbGameId -> LineupSnapshot m [LineupSnapshotRow]
+  SnapshotExistsForTeamGame :: DbLeagueTeamId -> DbGameId -> LineupSnapshot m Bool
+  GetSnapshotsForGame       :: DbGameId -> LineupSnapshot m [LineupSnapshotRow]
+
+writeSnapshots :: LineupSnapshot :> es => [LineupSnapshotRow] -> Eff es ()
+
+getSnapshotForTeamGame
+  :: LineupSnapshot :> es
+  => DbLeagueTeamId -> DbGameId -> Eff es [LineupSnapshotRow]
+  ! LineupSnapshot send-only; (DbLeagueTeamId, DbGameId) -> [LineupSlotRow]
+  ! the only consumer in production is Pelotero.Score.scoreOneTeam
+
+snapshotExistsForTeamGame
+  :: LineupSnapshot :> es
+  => DbLeagueTeamId -> DbGameId -> Eff es Bool
+
+getSnapshotsForGame :: LineupSnapshot :> es => DbGameId -> Eff es [LineupSnapshotRow]
+
+runLineupSnapshotDB
+  :: Database :> es
+  => Eff (LineupSnapshot : es) a
+  -> Eff es a
+  ! Database-backed interpreter; delegates to Pelotero.DB.LineupSnapshot
+  ! requires Error DBError
+
+%decision NewEffectForPhaseB3
+  what:    LineupSnapshot is a separate effect from LineupSlot; the two have different lifecycles and different consumers
+  why:     LineupSlot is the live, mutable, owner-edited lineup. LineupSnapshot is the immutable per-game freeze. Different concerns, different effects. Pelotero.Score reads ONLY from LineupSnapshot; Pelotero.Lineup.Snapshot writes ONLY to LineupSnapshot. Pelotero.UI / lineup management reads/writes LineupSlot. Splitting the effects keeps the producer/consumer graph clean and avoids the temptation to read from the live lineup at scoring time (which was the original correctness bug).
+  affects: 
+
+
+=== BEGIN Pelotero/Effects/Logging.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Effects/Logging.hs
+%mod Pelotero.Effects.Logging
+
+%ext DataKinds, DerivingStrategies, FlexibleContexts, GADTs, LambdaCase, OverloadedStrings, TypeFamilies, TypeOperators
+
+%uses Control.Exception
+%uses qualified Data.Aeson as Aeson
+%uses Data.IORef
+%uses Data.Text
+%uses Effectful
+%uses Effectful.Dispatch.Dynamic
+%uses Effectful.Reader.Static
+%uses Katip
+%uses qualified Katip as K
+%uses Katip.Scribes.Handle
+%uses System.IO
+
+data Logging :: Effect where
+  LogFM         :: Severity -> Text -> Logging m ()
+  LogItemFM     :: SimpleLogPayload -> Severity -> Text -> Logging m ()
+  AddNamespace  :: Namespace -> m a -> Logging m a
+  AddLogContext :: SimpleLogPayload -> m a -> Logging m a
+
+data LogLine = LogLine
+  { logLineSeverity  :: !Severity
+  , logLineNamespace :: !Namespace
+  , logLineMessage   :: !Text
+  , logLineContext   :: !Aeson.Value
+  }
+  deriving stock (Show, Eq)
+
+data KatipReader = KatipReader
+  { krLogEnv    :: !LogEnv
+  , krContext   :: !LogContexts
+  , krNamespace :: !Namespace
+  }
+
+data CaptureReader = CaptureReader
+  { crContext   :: !LogContexts
+  , crNamespace :: !Namespace
+  }
+
+logFM :: Logging :> es => Severity -> Text -> Eff es ()
+  ! Logging send-only; structured log emission with severity + message + namespace fields
+  ! production: writes to broadcast scribe (stdout JSON + rotating file)
+  ! test: appends to an [LogLine] accumulator returned from runLoggingPure
+
+logItem :: Logging :> es => SimpleLogPayload -> Severity -> Text -> Eff es ()
+  ! Logging send-only; logs an arbitrary Aeson-encodable payload with a severity
+  ! used for richer structured events (e.g. SyncResult summaries) where a plain text message loses the structure
+
+addNamespace :: Logging :> es => Namespace -> Eff es a -> Eff es a
+
+addContext :: Logging :> es => SimpleLogPayload -> Eff es a -> Eff es a
+
+runLoggingKatip
+  :: IOE :> es
+  => LogEnv
+  -> Eff (Logging : es) a
+  -> Eff es a
+
+withStdoutLogEnv
+  :: Namespace
+  -> Environment
+  -> Severity
+  -> (LogEnv -> IO a)
+  -> IO a
+
+runLoggingCapture
+  :: IOE :> es
+  => IORef [LogLine]
+  -> Eff (Logging : es) a
+  -> Eff es a
+
+runLoggingDiscard
+  :: Eff (Logging : es) a
+  -> Eff es a
+
+%decision KatipPatternLiftedFromCheeblr
+  what:    Logging effect uses the Katip pattern: logFM, logItem, katipNamespace; production interpreter broadcasts to stdout JSON + a rotating file scribe
+  why:     Cheeblr already runs this exact stack in production with structured search-friendly JSON logs; reusing it means we get the same querying, the same tooling, and one less invented wheel. Structured logs make per-warning grepping (e.g. 'all UnknownPosition warnings in the last week') a one-line jq query rather than a regex over freeform text. Test interpreter (runLoggingPure) collects messages into a [LogLine] return so assertions about logging behaviour are first-class rather than relying on captured stderr.
+  affects: logFM, logItem, katipNamespace, runLoggingProd, runLoggingPure
+
+%decision ReplacesConvertLogWarnings
+  what:    Pelotero.MLB.Convert.logWarnings (direct stderr IO) is gone; warning emission goes through Logging.logFM with structured fields
+  why:     Convert.logWarnings wrote bare stderr lines with a 'convert: ' prefix; the prefix was the only structure log scrapers had to grab onto. Going through Logging means each ConvertWarning becomes a structured log item with its constructor name as a tag; downstream systems can filter on the tag, not on string-prefix scraping. The Handle-parameterised logWarningsTo indirection existed only to make logWarnings testable; with a pure test interpreter (runLoggingPure), that indirection disappears.
+  affects: logFM
 
 
 === BEGIN Pelotero/Effects/MLBClient.hs ===
@@ -3069,19 +3364,112 @@ runTeamsInMemory
   affects: runTeamsDB
 
 
+=== BEGIN Pelotero/Lineup/Snapshot.hs ===
+
+%file /home/bismuth/git/pelotero-engine/lib/Pelotero/Lineup/Snapshot.hs
+%mod Pelotero.Lineup.Snapshot
+
+%ext FlexibleContexts, OverloadedStrings, TypeOperators
+
+%uses qualified Data.Text as T
+%uses Effectful
+%uses qualified Pelotero.DB.LeagueConfig as DBLC
+%uses qualified Pelotero.DB.LeagueTeam as DBLT
+%uses qualified Pelotero.DB.LineupSlot as DBLS
+%uses qualified Pelotero.DB.LineupSnapshot as DBSnap
+%uses Pelotero.Domain.Id
+%uses qualified Pelotero.Effects.LeagueConfig as LC
+%uses Pelotero.Effects.LeagueConfig
+%uses qualified Pelotero.Effects.LeagueTeam as LT
+%uses Pelotero.Effects.LeagueTeam
+%uses qualified Pelotero.Effects.LineupSlot as LS
+%uses Pelotero.Effects.LineupSlot
+%uses qualified Pelotero.Effects.LineupSnapshot as LSnap
+%uses Pelotero.Effects.LineupSnapshot
+%uses Pelotero.Effects.Logging
+
+data PerTeamResult
+  = TeamSnapshotted !Int
+    -- ^ n rows submitted to the snapshot table. May overcount under
+    --   concurrent snapshot jobs (ON CONFLICT DO NOTHING silently
+    --   drops duplicates), but in normal single-operator use n
+    --   equals the actual insert count.
+  | TeamAlreadyHasSnapshot
+    -- ^ a snapshot already existed for this (team, game); nothing changed
+  deriving stock (Show, Eq)
+
+data SnapshotResult = SnapshotResult
+  { snapTeamsSnapshotted :: !Int  -- ^ teams with a new snapshot written
+  , snapTeamsAlreadyDone :: !Int  -- ^ teams whose snapshot already existed
+  , snapRowsInserted     :: !Int  -- ^ total rows submitted across all teams
+  }
+  deriving stock (Show, Eq)
+
+instance Semigroup SnapshotResult where
+
+instance Monoid SnapshotResult where
+
+snapshotLineupsForTeam
+  :: ( LineupSlot     :> es
+     , LineupSnapshot :> es
+     , Logging        :> es
+     )
+  => DbLeagueTeamId
+  -> DbGameId
+  -> Eff es PerTeamResult
+
+snapshotLineupsForGame
+  :: ( LeagueConfig   :> es
+     , LeagueTeam     :> es
+     , LineupSlot     :> es
+     , LineupSnapshot :> es
+     , Logging        :> es
+     )
+  => DbGameId
+  -> Eff es SnapshotResult
+  ! intent: For one game id, copy each active league team's current lineup_slot rows into lineup_snapshot keyed by (league_team_id, game_id)
+  ! effects: LineupSlot, LineupSnapshot, LeagueTeam, Clock, Logging
+  ! iterates all league_team rows whose league is currently active; reads each team's lineup_slot via LS.getSlotsForTeam and writes via LineupSnapshot.upsertSnapshot
+  ! idempotent: ON CONFLICT (league_team_id, game_id, slot, player_id) DO NOTHING
+  ! logs a structured snapshot-written event per team per game
+
+snapshotLeagueTeams
+  :: ( LeagueTeam     :> es
+     , LineupSlot     :> es
+     , LineupSnapshot :> es
+     , Logging        :> es
+     )
+  => DbGameId
+  -> DbLeagueConfigId
+  -> Eff es SnapshotResult
+
+toSnapshot :: DbGameId -> DBLS.LineupSlotRow -> DBSnap.LineupSnapshotRow
+
+tshow :: Show a => a -> T.Text
+
+%decision SnapshotPerGamePerTeam
+  what:    snapshotLineupsForGame copies the current lineup_slot rows into lineup_snapshot keyed by (league_team_id, game_id) at the moment a game is about to start
+  why:     The (league_team_id, game_id) key gives us 'what was this team's lineup for this specific game'. Re-running scoring against a snapshot gives a deterministic answer. Idempotent: re-running before game start updates the snapshot (caller may want to capture a late lineup change); re-running after game start silently skips per the unique constraint, preserving the canonical lineup. Called from a CLI subcommand on a cron schedule (pelotero snapshot lineups --on-date 2025-04-15) before each day's earliest game start. Decoupled from sync: snapshot writing is a separate operational concern from data ingestion.
+  affects: snapshotLineupsForGame, snapshotLineupsForDate
+
+%decision ModuleLivesInLineupNotEffects
+  what:    snapshot orchestration lives at Pelotero.Lineup.Snapshot, not under Pelotero.Effects
+  why:     This module composes multiple effects (LineupSlot, LineupSnapshot, LeagueTeam, Clock, Logging) to do a piece of business logic; it is not itself an effect definition. Pelotero.Effects.LineupSnapshot is the dispatch interface; Pelotero.Lineup.Snapshot is the orchestration layer that uses it. Mirrors the layering between Pelotero.Sync.* (orchestration) and Pelotero.Effects.* (dispatch).
+  affects: 
+
+
 === BEGIN Pelotero/MLB/Convert.hs ===
 
 %file /home/bismuth/git/pelotero-engine/lib/Pelotero/MLB/Convert.hs
 %mod Pelotero.MLB.Convert
 
-%uses Control.Monad
 %uses qualified Data.Map.Strict as Map
 %uses Data.Maybe
 %uses Data.Text
 %uses qualified Data.Text as T
 %uses Data.Time.Calendar
 %uses Data.Time.Format
-%uses System.IO
+%uses Control.Applicative
 %uses Pelotero.Domain.Game
 %uses Pelotero.Domain.Id
 %uses Pelotero.Domain.Player
@@ -3097,6 +3485,7 @@ data ConvertWarning
   | UnknownHandedness !Int !Text
   | InvalidGameDate !Int !Text
   | MissingTeamRef !Int
+  | WireFieldDiscrepancy !Int !Text !Int   -- ^ player id, wire IP text, wire outs
   deriving stock (Show, Eq)
 
 data BoxscoreEntry = BoxscoreEntry
@@ -3113,10 +3502,6 @@ renderWarning :: ConvertWarning -> Text
   ! format is conventional: 'convert: <subject> <id> <verb> <detail>'; downstream log scrapers can rely on the leading 'convert: ' prefix
   ! tshow uses Show on the int id, so player ids appear without quotes
   ! WireFieldDiscrepancy renders as 'convert: pitching <playerId> wire field discrepancy: ip=<text> outs=<int>'
-
-logWarnings :: [ConvertWarning] -> IO ()
-
-logWarningsTo :: Handle -> [ConvertWarning] -> IO ()
 
 convertPlayer :: WP.WirePlayer -> ([ConvertWarning], Maybe Player)
   ! returns ([InvalidPlayerId], Nothing) for ids <= 0; the empty-warning case never produces Nothing here
@@ -3167,7 +3552,7 @@ convertBoxscore :: GameId -> WB.WireBoxscore -> ([ConvertWarning], [BoxscoreEntr
   ! concatenates away-side then home-side entries; team identification on each entry uses wbpParentTeamId from the wire
   ! the GameId comes from the caller
 
-boxsideEntries :: GameId -> WB.WireBoxTeam -> [BoxscoreEntry]
+boxsideEntries :: GameId -> WB.WireBoxTeam -> ([ConvertWarning], [BoxscoreEntry])
   ! iterates Map.elems of the players map; the wire keys ('ID660271') are discarded
   ! missing batting or pitching stats default to emptyBatting / emptyPitching
 
@@ -3175,7 +3560,7 @@ convertBatting :: WB.WireBoxBatting -> BattingStats
   ! mechanical field-by-field copy from WireBoxBatting to BattingStats; no derivation, parsing, or fallback
   ! any divergence between the two record shapes is a compile error here
 
-convertPitching :: WB.WireBoxPitching -> PitchingStats
+convertPitching :: Int -> WB.WireBoxPitching -> ([ConvertWarning], PitchingStats)
   ! intent: Convert WireBoxPitching to PitchingStats, reconciling wire IP string against wire outs and emitting a WireFieldDiscrepancy if they disagree
   ! parses wbpInningsPitched via parseInningsPitched; compares against wbpOuts when both are present
   ! on disagreement: emits WireFieldDiscrepancy and prefers the parsed IP string
@@ -3685,8 +4070,9 @@ parseIntStrict :: Text -> Maybe Int
 %file /home/bismuth/git/pelotero-engine/lib/Pelotero/Score.hs
 %mod Pelotero.Score
 
-%ext TypeOperators, FlexibleContexts
+%ext FlexibleContexts, TypeOperators
 
+%uses Data.Int
 %uses qualified Data.Map.Strict as Map
 %uses Data.Maybe
 %uses Data.Time.Calendar
@@ -3696,20 +4082,20 @@ parseIntStrict :: Text -> Maybe Int
 %uses Pelotero.DB.Game
 %uses Pelotero.DB.LeagueConfig
 %uses Pelotero.DB.LeagueTeam
-%uses Pelotero.DB.LineupSlot
+%uses Pelotero.DB.LineupSnapshot
 %uses Pelotero.Domain.Id
 %uses Pelotero.Domain.Scoring
 %uses Pelotero.Domain.Stats
-%uses Pelotero.Effects.BoxscoreEntry
 %uses qualified Pelotero.Effects.BoxscoreEntry as Box
-%uses Pelotero.Effects.Games
+%uses Pelotero.Effects.BoxscoreEntry
 %uses qualified Pelotero.Effects.Games as G
-%uses Pelotero.Effects.LeagueConfig
+%uses Pelotero.Effects.Games
 %uses qualified Pelotero.Effects.LeagueConfig as LC
-%uses Pelotero.Effects.LeagueTeam
+%uses Pelotero.Effects.LeagueConfig
 %uses qualified Pelotero.Effects.LeagueTeam as LT
-%uses Pelotero.Effects.LineupSlot
-%uses qualified Pelotero.Effects.LineupSlot as LS
+%uses Pelotero.Effects.LeagueTeam
+%uses qualified Pelotero.Effects.LineupSnapshot as LSnap
+%uses Pelotero.Effects.LineupSnapshot
 
 data PlayerScore = PlayerScore
   { psPlayer         :: !DbPlayerId
@@ -3758,11 +4144,11 @@ scorePlayerPure
   ! the canonical hedgehog target for scoring property tests
 
 scoreLeague
-  :: ( LeagueConfig  :> es
-     , LeagueTeam    :> es
-     , LineupSlot    :> es
-     , Games         :> es
-     , BoxscoreEntry :> es
+  :: ( LeagueConfig   :> es
+     , LeagueTeam     :> es
+     , LineupSnapshot :> es
+     , Games          :> es
+     , BoxscoreEntry  :> es
      )
   => DbLeagueConfigId
   -> Eff es (Maybe LeagueScore)
@@ -3774,11 +4160,11 @@ scoreLeague
   ! deterministic across re-runs: same (league, period) inputs always yield the same scores
 
 scoreTeam
-  :: ( LeagueConfig  :> es
-     , LeagueTeam    :> es
-     , LineupSlot    :> es
-     , Games         :> es
-     , BoxscoreEntry :> es
+  :: ( LeagueConfig   :> es
+     , LeagueTeam     :> es
+     , LineupSnapshot :> es
+     , Games          :> es
+     , BoxscoreEntry  :> es
      )
   => DbLeagueConfigId
   -> DbLeagueTeamId
@@ -3787,12 +4173,13 @@ scoreTeam
   ! returns Nothing if either the league config or the team is absent
   ! does NOT validate that the team belongs to the league
 
+collectGameIds
+  :: Games :> es
+  => Day -> Day -> Eff es [DbGameId]
+
 buildPlayerMaps
-  :: ( Games         :> es
-     , BoxscoreEntry :> es
-     )
-  => Day
-  -> Day
+  :: BoxscoreEntry :> es
+  => [DbGameId]
   -> Eff es ( Map.Map DbPlayerId [BattingRow]
             , Map.Map DbPlayerId [PitchingRow]
             )
@@ -3800,33 +4187,35 @@ buildPlayerMaps
   ! endpoints inclusive on both sides
   ! results bucket by player_id at the repository level; this function only renames
 
-buildBattingMap
-  :: BoxscoreEntry :> es
-  => [DbGameId] -> Eff es (Map.Map DbPlayerId [BattingRow])
-  ! thin wrapper around BoxscoreEntry.getBattingForDateRangeT; returns Map DbPlayerId [BattingRow]
-
-buildPitchingMap
-  :: BoxscoreEntry :> es
-  => [DbGameId] -> Eff es (Map.Map DbPlayerId [PitchingRow])
-  ! mirror of buildBattingMap
-
 scoreOneTeam
-  :: LineupSlot :> es
+  :: LineupSnapshot :> es
   => LeagueScoring
   -> Map.Map DbPlayerId [BattingRow]
   -> Map.Map DbPlayerId [PitchingRow]
-  -> DbLeagueTeamId
+  -> [DbGameId]
+  -> LeagueTeamRow
   -> Eff es TeamScore
   ! per-game inner loop: for each game in the period, fetch the team's lineup snapshot for that game, score that game's stats, sum
   ! uses LineupSnapshot.getSnapshotForTeamGame (NOT LineupSlot.getSlotsForTeam)
 
-lookupAndScore
+scoreTeamForGame
+  :: LineupSnapshot :> es
+  => LeagueScoring
+  -> Map.Map DbPlayerId [BattingRow]
+  -> Map.Map DbPlayerId [PitchingRow]
+  -> DbLeagueTeamId
+  -> DbGameId
+  -> Eff es [PlayerScore]
+
+scoreOnePlayerForGame
   :: LeagueScoring
   -> Map.Map DbPlayerId [BattingRow]
   -> Map.Map DbPlayerId [PitchingRow]
+  -> DbGameId
   -> DbPlayerId
   -> PlayerScore
-  ! Map.findWithDefault [] for both rows; a player on the lineup with no boxscore activity scores zero
+
+mergePlayerScores :: PlayerScore -> PlayerScore -> PlayerScore
 
 %decision PureKernelSplitFromEffects
   what:    scorePlayerPure / sumBattingPoints / sumPitchingPoints / rowToBattingStats / rowToPitchingStats are pure and exported separately from the effectful scoreLeague / scoreTeam
@@ -4030,6 +4419,8 @@ sha256Hex :: BS.ByteString -> T.Text
 %uses Pelotero.Effects.Players
 %uses Pelotero.Effects.Teams
 %uses Pelotero.Provider.ExternalId
+%uses qualified Pelotero.MLB.Convert as Convert
+%uses Pelotero.Effects.Logging
 
 data SyncResult = SyncResult
   { syncTeamsUpserted   :: !Int
@@ -4037,6 +4428,8 @@ data SyncResult = SyncResult
   , syncFetchSha256     :: !T.Text
   }
   deriving stock (Show, Eq)
+
+logConvertWarnings :: Logging :> es => [Convert.ConvertWarning] -> Eff es ()
 
 syncRosters
   :: ( Players  :> es
@@ -4132,6 +4525,8 @@ upsertAllPlayers
 %uses Pelotero.Effects.FetchLog
 %uses Pelotero.Effects.Games
 %uses Pelotero.Effects.Teams
+%uses qualified Pelotero.MLB.Convert as Convert
+%uses Pelotero.Effects.Logging
 %uses Pelotero.Provider.ExternalId
 
 data ScheduleSyncResult = ScheduleSyncResult
@@ -4177,6 +4572,8 @@ resolveTeam
   -> Eff es (Maybe DbTeamId)
   ! wraps lookupTeamByExternalId, calling externalIdFromTeamId for the encoding
   ! the encoding is now type-checked at compile time via the Provider.ExternalId helper, not asserted via source comments
+
+logConvertWarnings :: Logging :> es => [Convert.ConvertWarning] -> Eff es ()
 
 %decision SkipGamesWithUnknownTeams
   what:    syncSchedule resolves both away and home teams via lookupTeamByExternalId; if either is missing, the entire game is skipped and counted in schedGamesSkipped

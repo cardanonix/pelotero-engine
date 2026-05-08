@@ -8,19 +8,18 @@ module Pelotero.MLB.Convert
     -- * Reporting
   , ConvertWarning(..)
   , renderWarning
-  , logWarnings
+  -- , logWarnings
     -- * Box-score entries
   , BoxscoreEntry(..)
   ) where
 
-import Control.Monad (unless)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time.Calendar (Day)
 import Data.Time.Format (defaultTimeLocale, parseTimeM)
-import System.IO (Handle, hPutStrLn, stderr)
+import           Control.Applicative          ((<|>))
 
 import Pelotero.Domain.Game (Game(..), GameSchedule(..))
 import Pelotero.Domain.Id (GameId(..), PlayerId(..), TeamId(..))
@@ -30,7 +29,7 @@ import Pelotero.Domain.Player
   , parseHandedness
   )
 import Pelotero.Domain.Position (Position, parsePosition)
-import Pelotero.Domain.Stats (BattingStats(..), PitchingStats(..))
+import Pelotero.Domain.Stats (BattingStats(..), PitchingStats(..), emptyPitching, parseInningsPitched)
 import qualified Pelotero.MLB.Wire.Boxscore as WB
 import qualified Pelotero.MLB.Wire.Player as WP
 import qualified Pelotero.MLB.Wire.Schedule as WS
@@ -44,6 +43,7 @@ data ConvertWarning
   | UnknownHandedness !Int !Text
   | InvalidGameDate !Int !Text
   | MissingTeamRef !Int
+  | WireFieldDiscrepancy !Int !Text !Int   -- ^ player id, wire IP text, wire outs
   deriving stock (Show, Eq)
 
 renderWarning :: ConvertWarning -> Text
@@ -63,13 +63,17 @@ renderWarning = \case
       <> " with unparseable date " <> tshow raw
   MissingTeamRef gid ->
     "convert: dropped game " <> tshow gid <> " missing team reference"
+  WireFieldDiscrepancy pid ip outs ->
+    "convert: pitching " <> tshow pid
+      <> " wire field discrepancy: ip=" <> ip
+      <> " outs=" <> tshow outs
 
-logWarnings :: [ConvertWarning] -> IO ()
-logWarnings = logWarningsTo stderr
+-- logWarnings :: [ConvertWarning] -> IO ()
+-- logWarnings = logWarningsTo stderr
 
-logWarningsTo :: Handle -> [ConvertWarning] -> IO ()
-logWarningsTo h ws = unless (null ws) $
-  mapM_ (\w -> hPutStrLn h (T.unpack (renderWarning w))) ws
+-- logWarningsTo :: Handle -> [ConvertWarning] -> IO ()
+-- logWarningsTo h ws = unless (null ws) $
+--   mapM_ (\w -> hPutStrLn h (T.unpack (renderWarning w))) ws
 
 --------------------------------------------------------------------------------
 -- Players
@@ -196,21 +200,32 @@ data BoxscoreEntry = BoxscoreEntry
 
 convertBoxscore :: GameId -> WB.WireBoxscore -> ([ConvertWarning], [BoxscoreEntry])
 convertBoxscore gid bs =
-  let teams = WB.wbsTeams bs
-      away  = boxsideEntries gid (WB.wbtAway teams)
-      home  = boxsideEntries gid (WB.wbtHome teams)
-  in ([], away <> home)
+  let (aw, ae) = boxsideEntries gid (WB.wbtAway (WB.wbsTeams bs))
+      (hw, he) = boxsideEntries gid (WB.wbtHome (WB.wbsTeams bs))
+  in (aw <> hw, ae <> he)
 
-boxsideEntries :: GameId -> WB.WireBoxTeam -> [BoxscoreEntry]
-boxsideEntries gid side = map mkEntry (Map.elems (WB.wbtPlayers side))
+boxsideEntries :: GameId -> WB.WireBoxTeam -> ([ConvertWarning], [BoxscoreEntry])
+boxsideEntries gid team =
+  let pairs = map mkOne (Map.elems (WB.wbtPlayers team))
+      (warnsList, entries) = unzip pairs
+  in (concat warnsList, entries)
   where
-    mkEntry wp = BoxscoreEntry
-      { boxGameId   = gid
-      , boxPlayerId = PlayerId (WB.wbpPersonId (WB.wbpPerson wp))
-      , boxTeamId   = TeamId <$> WB.wbpParentTeamId wp
-      , boxBatting  = fmap convertBatting (WB.wbpStats wp >>= WB.wbsBatting)
-      , boxPitching = fmap convertPitching (WB.wbpStats wp >>= WB.wbsPitching)
-      }
+    mkOne wp =
+      let pid = WB.wbpPersonId (WB.wbpPerson wp)
+          stats = WB.wbpStats wp
+          batting = fmap convertBatting (stats >>= WB.wbsBatting)
+          (pitWarns, mPitching) = case stats >>= WB.wbsPitching of
+            Just wbpitch ->
+              let (ws, ps) = convertPitching pid wbpitch
+              in (ws, Just ps)
+            Nothing -> ([], Nothing)
+      in (pitWarns, BoxscoreEntry
+            { boxGameId   = gid
+            , boxPlayerId = PlayerId pid
+            , boxTeamId   = fmap TeamId (WB.wbpParentTeamId wp)
+            , boxBatting  = batting
+            , boxPitching = mPitching
+            })
 
 convertBatting :: WB.WireBoxBatting -> BattingStats
 convertBatting WB.WireBoxBatting{..} = BattingStats
@@ -241,52 +256,59 @@ convertBatting WB.WireBoxBatting{..} = BattingStats
   , batPickoffs             = wbbPickoffs
   }
 
-convertPitching :: WB.WireBoxPitching -> PitchingStats
-convertPitching WB.WireBoxPitching{..} = PitchingStats
-  { pitGamesPlayed             = wbpGamesPlayed
-  , pitGamesStarted            = wbpGamesStarted
-  , pitGamesFinished           = wbpGamesFinished
-  , pitCompleteGames           = wbpCompleteGames
-  , pitShutouts                = wbpShutouts
-  , pitWins                    = wbpWins
-  , pitLosses                  = wbpLosses
-  , pitSaves                   = wbpSaves
-  , pitSaveOpportunities       = wbpSaveOpportunities
-  , pitHolds                   = wbpHolds
-  , pitBlownSaves              = wbpBlownSaves
-  , pitInningsPitched          = wbpInningsPitched
-  , pitOuts                    = wbpOuts
-  , pitBattersFaced            = wbpBattersFaced
-  , pitNumberOfPitches         = wbpNumberOfPitches
-  , pitStrikes                 = wbpStrikes
-  , pitBalls                   = wbpBalls
-  , pitHits                    = wbpHits
-  , pitDoubles                 = wbpDoubles
-  , pitTriples                 = wbpTriples
-  , pitHomeRuns                = wbpHomeRuns
-  , pitRuns                    = wbpRuns
-  , pitEarnedRuns              = wbpEarnedRuns
-  , pitStrikeOuts              = wbpStrikeOuts
-  , pitBaseOnBalls             = wbpBaseOnBalls
-  , pitIntentionalWalks        = wbpIntentionalWalks
-  , pitHitBatsmen              = wbpHitBatsmen
-  , pitWildPitches             = wbpWildPitches
-  , pitBalks                   = wbpBalks
-  , pitPickoffs                = wbpPickoffs
-  , pitFlyOuts                 = wbpFlyOuts
-  , pitGroundOuts              = wbpGroundOuts
-  , pitAirOuts                 = wbpAirOuts
-  , pitInheritedRunners        = wbpInheritedRunners
-  , pitInheritedRunnersScored  = wbpInheritedRunnersScored
-  , pitStolenBases             = wbpStolenBases
-  , pitCaughtStealing          = wbpCaughtStealing
-  , pitAtBats                  = wbpAtBats
-  , pitRbi                     = wbpRbi
-  , pitSacBunts                = wbpSacBunts
-  , pitSacFlies                = wbpSacFlies
-  , pitCatchersInterference    = wbpCatchersInterference
-  , pitPassedBall              = wbpPassedBall
-  }
+convertPitching :: Int -> WB.WireBoxPitching -> ([ConvertWarning], PitchingStats)
+convertPitching playerId wp =
+  let parsedIp = WB.wbpInningsPitched wp >>= parseInningsPitched
+      wireOuts = WB.wbpOuts wp
+      warns    = case (WB.wbpInningsPitched wp, parsedIp, wireOuts) of
+        (Just ipText, Just ipOuts, Just wOuts) | ipOuts /= wOuts ->
+          [WireFieldDiscrepancy playerId ipText wOuts]
+        _ -> []
+      stats = emptyPitching
+        { pitGamesPlayed             = WB.wbpGamesPlayed wp
+        , pitGamesStarted            = WB.wbpGamesStarted wp
+        , pitGamesFinished           = WB.wbpGamesFinished wp
+        , pitCompleteGames           = WB.wbpCompleteGames wp
+        , pitShutouts                = WB.wbpShutouts wp
+        , pitWins                    = WB.wbpWins wp
+        , pitLosses                  = WB.wbpLosses wp
+        , pitSaves                   = WB.wbpSaves wp
+        , pitSaveOpportunities       = WB.wbpSaveOpportunities wp
+        , pitHolds                   = WB.wbpHolds wp
+        , pitBlownSaves              = WB.wbpBlownSaves wp
+        , pitOuts                    = parsedIp <|> wireOuts
+        , pitBattersFaced            = WB.wbpBattersFaced wp
+        , pitNumberOfPitches         = WB.wbpNumberOfPitches wp
+        , pitStrikes                 = WB.wbpStrikes wp
+        , pitBalls                   = WB.wbpBalls wp
+        , pitHits                    = WB.wbpHits wp
+        , pitDoubles                 = WB.wbpDoubles wp
+        , pitTriples                 = WB.wbpTriples wp
+        , pitHomeRuns                = WB.wbpHomeRuns wp
+        , pitRuns                    = WB.wbpRuns wp
+        , pitEarnedRuns              = WB.wbpEarnedRuns wp
+        , pitStrikeOuts              = WB.wbpStrikeOuts wp
+        , pitBaseOnBalls             = WB.wbpBaseOnBalls wp
+        , pitIntentionalWalks        = WB.wbpIntentionalWalks wp
+        , pitHitBatsmen              = WB.wbpHitBatsmen wp
+        , pitWildPitches             = WB.wbpWildPitches wp
+        , pitBalks                   = WB.wbpBalks wp
+        , pitPickoffs                = WB.wbpPickoffs wp
+        , pitFlyOuts                 = WB.wbpFlyOuts wp
+        , pitGroundOuts              = WB.wbpGroundOuts wp
+        , pitAirOuts                 = WB.wbpAirOuts wp
+        , pitInheritedRunners        = WB.wbpInheritedRunners wp
+        , pitInheritedRunnersScored  = WB.wbpInheritedRunnersScored wp
+        , pitStolenBases             = WB.wbpStolenBases wp
+        , pitCaughtStealing          = WB.wbpCaughtStealing wp
+        , pitAtBats                  = WB.wbpAtBats wp
+        , pitRbi                     = WB.wbpRbi wp
+        , pitSacBunts                = WB.wbpSacBunts wp
+        , pitSacFlies                = WB.wbpSacFlies wp
+        , pitCatchersInterference    = WB.wbpCatchersInterference wp
+        , pitPassedBall              = WB.wbpPassedBall wp
+        }
+  in (warns, stats)
 
 --------------------------------------------------------------------------------
 -- Internal helpers

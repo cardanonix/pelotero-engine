@@ -45,6 +45,10 @@ import           Pelotero.Provider.ExternalId
                      , externalIdFromTeamId
                      )
 
+-- logConvertWarnings :: Logging :> es => [Convert.ConvertWarning] -> Eff es ()
+-- logConvertWarnings = mapM_ (logFM WarningS . Convert.renderWarning)
+
+
 data BoxscoreSyncResult = BoxscoreSyncResult
   { boxGamesSeen        :: !Int
   , boxGamesProcessed   :: !Int
@@ -262,10 +266,7 @@ pitchingRowFor gid pid mTid s = PitchingRow
 -- (with a 'WireFieldDiscrepancy' warning on disagreement) will live in
 -- 'Pelotero.MLB.Convert.convertPitching'.
 inningsPitchedOuts :: DStats.PitchingStats -> Maybe Int32
-inningsPitchedOuts s =
-  case DStats.pitInningsPitched s >>= DStats.parseInningsPitched of
-    Just o  -> Just (fromIntegral o)
-    Nothing -> fromIntegral <$> DStats.pitOuts s
+inningsPitchedOuts = fmap fromIntegral . DStats.pitOuts
 
 i32 :: Maybe Int -> Maybe Int32
 i32 = fmap fromIntegral

@@ -36,7 +36,6 @@ spec = do
             , batRuns     = Just 1
             , batAtBats   = Just 4
             }
-      -- HR=1*4 + RBI=2*1 + R=1*1 = 7 (singles derived = 0)
       scoreBatting standardBatting line `shouldBe` Points 7
 
     it "is linear in hit multipliers (property)" $ hedgehog $ do
@@ -63,23 +62,18 @@ spec = do
     it "scores zero on an empty stat line" $
       scorePitching standardPitching emptyPitching `shouldBe` zeroPoints
 
-    it "credits a quality start: 6.0 IP, 3 ER" $ do
-      let line = emptyPitching { pitInningsPitched = Just "6.0", pitEarnedRuns = Just 3 }
-      -- 6 IP * 3 + QS=4 - 3 = 19
+    it "credits a quality start: 18 outs (6.0 IP), 3 ER" $ do
+      let line = emptyPitching { pitOuts = Just 18, pitEarnedRuns = Just 3 }
       scorePitching standardPitching line `shouldBe` Points 19
 
-    it "denies a quality start: 5.2 IP, 3 ER" $ do
-      let line = emptyPitching { pitInningsPitched = Just "5.2", pitEarnedRuns = Just 3 }
-      -- 17/3 IP * 3 - 3 = 14
+    it "denies a quality start: 17 outs (5.2 IP), 3 ER" $ do
+      let line = emptyPitching { pitOuts = Just 17, pitEarnedRuns = Just 3 }
       scorePitching standardPitching line `shouldBe` Points 14
 
-    it "denies a quality start: 6.0 IP, 4 ER" $ do
-      let line = emptyPitching { pitInningsPitched = Just "6.0", pitEarnedRuns = Just 4 }
-      -- 18 - 4 = 14
+    it "denies a quality start: 18 outs (6.0 IP), 4 ER" $ do
+      let line = emptyPitching { pitOuts = Just 18, pitEarnedRuns = Just 4 }
       scorePitching standardPitching line `shouldBe` Points 14
 
---------------------------------------------------------------------------------
--- Fixtures
 
 standardBatting :: BattingMultipliers
 standardBatting = BattingMultipliers
@@ -118,8 +112,6 @@ standardPitching = PitchingMultipliers
   , pmLoss          = -3
   }
 
---------------------------------------------------------------------------------
--- Generators
 
 genBattingLine :: Gen BattingStats
 genBattingLine = do

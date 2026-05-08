@@ -1,56 +1,72 @@
-{-# LANGUAGE TypeFamilies      #-}
-{-# LANGUAGE DataKinds         #-}
-{-# LANGUAGE TypeOperators     #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE GADTs             #-}
-{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Pelotero.Effects.LeagueConfig
-  ( LeagueConfig(..)
+  ( LeagueConfig
   , insertLeagueConfig
   , updateLeagueConfig
   , getById
   , getByLeagueId
+  , getAll
   , runLeagueConfigDB
   ) where
 
-import Data.Text (Text)
-
-import Effectful (Effect, Dispatch(Dynamic), DispatchOf)
-import qualified Effectful as E
-import Effectful.Dispatch.Dynamic (interpret_, send)
-
-import qualified Pelotero.DB.LeagueConfig as LCRepo
-import           Pelotero.DB.LeagueConfig (LeagueConfigRow)
-import           Pelotero.Domain.Id       (DbLeagueConfigId)
-import           Pelotero.Effects.Database (Database, runTx)
+import           Data.Text                  (Text)
+import           Effectful
+import           Effectful.Dispatch.Dynamic
+import qualified Pelotero.DB.LeagueConfig   as LCRepo
+import           Pelotero.DB.LeagueConfig   (LeagueConfigRow)
+import           Pelotero.Domain.Id
+import           Pelotero.Effects.Database
 
 data LeagueConfig :: Effect where
-  InsertLeagueConfig :: LeagueConfigRow                       -> LeagueConfig m DbLeagueConfigId
-  UpdateLeagueConfig :: DbLeagueConfigId -> LeagueConfigRow   -> LeagueConfig m ()
-  GetById            :: DbLeagueConfigId                      -> LeagueConfig m (Maybe LeagueConfigRow)
-  GetByLeagueId      :: Text                                  -> LeagueConfig m (Maybe LeagueConfigRow)
+  InsertLeagueConfig :: LeagueConfigRow                     -> LeagueConfig m DbLeagueConfigId
+  UpdateLeagueConfig :: DbLeagueConfigId -> LeagueConfigRow -> LeagueConfig m ()
+  GetById            :: DbLeagueConfigId                    -> LeagueConfig m (Maybe LeagueConfigRow)
+  GetByLeagueId      :: Text                                -> LeagueConfig m (Maybe LeagueConfigRow)
+  GetAll             ::                                        LeagueConfig m [LeagueConfigRow]
 
-type instance DispatchOf LeagueConfig = 'Dynamic
+type instance DispatchOf LeagueConfig = Dynamic
 
-insertLeagueConfig :: LeagueConfig E.:> es => LeagueConfigRow -> E.Eff es DbLeagueConfigId
-insertLeagueConfig = send . InsertLeagueConfig
+insertLeagueConfig
+  :: LeagueConfig :> es
+  => LeagueConfigRow
+  -> Eff es DbLeagueConfigId
+insertLeagueConfig r = send (InsertLeagueConfig r)
 
-updateLeagueConfig :: LeagueConfig E.:> es => DbLeagueConfigId -> LeagueConfigRow -> E.Eff es ()
-updateLeagueConfig lcid row = send (UpdateLeagueConfig lcid row)
+updateLeagueConfig
+  :: LeagueConfig :> es
+  => DbLeagueConfigId
+  -> LeagueConfigRow
+  -> Eff es ()
+updateLeagueConfig lcid r = send (UpdateLeagueConfig lcid r)
 
-getById :: LeagueConfig E.:> es => DbLeagueConfigId -> E.Eff es (Maybe LeagueConfigRow)
-getById = send . GetById
+getById
+  :: LeagueConfig :> es
+  => DbLeagueConfigId
+  -> Eff es (Maybe LeagueConfigRow)
+getById lcid = send (GetById lcid)
 
-getByLeagueId :: LeagueConfig E.:> es => Text -> E.Eff es (Maybe LeagueConfigRow)
-getByLeagueId = send . GetByLeagueId
+getByLeagueId
+  :: LeagueConfig :> es
+  => Text
+  -> Eff es (Maybe LeagueConfigRow)
+getByLeagueId t = send (GetByLeagueId t)
+
+getAll :: LeagueConfig :> es => Eff es [LeagueConfigRow]
+getAll = send GetAll
 
 runLeagueConfigDB
-  :: Database E.:> es
-  => E.Eff (LeagueConfig : es) a
-  -> E.Eff es a
-runLeagueConfigDB = interpret_ $ \case
-  InsertLeagueConfig row     -> runTx (LCRepo.insertLeagueConfigT row)
+  :: Database :> es
+  => Eff (LeagueConfig : es) a
+  -> Eff es a
+runLeagueConfigDB = interpret $ \_ -> \case
+  InsertLeagueConfig r       -> runTx (LCRepo.insertLeagueConfigT r)
   UpdateLeagueConfig lcid r  -> runTx (LCRepo.updateLeagueConfigT lcid r)
   GetById lcid               -> runTx (LCRepo.getByIdT lcid)
-  GetByLeagueId lid          -> runTx (LCRepo.getByLeagueIdT lid)
+  GetByLeagueId t            -> runTx (LCRepo.getByLeagueIdT t)
+  GetAll                     -> runTx LCRepo.getAllT

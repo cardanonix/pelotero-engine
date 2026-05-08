@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications  #-}
 {-# LANGUAGE TypeOperators     #-}
 {-# LANGUAGE FlexibleContexts  #-}
 
@@ -10,6 +11,7 @@ import           Data.Time                (UTCTime(..), fromGregorian, secondsTo
 import           Test.Hspec
 
 import           Effectful                (runEff)
+import           Effectful.Error.Static   (runErrorNoCallStack)
 
 import qualified Pelotero.DB.BoxscoreEntry as Box
 import qualified Pelotero.DB.Game          as Game
@@ -24,6 +26,7 @@ import           Pelotero.DB.LeagueConfig  (LeagueConfigRow(..))
 import           Pelotero.DB.LeagueTeam    (LeagueTeamRow(..))
 import           Pelotero.DB.LineupSlot    (LineupSlotRow(..))
 import           Pelotero.DB.Player        (PlayerRow(..))
+import           Pelotero.DB.Pool          (DBError)
 import           Pelotero.DB.Team          (TeamRow(..))
 import           Pelotero.DB.Provider      (ProviderName(..))
 import           Pelotero.Domain.Id
@@ -39,12 +42,15 @@ import           Pelotero.Domain.Scoring
                    , Points(..)
                    )
 
-import           Pelotero.Effects.BoxscoreEntry (runBoxscoreEntryDB)
-import           Pelotero.Effects.Database      (runDatabasePool, runTx)
-import           Pelotero.Effects.Games         (runGamesDB)
-import           Pelotero.Effects.LeagueConfig  (runLeagueConfigDB)
-import           Pelotero.Effects.LeagueTeam    (runLeagueTeamDB)
-import           Pelotero.Effects.LineupSlot    (runLineupSlotDB)
+import           Pelotero.Effects.BoxscoreEntry  (runBoxscoreEntryDB)
+import           Pelotero.Effects.Database       (runDatabasePool, runTx)
+import           Pelotero.Effects.Games          (runGamesDB)
+import           Pelotero.Effects.LeagueConfig   (runLeagueConfigDB)
+import           Pelotero.Effects.LeagueTeam     (runLeagueTeamDB)
+import           Pelotero.Effects.LineupSlot     (runLineupSlotDB)
+import           Pelotero.Effects.LineupSnapshot (runLineupSnapshotDB)
+import           Pelotero.Effects.Logging        (runLoggingDiscard)
+import qualified Pelotero.Lineup.Snapshot        as Snap
 import           Pelotero.Score
                    ( LeagueScore(..)
                    , PlayerScore(..)
@@ -52,20 +58,28 @@ import           Pelotero.Score
                    , scoreLeague
                    )
 
-import           IntegrationTest.Setup    (cleanDatabase, withTestPool)
+import           IntegrationTest.Setup
+                   ( cleanDatabase
+                   , runEffectsOrFail
+                   , withTestPool
+                   )
 
 spec :: Spec
 spec = around withTestPool $
-  describe "Pelotero.Score.scoreLeague (end-to-end)" $ do
+  describe "Pelotero.Score.scoreLeague (end-to-end, via lineup snapshots)" $ do
 
     it "scores a one-team league with one game's batting and pitching" $ \pool -> do
       cleanDatabase pool
 
-      result <- runEff
+      result <- runEffectsOrFail
+              . runEff
+              . runErrorNoCallStack @DBError
+              . runLoggingDiscard
               . runDatabasePool pool
               . runLeagueConfigDB
               . runLeagueTeamDB
               . runLineupSlotDB
+              . runLineupSnapshotDB
               . runGamesDB
               . runBoxscoreEntryDB
               $ do
@@ -76,7 +90,7 @@ spec = around withTestPool $
                     , ltLeagueConfigId = lcid
                     , ltTeamKey        = "team-one"
                     , ltName           = "Team One"
-                    , ltOwner          = "owner-one"
+                    , ltOwner           = "owner-one"
                     }
 
                   pidBat <- runTx (P.insertPlayerT (mkPlayer "score-bat"))
@@ -96,7 +110,6 @@ spec = around withTestPool $
                     , gameRowLastSyncedAt       = Nothing
                     }
 
-                  -- Batting line: 1 HR (4) + 2 RBI (2) + 1 R (1) = 7.
                   runTx $ Box.upsertBattingT (zeroBatting gid pidBat)
                     { battingTeamId   = Just atid
                     , battingHomeRuns = Just 1
@@ -104,12 +117,16 @@ spec = around withTestPool $
                     , battingRuns     = Just 1
                     }
 
-                  -- Pitching line: 18 outs * 3 + QS 4 - 3 ER = 19.
                   runTx $ Box.upsertPitchingT (zeroPitching gid pidPit)
                     { pitchingTeamId             = Just htid
                     , pitchingInningsPitchedOuts = Just 18
                     , pitchingEarnedRuns         = Just 3
                     }
+
+                  -- Snapshot the team's lineup for this game BEFORE scoring.
+                  -- Phase B.3: scoring reads from snapshots, not current
+                  -- lineup_slot rows.
+                  _ <- Snap.snapshotLineupsForTeam ltid gid
 
                   scoreLeague lcid
 
@@ -125,23 +142,31 @@ spec = around withTestPool $
 
     it "returns Nothing for a nonexistent league config id" $ \pool -> do
       cleanDatabase pool
-      result <- runEff
+      result <- runEffectsOrFail
+              . runEff
+              . runErrorNoCallStack @DBError
+              . runLoggingDiscard
               . runDatabasePool pool
               . runLeagueConfigDB
               . runLeagueTeamDB
               . runLineupSlotDB
+              . runLineupSnapshotDB
               . runGamesDB
               . runBoxscoreEntryDB
               $ scoreLeague (DbLeagueConfigId 999999)
       result `shouldBe` Nothing
 
-    it "scores zero when the lineup is empty" $ \pool -> do
+    it "scores zero when no games (and no snapshots) exist in the period" $ \pool -> do
       cleanDatabase pool
-      result <- runEff
+      result <- runEffectsOrFail
+              . runEff
+              . runErrorNoCallStack @DBError
+              . runLoggingDiscard
               . runDatabasePool pool
               . runLeagueConfigDB
               . runLeagueTeamDB
               . runLineupSlotDB
+              . runLineupSnapshotDB
               . runGamesDB
               . runBoxscoreEntryDB
               $ do
@@ -162,8 +187,6 @@ spec = around withTestPool $
           _ -> expectationFailure "expected exactly one team"
         Nothing -> expectationFailure "scoreLeague returned Nothing"
 
---------------------------------------------------------------------------------
--- Fixtures
 
 sumPlayerTotals :: TeamScore -> Points
 sumPlayerTotals = foldr addP (Points 0) . tsPlayers
