@@ -225,6 +225,7 @@ test-suite pelotero-integration-test
     IntegrationTest.SyncPlayersSpec
     IntegrationTest.ScoreSpec
     IntegrationTest.SmokeSpec
+    IntegrationTest.Fixtures
 
   build-depends:    base
                   , pelotero-engine
