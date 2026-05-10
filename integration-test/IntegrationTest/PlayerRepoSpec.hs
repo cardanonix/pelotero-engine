@@ -1,4 +1,3 @@
--- | Round-trip tests for "Pelotero.DB.Player".
 module IntegrationTest.PlayerRepoSpec (spec) where
 
 import Test.Hspec

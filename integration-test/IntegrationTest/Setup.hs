@@ -5,21 +5,27 @@ module IntegrationTest.Setup
   , cleanDatabase
   ) where
 
-import Control.Exception        (bracket, throwIO)
-import qualified Hasql.Session     as Session
-import qualified Hasql.Statement   as Statement
-import qualified Hasql.Decoders    as Decoders
-import qualified Hasql.Encoders    as Encoders
-import qualified Hasql.Transaction as Tx
+import           Control.Exception        (bracket, throwIO)
+import qualified Hasql.Decoders           as Decoders
+import qualified Hasql.Encoders           as Encoders
+import qualified Hasql.Session            as Session
+import qualified Hasql.Statement          as Statement
+import qualified Hasql.Transaction        as Tx
 
-import           Pelotero.DB.Pool (DBError, Pool)
-import qualified Pelotero.DB.Pool as DBPool
+import           Pelotero.DB.Pool         (DBError, Pool)
+import qualified Pelotero.DB.Pool         as DBPool
 
+-- | Acquire a connection pool for the duration of an action and release
+-- it afterwards. Intended to be used with hspec's 'aroundAll' so that
+-- one pool serves the entire suite (per-test isolation comes from
+-- 'runRolledBack', not from per-test pool acquisition).
 withTestPool :: (Pool -> IO a) -> IO a
 withTestPool action = do
   cfg <- DBPool.loadDBConfig
   bracket (DBPool.acquire cfg) DBPool.release action
 
+-- | Run a Transaction and roll it back regardless of outcome.
+-- Each test starts with a clean slate without paying for a fresh pool.
 runRolledBack :: Pool -> Tx.Transaction a -> IO a
 runRolledBack pool tx = do
   r <- DBPool.runTransaction pool $ do
@@ -30,10 +36,6 @@ runRolledBack pool tx = do
     Right a  -> pure a
     Left err -> throwIO (userError ("DB error in test: " <> show err))
 
--- | For tests that go through the effect stack: takes the result of
--- a fully-discharged @runEff . runErrorNoCallStack @DBError . ...@
--- chain and turns 'Left' into a thrown exception. Tests then assert
--- against the bare success value.
 runEffectsOrFail :: IO (Either DBError a) -> IO a
 runEffectsOrFail io = do
   r <- io
@@ -41,6 +43,11 @@ runEffectsOrFail io = do
     Right a  -> pure a
     Left err -> throwIO (userError ("DB error in test: " <> show err))
 
+-- | TRUNCATE every table the integration suite touches. Use sparingly
+-- -- the rolled-back transaction pattern in 'runRolledBack' is cheaper
+-- and gives you isolation for free. This is for tests that genuinely
+-- need to commit (e.g. effect interpreter tests that run multiple
+-- transactions).
 cleanDatabase :: Pool -> IO ()
 cleanDatabase pool = do
   r <- DBPool.runSession pool $ Session.statement () truncateStmt
@@ -60,6 +67,7 @@ cleanDatabase pool = do
       , "game_external_id, "
       , "game_player_batting, "
       , "game_player_pitching, "
+      , "lineup_snapshot, "
       , "provider_fetch_log, "
       , "league_config, "
       , "league_team, "

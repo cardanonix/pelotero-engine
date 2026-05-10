@@ -1,4 +1,3 @@
--- | Round-trip tests for "Pelotero.DB.Game".
 module IntegrationTest.GameRepoSpec (spec) where
 
 import Data.Time (fromGregorian)

@@ -1,4 +1,3 @@
--- | Round-trip tests for "Pelotero.DB.FetchLog".
 module IntegrationTest.FetchLogRepoSpec (spec) where
 
 import Test.Hspec

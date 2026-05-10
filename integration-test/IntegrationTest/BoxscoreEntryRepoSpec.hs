@@ -1,4 +1,3 @@
--- | Round-trip tests for "Pelotero.DB.BoxscoreEntry".
 module IntegrationTest.BoxscoreEntryRepoSpec (spec) where
 
 import Data.Time (fromGregorian)

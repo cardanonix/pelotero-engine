@@ -1,5 +1,3 @@
--- | Round-trip tests for "Pelotero.DB.Team". Every test runs in a
--- transaction that is rolled back on exit, so the DB state is unchanged.
 module IntegrationTest.TeamRepoSpec (spec) where
 
 import Test.Hspec
