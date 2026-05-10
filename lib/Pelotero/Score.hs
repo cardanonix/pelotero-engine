@@ -5,30 +5,30 @@ module Pelotero.Score
   ( PlayerScore (..)
   , TeamScore (..)
   , LeagueScore (..)
-    -- * Pure scoring kernel
+
   , rowToBattingStats
   , rowToPitchingStats
   , sumBattingPoints
   , sumPitchingPoints
   , scorePlayerPure
-    -- * Effectful entry points
+
   , scoreLeague
   , scoreTeam
-    -- * Internals exposed for testing
+
   , buildPlayerMaps
   ) where
 
 import           Data.Int                       (Int32)
 import qualified Data.Map.Strict                as Map
-import           Data.Maybe                     (fromMaybe, mapMaybe)
+import           Data.Maybe                     (mapMaybe)
 import           Data.Time.Calendar             (Day)
 import           Data.Time.Clock                (utctDay)
 import           Effectful
 
 import           Pelotero.DB.BoxscoreEntry      (BattingRow (..), PitchingRow (..))
 import           Pelotero.DB.Game               (GameRow (..))
-import           Pelotero.DB.LeagueConfig       (LeagueConfigRow (..))
-import           Pelotero.DB.LeagueTeam         (LeagueTeamRow (..))
+import           Pelotero.DB.LeagueConfig       (LoadedLeagueConfig (..))
+import           Pelotero.DB.LeagueTeam         (LoadedLeagueTeam (..))
 import           Pelotero.DB.LineupSnapshot     (LineupSnapshotRow (..))
 import           Pelotero.Domain.Id
 import           Pelotero.Domain.Scoring
@@ -54,10 +54,6 @@ import           Pelotero.Effects.LeagueTeam    (LeagueTeam)
 import qualified Pelotero.Effects.LineupSnapshot as LSnap
 import           Pelotero.Effects.LineupSnapshot (LineupSnapshot)
 
--- ============================================================================
--- Result types
--- ============================================================================
-
 data PlayerScore = PlayerScore
   { psPlayer         :: !DbPlayerId
   , psBattingPoints  :: !Points
@@ -80,10 +76,6 @@ data LeagueScore = LeagueScore
   , lscTeams       :: ![TeamScore]
   }
   deriving stock (Show, Eq)
-
--- ============================================================================
--- Pure kernel (unchanged from pre-B.3)
--- ============================================================================
 
 rowToBattingStats :: BattingRow -> BattingStats
 rowToBattingStats r = emptyBatting
@@ -184,10 +176,6 @@ scorePlayerPure scoring bs ps pid =
        , psTotalPoints    = addPoints bp pp
        }
 
--- ============================================================================
--- Effectful: snapshot-driven scoring
--- ============================================================================
-
 scoreLeague
   :: ( LeagueConfig   :> es
      , LeagueTeam     :> es
@@ -202,9 +190,9 @@ scoreLeague lcid = do
   case mConfig of
     Nothing     -> pure Nothing
     Just config -> do
-      let startDay = utctDay (lcScoringStart config)
-          endDay   = utctDay (lcScoringEnd   config)
-          scoring  = lcScoring config
+      let startDay = utctDay (llcScoringStart config)
+          endDay   = utctDay (llcScoringEnd   config)
+          scoring  = llcScoring config
       gameIds  <- collectGameIds startDay endDay
       teams    <- LT.getForLeague lcid
       (bm, pm) <- buildPlayerMaps startDay endDay
@@ -231,9 +219,9 @@ scoreTeam lcid ltid = do
   mTeam   <- LT.getById ltid
   case (mConfig, mTeam) of
     (Just config, Just team) -> do
-      let startDay = utctDay (lcScoringStart config)
-          endDay   = utctDay (lcScoringEnd   config)
-          scoring  = lcScoring config
+      let startDay = utctDay (llcScoringStart config)
+          endDay   = utctDay (llcScoringEnd   config)
+          scoring  = llcScoring config
       gameIds  <- collectGameIds startDay endDay
       (bm, pm) <- buildPlayerMaps startDay endDay
       Just <$> scoreOneTeam scoring bm pm gameIds team
@@ -246,14 +234,6 @@ collectGameIds startDay endDay = do
   games <- G.getGamesByDateRange startDay endDay
   pure (mapMaybe gameRowId games)
 
--- | Bucket batting and pitching rows for the period into per-player
--- lists. Two effect calls total: one date-range SELECT for batting
--- joined against 'gameSchema' on 'game_date' (and the pitching mirror).
--- Independent of period length, so an N-day backfill is two round
--- trips, not @2N@. Pre-C.2 this was per-game. The downstream filter
--- in 'scoreOnePlayerForGame' is unchanged: each row carries its own
--- 'battingGameId' / 'pitchingGameId', so per-game scoring against the
--- bucketed maps still works.
 buildPlayerMaps
   :: BoxscoreEntry :> es
   => Day -> Day
@@ -273,10 +253,10 @@ scoreOneTeam
   -> Map.Map DbPlayerId [BattingRow]
   -> Map.Map DbPlayerId [PitchingRow]
   -> [DbGameId]
-  -> LeagueTeamRow
+  -> LoadedLeagueTeam
   -> Eff es TeamScore
 scoreOneTeam scoring bm pm gameIds team = do
-  let ltid = fromMaybe (error "scoreOneTeam: team without surrogate id") (ltId team)
+  let ltid = lltId team
   perGame <- traverse (scoreTeamForGame scoring bm pm ltid) gameIds
   let allScores      = concat perGame
       grouped        = Map.fromListWith mergePlayerScores

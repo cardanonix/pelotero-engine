@@ -23,19 +23,18 @@ spec = around withTestPool $
         LC.getByIdT lcid
       case mGot of
         Just got -> do
-          lcLeagueId got     `shouldBe` "lc-rt-league"
-          lcCommissioner got `shouldBe` "test-commish"
-          lcStatus got       `shouldBe` "draft"
+          LC.llcLeagueId     got `shouldBe` "lc-rt-league"
+          LC.llcCommissioner got `shouldBe` "test-commish"
+          LC.llcStatus       got `shouldBe` "draft"
         Nothing -> expectationFailure "round-trip read returned Nothing"
 
     it "preserves JSONB-encoded scoring config across round trip" $ \pool -> do
       mGot <- runRolledBack pool $ do
-        let cfg = (mkConfig "lc-jsonb")
-              { lcScoring = customScoring }
+        let cfg = (mkConfig "lc-jsonb") { lcScoring = customScoring }
         lcid <- LC.insertLeagueConfigT cfg
         LC.getByIdT lcid
       case mGot of
-        Just got -> lcScoring got `shouldBe` customScoring
+        Just got -> LC.llcScoring got `shouldBe` customScoring
         Nothing  -> expectationFailure "round-trip read returned Nothing"
 
     it "preserves JSONB-encoded roster and lineup limits" $ \pool -> do
@@ -48,8 +47,8 @@ spec = around withTestPool $
         LC.getByIdT lcid
       case mGot of
         Just got -> do
-          lcRosterLimits got `shouldBe` customRosterLimits
-          lcLineupLimits got `shouldBe` customLineupLimits
+          LC.llcRosterLimits got `shouldBe` customRosterLimits
+          LC.llcLineupLimits got `shouldBe` customLineupLimits
         Nothing -> expectationFailure "round-trip read returned Nothing"
 
     it "getByLeagueId looks up by the natural league_id" $ \pool -> do
@@ -57,7 +56,7 @@ spec = around withTestPool $
         _ <- LC.insertLeagueConfigT (mkConfig "lc-bylid")
         LC.getByLeagueIdT "lc-bylid-league"
       case mGot of
-        Just got -> lcLeagueId got `shouldBe` "lc-bylid-league"
+        Just got -> LC.llcLeagueId got `shouldBe` "lc-bylid-league"
         Nothing  -> expectationFailure "expected to find by league_id"
 
     it "getByLeagueId returns Nothing for unknown ids" $ \pool -> do
@@ -75,8 +74,8 @@ spec = around withTestPool $
         LC.getByIdT lcid
       case mGot of
         Just got -> do
-          lcCommissioner got `shouldBe` "new-commish"
-          lcStatus got       `shouldBe` "active"
+          LC.llcCommissioner got `shouldBe` "new-commish"
+          LC.llcStatus       got `shouldBe` "active"
         Nothing -> expectationFailure "expected to find updated config"
 
 mkConfig :: Text -> LeagueConfigRow

@@ -278,24 +278,58 @@ After that the rest is mechanical. The plan above gets you to a state where your
 ___________________
 
 Updated progress:
-Status check against the chase bundle: your "this week" list is fully landed. A.1 (ExternalId), A.6 (handChar), A.2 (Logging effect with the three interpreters), A.3 (typed DBError flowing through runDatabasePool), B.1 (canonical pitOuts, with WireFieldDiscrepancy warnings on disagreement), and B.3 (LineupSnapshot table, effect, orchestration, V0030 migration, Score reading from snapshots). The Score module's per-game scoring loop reading from getSnapshotForTeamGame is exactly the shape you sketched. Good.
-What's left:
 
-A.4: JSON instances out of Domain (newtype wrappers in Pelotero.DB.JsonB)
-A.5: ProviderKeyed typeclass (collapses Player/Team/Game external-id boilerplate)
-B.2: order_index columns on roster_slot and lineup_slot
-C.1: idempotency-by-SHA in syncRosters and syncSchedule (complete)
-C.2: single-SELECT scoring via date-range box queries
-D.1/D.2: Draft state machine and AutoDraft port
-E.1/E.2: CLI consolidation and old_src/ deletion
+The Draft consolidation is done. Single transition implementation (the crem state machine), no duplication, the Show SomeDraftStateG instance you added makes future debugging easier. The two new Hedgehog properties — rejection invariance and "Complete is absorbing" — are stronger than the original agreement test, because they assert the machine respects rules without reference to a second source. If you ever extend the state machine with new transitions, those properties keep earning their keep automatically.
+The partial-function fix in Score is also done. lltId :: DbLeagueTeamId and llcId :: DbLeagueConfigId are total. The error "scoreOneTeam: team without surrogate id" is gone. The Loaded* types correctly model the read-path-totality invariant.
+Where you are on the original plan:
 
-Honest take on ordering: none of these block each other. B.3 was the load-bearing piece and it's done. The rest is genuinely parallelizable cleanup, your "rest is mechanical" framing was right.
-My recommendation is C.1 first, then A.5.
-C.1 because it's roughly ten lines per function and produces a real operational change: today, re-running syncRosters against an unchanged payload still does the full team+player upsert and writes a fetch-log row. With the SHA short-circuit, re-runs become free for unchanged data, which makes cron-driven sync sane. The FetchLog already stores the SHA you need; you're using existing infrastructure.
-A.5 second because it's the big satisfying collapse and the three callers (DB.Player, DB.Team, DB.Game plus their effect interpreters) have genuinely earned the abstraction. A.4 is honestly a lower-priority layering cleanup and orthogonal to A.5 since LeagueConfig has no external IDs and so isn't a ProviderKeyed candidate. Doing A.5 first lets the typeclass shape stabilize against three real callers before you add wrapper noise from A.4.
-One pushback worth airing: B.2 (order_index) is in the plan but has zero current consumers. Adding the column now means a migration, four code touches, and a Hedgehog property for an invariant nobody reads. I'd defer B.2 until the first feature that actually wants positional batting order, and add the column as part of that feature's work. Landing it speculatively is the kind of thing that bit-rots and you discover six months later that the order field was never actually populated correctly because nothing tested it. Your call, but the plan's "today no consumer cares" framing is itself the argument for not doing it yet.
-Want me to start on C.1? I'd write the complete updated Pelotero.Sync.Players and Pelotero.Sync.Schedule with the SHA short-circuit at the top of each, plus the Logging.logFM InfoS line for the skip case so the skip is observable. Should be a tight diff.
+A.1 ExternalId — done
+A.2 Logging — done
+A.3 typed DBError — done
+A.4 JsonB wrappers — done
+A.5 ProviderKeyed — done
+A.6 handChar — done
+B.1 canonical pitOuts — done
+B.3 lineup snapshots — done
+C.1 SHA idempotency — done (rosters, schedule, boxscores)
+C.2 single-SELECT scoring — done
+D.1/D.2 Draft state machine and AutoDraft — done and now consolidated
 
+Plus two correctness items not on the original list:
 
-___________________
-expect the same run/run_/run1 and NumberOfRowsAffected → NoReturning edits across the other DB modules (Game.hs, BoxscoreEntry.hs, LeagueConfig.hs, LeagueTeam.hs, RosterSlot.hs, LineupSlot.hs, LineupSnapshot.hs, PlayerRanking.hs, DraftPick.hs, FetchLog.hs). The pattern is identical: select → run, insert/update with Returning fld → run1, insert/update with NoReturning → run_. A bulk grep for NumberOfRowsAffected and for Tx.statement () \$ insert/Tx.statement () \$ update (without run) should turn up everywhere that needs touching.  
+Score.scoreOneTeam partial function — done
+Loaded* types for read-path totality — done (LeagueTeam, LeagueConfig)
+
+Remaining:
+
+B.2 order_index — I'd still defer until a feature actually needs it
+E.1 CLI consolidation — app/Main.hs is still a stub; pelotero <subcommand> shape not yet wired
+E.2 delete old_src/ — once E.1 lands and you're confident nothing in the legacy tree is still load-bearing
+
+I'd take a beat before E.1. You've made a lot of changes in a short window, all of them green now. Sit on it for a day, run the binary against a real season's worth of MLB fixtures end-to-end (sync → snapshot → score), make sure nothing funny shows up that the unit tests don't catch. Then E.1 is mostly mechanical optparse-applicative wiring, and you can do it without dragging behind half-baked correctness work.
+Want to run an end-to-end smoke against real fixtures next, or move straight to E.1?
+
+another update:
+Reviewed the plan and the code. Picking up where the prior thread left off, with the question "smoke test vs E.1" sitting on the table.
+On the smoke test vs E.1 question: smoke test first, and the plan is correct to push for it. E.1 is mechanical optparse-applicative wiring. If the engine is wrong end-to-end, you don't want to discover that while also debugging argument parsing. The smoke test exercises the actual integration: fetch → upsert → snapshot → score → re-score-after-edit. If that's green, E.1 becomes a one-evening job.
+But before you run that smoke, a few honest observations on the code as it stands:
+Bugs and smells worth fixing now
+
+pelotero-engine.cabal lists effectful twice in the library build-depends. Cabal will accept it, but it's noise. Drop the bare , effectful line.
+Pelotero.DB.Pool.runTransaction always uses TxS.Write mode. Every getById, getAll, getByDateRange is opened as a write transaction. Functionally fine but it wastes the read/write distinction Postgres gives you for free. Either thread the mode through or split into runTransactionR / runTransactionW. Not load-bearing today; will matter the moment you have concurrent readers.
+N+1 in scoring snapshot reads. scoreOneTeam does traverse (scoreTeamForGame ...) gameIds, and scoreTeamForGame calls LSnap.getSnapshotForTeamGame ltid gid. So for L leagues × T teams × G games you do LTG snapshot queries. C.2 fixed this for batting/pitching with getBattingForDateRange; you didn't do the equivalent for snapshots. A getSnapshotsForDateRange :: Day -> Day -> Tx.Transaction [LineupSnapshotRow] joined to game on date, then grouped client-side by (league_team_id, game_id), would collapse all of them to one. For a season it's the difference between thousands of round-trips and one.
+Pelotero.Sync.Boxscores.upsertEntries silently drops boxscore entries for players not yet in the DB (the Nothing branch on Players.lookupPlayerByExternalId). At minimum log a warning. Right now an unsynced player will just vanish from scoring with no signal.
+runDatabasePool calls logFM ErrorS before throwError. If your Logging interpreter ever does anything that can fail (it can't with the current Katip one, but the Capture one writes through an IORef which can't fail either, so practically OK), the original DBError gets masked. Low-priority but the pattern of "log then throw" inside an effect handler is worth being aware of.
+The plan deferring B.2 is fine for current scoring, but be honest with yourself: any positional batting-order scoring (e.g., leadoff bonus, cleanup penalty) needs order_index in lineup_snapshot too, not just lineup_slot. If you ever turn that on, you have to backfill snapshots, and you can't because the original lineup ordering is lost the moment the owner edits. Document this explicitly, or the deferral becomes a debt note nobody re-reads.
+
+Smoke test scenarios I'd actually run
+The point of a smoke isn't "does it not crash." It's "does the engine produce numbers I can defend." Scenarios in priority order:
+
+Sync a known week of games end-to-end (rosters → schedule → boxscores), then score against fixtures where you can hand-verify a single player's points against the multipliers. One starting pitcher's QS bonus is enough to expose 10 bugs.
+Re-run scoring with no data changes. Numbers must be byte-identical. If they drift, you have non-determinism somewhere (UTC handling, ordering, Map iteration on stale snapshots).
+Edit a lineup mid-period, re-snapshot, re-score. Games before the edit must score against the old snapshot, games after against the new. This is the whole point of B.3 and the only real test of it.
+Run boxscore sync twice with no upstream change. SHA idempotency must short-circuit. Confirm via the boxGamesUnchanged count, not just absence of errors.
+Drop one game's snapshot, re-score. Team's total should decrease by exactly that game's contribution. If it doesn't, your snapshot read is broken or your merge is double-counting.
+
+Once those are green, E.1 is safe. Until then it's premature.
+One last thing: you said you want full files when you ask for code. Nothing here required code edits. When you're ready to address #1, #3, or #4 above, ask and I'll cut the files.

@@ -30,9 +30,9 @@ spec = around withTestPool $
         LT.getByIdT ltid
       case mGot of
         Just got -> do
-          ltTeamKey got `shouldBe` "alpha-key"
-          ltName got    `shouldBe` "alpha-name"
-          ltOwner got   `shouldBe` "alpha-owner"
+          LT.lltTeamKey got `shouldBe` "alpha-key"
+          LT.lltName    got `shouldBe` "alpha-name"
+          LT.lltOwner   got `shouldBe` "alpha-owner"
         Nothing -> expectationFailure "round-trip read returned Nothing"
 
     it "lookupByKey finds a team by (league_config_id, team_key)" $ \pool -> do
@@ -41,7 +41,7 @@ spec = around withTestPool $
         _    <- LT.insertLeagueTeamT (mkTeam lcid "beta")
         LT.lookupByKeyT lcid "beta-key"
       case mGot of
-        Just got -> ltTeamKey got `shouldBe` "beta-key"
+        Just got -> LT.lltTeamKey got `shouldBe` "beta-key"
         Nothing  -> expectationFailure "expected to find by key"
 
     it "lookupByKey returns Nothing for an unknown key" $ \pool -> do
@@ -57,7 +57,7 @@ spec = around withTestPool $
         _    <- LT.insertLeagueTeamT (mkTeam lcid "beta")
         _    <- LT.insertLeagueTeamT (mkTeam lcid "gamma")
         rows <- LT.getForLeagueT lcid
-        pure (sort (map ltName rows))
+        pure (sort (map LT.lltName rows))
       names `shouldBe` ["alpha-name", "beta-name", "gamma-name"]
 
     it "getForLeague does not bleed across leagues" $ \pool -> do
@@ -81,8 +81,8 @@ spec = around withTestPool $
         LT.getByIdT ltid
       case mGot of
         Just got -> do
-          ltName got  `shouldBe` "renamed"
-          ltOwner got `shouldBe` "new-owner"
+          LT.lltName  got `shouldBe` "renamed"
+          LT.lltOwner got `shouldBe` "new-owner"
         Nothing -> expectationFailure "expected to find updated team"
 
     it "deleteT removes the named team" $ \pool -> do

@@ -19,16 +19,16 @@ import           Data.Text                  (Text)
 import           Effectful
 import           Effectful.Dispatch.Dynamic
 import qualified Pelotero.DB.LeagueConfig   as LCRepo
-import           Pelotero.DB.LeagueConfig   (LeagueConfigRow)
+import           Pelotero.DB.LeagueConfig   (LeagueConfigRow, LoadedLeagueConfig)
 import           Pelotero.Domain.Id
 import           Pelotero.Effects.Database
 
 data LeagueConfig :: Effect where
   InsertLeagueConfig :: LeagueConfigRow                     -> LeagueConfig m DbLeagueConfigId
   UpdateLeagueConfig :: DbLeagueConfigId -> LeagueConfigRow -> LeagueConfig m ()
-  GetById            :: DbLeagueConfigId                    -> LeagueConfig m (Maybe LeagueConfigRow)
-  GetByLeagueId      :: Text                                -> LeagueConfig m (Maybe LeagueConfigRow)
-  GetAll             ::                                        LeagueConfig m [LeagueConfigRow]
+  GetById            :: DbLeagueConfigId                    -> LeagueConfig m (Maybe LoadedLeagueConfig)
+  GetByLeagueId      :: Text                                -> LeagueConfig m (Maybe LoadedLeagueConfig)
+  GetAll             ::                                        LeagueConfig m [LoadedLeagueConfig]
 
 type instance DispatchOf LeagueConfig = Dynamic
 
@@ -48,16 +48,16 @@ updateLeagueConfig lcid r = send (UpdateLeagueConfig lcid r)
 getById
   :: LeagueConfig :> es
   => DbLeagueConfigId
-  -> Eff es (Maybe LeagueConfigRow)
+  -> Eff es (Maybe LoadedLeagueConfig)
 getById lcid = send (GetById lcid)
 
 getByLeagueId
   :: LeagueConfig :> es
   => Text
-  -> Eff es (Maybe LeagueConfigRow)
+  -> Eff es (Maybe LoadedLeagueConfig)
 getByLeagueId t = send (GetByLeagueId t)
 
-getAll :: LeagueConfig :> es => Eff es [LeagueConfigRow]
+getAll :: LeagueConfig :> es => Eff es [LoadedLeagueConfig]
 getAll = send GetAll
 
 runLeagueConfigDB

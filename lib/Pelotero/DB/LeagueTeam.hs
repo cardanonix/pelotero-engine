@@ -11,6 +11,7 @@
 
 module Pelotero.DB.LeagueTeam
   ( LeagueTeamRow(..)
+  , LoadedLeagueTeam(..)
   , insertLeagueTeamT
   , updateLeagueTeamT
   , getByIdT
@@ -87,13 +88,24 @@ data LeagueTeamRow = LeagueTeamRow
   }
   deriving stock (Show, Eq)
 
-fromResult :: LeagueTeam Result -> LeagueTeamRow
-fromResult LeagueTeam{..} = LeagueTeamRow
-  { ltId             = Just _ltId
-  , ltLeagueConfigId = _ltLeagueConfigId
-  , ltTeamKey        = _ltTeamKey
-  , ltName           = _ltName
-  , ltOwner          = _ltOwner
+-- | A team row loaded from the database. The id is always present;
+-- partial functions on the read path are gone.
+data LoadedLeagueTeam = LoadedLeagueTeam
+  { lltId             :: !DbLeagueTeamId
+  , lltLeagueConfigId :: !DbLeagueConfigId
+  , lltTeamKey        :: !Text
+  , lltName           :: !Text
+  , lltOwner          :: !Text
+  }
+  deriving stock (Show, Eq)
+
+fromResult :: LeagueTeam Result -> LoadedLeagueTeam
+fromResult LeagueTeam{..} = LoadedLeagueTeam
+  { lltId             = _ltId
+  , lltLeagueConfigId = _ltLeagueConfigId
+  , lltTeamKey        = _ltTeamKey
+  , lltName           = _ltName
+  , lltOwner          = _ltOwner
   }
 
 -- ============================================================================
@@ -130,7 +142,7 @@ updateLeagueTeamT ltid row = Tx.statement () $ R.run_ $ R.update R.Update
   , R.returning   = R.NoReturning
   }
 
-getByIdT :: DbLeagueTeamId -> Tx.Transaction (Maybe LeagueTeamRow)
+getByIdT :: DbLeagueTeamId -> Tx.Transaction (Maybe LoadedLeagueTeam)
 getByIdT ltid = do
   rows <- Tx.statement () $ R.run $ R.select $ do
     t <- R.each leagueTeamSchema
@@ -141,7 +153,7 @@ getByIdT ltid = do
     []      -> Nothing
 
 lookupByKeyT
-  :: DbLeagueConfigId -> Text -> Tx.Transaction (Maybe LeagueTeamRow)
+  :: DbLeagueConfigId -> Text -> Tx.Transaction (Maybe LoadedLeagueTeam)
 lookupByKeyT lcid key = do
   rows <- Tx.statement () $ R.run $ R.select $ do
     t <- R.each leagueTeamSchema
@@ -151,7 +163,7 @@ lookupByKeyT lcid key = do
     (t : _) -> Just (fromResult t)
     []      -> Nothing
 
-getForLeagueT :: DbLeagueConfigId -> Tx.Transaction [LeagueTeamRow]
+getForLeagueT :: DbLeagueConfigId -> Tx.Transaction [LoadedLeagueTeam]
 getForLeagueT lcid = do
   rows <- Tx.statement () $ R.run $ R.select $
     R.orderBy (_ltName >$< R.asc) $ do
@@ -178,14 +190,14 @@ insertLeagueTeam pool row = runTransaction pool (insertLeagueTeamT row)
 updateLeagueTeam :: Pool -> DbLeagueTeamId -> LeagueTeamRow -> IO (Either DBError ())
 updateLeagueTeam pool ltid row = runTransaction pool (updateLeagueTeamT ltid row)
 
-getById :: Pool -> DbLeagueTeamId -> IO (Either DBError (Maybe LeagueTeamRow))
+getById :: Pool -> DbLeagueTeamId -> IO (Either DBError (Maybe LoadedLeagueTeam))
 getById pool ltid = runTransaction pool (getByIdT ltid)
 
 lookupByKey
-  :: Pool -> DbLeagueConfigId -> Text -> IO (Either DBError (Maybe LeagueTeamRow))
+  :: Pool -> DbLeagueConfigId -> Text -> IO (Either DBError (Maybe LoadedLeagueTeam))
 lookupByKey pool lcid key = runTransaction pool (lookupByKeyT lcid key)
 
-getForLeague :: Pool -> DbLeagueConfigId -> IO (Either DBError [LeagueTeamRow])
+getForLeague :: Pool -> DbLeagueConfigId -> IO (Either DBError [LoadedLeagueTeam])
 getForLeague pool lcid = runTransaction pool (getForLeagueT lcid)
 
 delete :: Pool -> DbLeagueTeamId -> IO (Either DBError ())

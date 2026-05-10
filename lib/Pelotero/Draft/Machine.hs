@@ -111,6 +111,12 @@ data DraftStateG (v :: DraftVertex) where
 data SomeDraftStateG = forall v.
   SomeDraftStateG (SDraftVertex v) (DraftStateG v)
 
+instance Show SomeDraftStateG where
+  show (SomeDraftStateG _ st) = case st of
+    WaitingToStartG    -> "SomeDraftStateG WaitingToStartG"
+    DraftingG ctx      -> "SomeDraftStateG (DraftingG " <> show ctx <> ")"
+    CompleteG summary  -> "SomeDraftStateG (CompleteG " <> show summary <> ")"
+
 initialMachineState :: SomeDraftStateG
 initialMachineState = SomeDraftStateG SWaitingToStartV WaitingToStartG
 
@@ -266,3 +272,4 @@ runDraftCommand (SomeDraftStateG _ st) cmd =
     ActionResult m ->
       let (out, nextSt) = runIdentity m
       in (out, toSomeDraftStateG nextSt)
+

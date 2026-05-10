@@ -99,7 +99,7 @@ snapshotLineupsForTeam ltid gid = do
       pure (TeamSnapshotted n)
 
 -- | Snapshot every team in every active league for the given game.
--- A league is "active" iff 'lcStatus' equals @"active"@.
+-- A league is "active" iff 'llcStatus' equals @"active"@.
 snapshotLineupsForGame
   :: ( LeagueConfig   :> es
      , LeagueTeam     :> es
@@ -111,9 +111,7 @@ snapshotLineupsForGame
   -> Eff es SnapshotResult
 snapshotLineupsForGame gid = do
   configs <- LC.getAll
-  let activeIds = [lcid | c <- configs
-                        , DBLC.lcStatus c == "active"
-                        , Just lcid <- [DBLC.lcId c]]
+  let activeIds = [DBLC.llcId c | c <- configs, DBLC.llcStatus c == "active"]
   perLeague <- traverse (snapshotLeagueTeams gid) activeIds
   let summary = mconcat perLeague
   logFM InfoS $ "snapshot complete game=" <> tshow gid
@@ -133,7 +131,7 @@ snapshotLeagueTeams
   -> Eff es SnapshotResult
 snapshotLeagueTeams gid lcid = do
   teams <- LT.getForLeague lcid
-  let teamIds = [ltid | t <- teams, Just ltid <- [DBLT.ltId t]]
+  let teamIds = map DBLT.lltId teams
   results <- traverse (\ltid -> snapshotLineupsForTeam ltid gid) teamIds
   pure (foldr accumulate mempty results)
   where

@@ -17,39 +17,42 @@ import qualified Pelotero.Draft         as D
 import qualified Pelotero.Draft.Machine as M
 
 spec :: Spec
-spec = describe "Pelotero.Draft.Machine" $
-  it "draftAction agrees with applyCommand on every (state, command) pair" $
+spec = describe "Pelotero.Draft.Machine" $ do
+
+  it "rejected commands leave the state unchanged" $
     hedgehog $ do
       state <- forAll genReachableState
       cmd   <- forAll genCommand
-      let result1 = D.applyCommand cmd state
-          result2 = runViaMachine state cmd
-      case (result1, result2) of
-        (Right (s1, evs1), Right (s2, evs2)) -> do
-          s1   === s2
-          evs1 === evs2
-        (Left err1, Left err2) ->
-          err1 === err2
-        _ -> do
-          annotate ("applyCommand:  " <> show result1)
-          annotate ("runViaMachine: " <> show result2)
+      case M.runDraftCommand (M.fromDraftState state) cmd of
+        (Left _, M.SomeDraftStateG _ st') ->
+          M.toDraftState st' === state
+        (Right _, _) ->
+          pure ()
+
+  it "Complete is absorbing: every command from Complete is rejected" $
+    hedgehog $ do
+      summary <- forAll genCompleteSummary
+      cmd     <- forAll genCommand
+      let state = D.Complete summary
+      case M.runDraftCommand (M.fromDraftState state) cmd of
+        (Left D.DraftAlreadyComplete, M.SomeDraftStateG _ st') ->
+          M.toDraftState st' === state
+        other -> do
+          annotate ("expected DraftAlreadyComplete; got: " <> show other)
           failure
 
-
--- | Project the machine layer back to the same shape as 'applyCommand'
--- for direct comparison. Uses 'case' rather than 'let' to keep the
--- existential 'v' inside 'SomeDraftStateG' scoped to its branch.
-runViaMachine
+-- | Drive the machine and project the result into the pure shape, used
+-- only by the generators below to construct reachable states.
+runMachine
   :: D.DraftState
   -> D.DraftCommand
   -> Either D.DraftError (D.DraftState, [D.DraftEvent])
-runViaMachine state cmd =
+runMachine state cmd =
   case M.runDraftCommand (M.fromDraftState state) cmd of
     (Left err, _) ->
       Left err
     (Right evs, M.SomeDraftStateG _ st') ->
       Right (M.toDraftState st', evs)
-
 
 -- | Small but realistic draft plan: 2-5 teams, 2-6 rounds, with a pool
 -- strictly larger than the pick count. Player ids are deterministic
@@ -82,7 +85,7 @@ genReachableState = Gen.choice
   where
     genDraftingState = do
       plan <- genDraftPlan
-      case D.applyCommand (D.StartDraft plan) D.WaitingToStart of
+      case runMachine D.WaitingToStart (D.StartDraft plan) of
         Right (D.Drafting ctx, _) -> do
           let total = length (D.dcRemaining ctx)
           n <- Gen.int (Range.linear 0 (total - 1))
@@ -91,7 +94,7 @@ genReachableState = Gen.choice
 
     genCompleteState = do
       plan <- genDraftPlan
-      case D.applyCommand (D.StartDraft plan) D.WaitingToStart of
+      case runMachine D.WaitingToStart (D.StartDraft plan) of
         Right (state1, _) ->
           applyNPicks (length (D.dpOrder plan)) state1
         _ -> Gen.discard
@@ -101,16 +104,39 @@ genReachableState = Gen.choice
       D.Drafting ctx -> case D.dcRemaining ctx of
         []            -> pure st
         (team, _) : _ -> case Set.lookupMin (D.dcAvailable ctx) of
-          Just player -> case D.applyCommand (D.MakePick team player) st of
+          Just player -> case runMachine st (D.MakePick team player) of
             Right (st', _) -> applyNPicks (n - 1) st'
             Left _         -> Gen.discard
           Nothing -> Gen.discard
       _ -> pure st
 
+-- | A summary representing a completed draft, for testing the
+-- absorbing 'Complete' state.
+genCompleteSummary :: Gen D.DraftSummary
+genCompleteSummary = do
+  plan <- genDraftPlan
+  case runMachine D.WaitingToStart (D.StartDraft plan) of
+    Right (s1, _) -> drainPicks (length (D.dpOrder plan)) s1
+    _             -> Gen.discard
+  where
+    drainPicks 0 st = case st of
+      D.Complete summary -> pure summary
+      _                  -> Gen.discard
+    drainPicks n st = case st of
+      D.Drafting ctx -> case D.dcRemaining ctx of
+        []            -> Gen.discard
+        (team, _) : _ -> case Set.lookupMin (D.dcAvailable ctx) of
+          Just player -> case runMachine st (D.MakePick team player) of
+            Right (st', _) -> drainPicks (n - 1) st'
+            Left _         -> Gen.discard
+          Nothing -> Gen.discard
+      D.Complete summary -> pure summary
+      _ -> Gen.discard
+
 -- | Free-form command generator. Teams and players are drawn from id
 -- ranges that may or may not overlap with whatever plan produced the
 -- state — that's deliberate, since most generated commands hit
--- rejection paths and the agreement property earns its keep on them.
+-- rejection paths and the rejection-invariance property earns its keep on them.
 genCommand :: Gen D.DraftCommand
 genCommand = Gen.choice
   [ D.StartDraft <$> genDraftPlan

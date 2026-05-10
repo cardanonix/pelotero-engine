@@ -11,6 +11,7 @@
 
 module Pelotero.DB.LeagueConfig
   ( LeagueConfigRow(..)
+  , LoadedLeagueConfig(..)
   , insertLeagueConfigT
   , updateLeagueConfigT
   , getByIdT
@@ -89,6 +90,8 @@ leagueConfigSchema = TableSchema
       }
   }
 
+-- | An unsaved or partially-known league config. Used for inserts and
+-- updates, where the caller may not yet know the surrogate id.
 data LeagueConfigRow = LeagueConfigRow
   { lcId            :: !(Maybe DbLeagueConfigId)
   , lcLeagueId      :: !Text
@@ -105,20 +108,38 @@ data LeagueConfigRow = LeagueConfigRow
   }
   deriving stock (Show, Eq)
 
-fromResult :: LeagueConfig Result -> LeagueConfigRow
-fromResult LeagueConfig{..} = LeagueConfigRow
-  { lcId            = Just _lcId
-  , lcLeagueId      = _lcLeagueId
-  , lcCommissioner  = _lcCommissioner
-  , lcStatus        = _lcStatus
-  , lcScoring       = unJsonbScoring      _lcScoring
-  , lcRosterLimits  = unJsonbRosterLimits _lcRosterLimits
-  , lcLineupLimits  = unJsonbLineupLimits _lcLineupLimits
-  , lcDraftAuto     = _lcDraftAuto
-  , lcDraftStrategy = _lcDraftStrategy
-  , lcDraftAutoAt   = _lcDraftAutoAt
-  , lcScoringStart  = _lcScoringStart
-  , lcScoringEnd    = _lcScoringEnd
+-- | A league config loaded from the database. The id is always present;
+-- partial functions on the read path are gone.
+data LoadedLeagueConfig = LoadedLeagueConfig
+  { llcId            :: !DbLeagueConfigId
+  , llcLeagueId      :: !Text
+  , llcCommissioner  :: !Text
+  , llcStatus        :: !Text
+  , llcScoring       :: !LeagueScoring
+  , llcRosterLimits  :: !RosterLimits
+  , llcLineupLimits  :: !LineupLimits
+  , llcDraftAuto     :: !Bool
+  , llcDraftStrategy :: !Text
+  , llcDraftAutoAt   :: !(Maybe UTCTime)
+  , llcScoringStart  :: !UTCTime
+  , llcScoringEnd    :: !UTCTime
+  }
+  deriving stock (Show, Eq)
+
+fromResult :: LeagueConfig Result -> LoadedLeagueConfig
+fromResult LeagueConfig{..} = LoadedLeagueConfig
+  { llcId            = _lcId
+  , llcLeagueId      = _lcLeagueId
+  , llcCommissioner  = _lcCommissioner
+  , llcStatus        = _lcStatus
+  , llcScoring       = unJsonbScoring      _lcScoring
+  , llcRosterLimits  = unJsonbRosterLimits _lcRosterLimits
+  , llcLineupLimits  = unJsonbLineupLimits _lcLineupLimits
+  , llcDraftAuto     = _lcDraftAuto
+  , llcDraftStrategy = _lcDraftStrategy
+  , llcDraftAutoAt   = _lcDraftAutoAt
+  , llcScoringStart  = _lcScoringStart
+  , llcScoringEnd    = _lcScoringEnd
   }
 
 insertLeagueConfigT :: LeagueConfigRow -> Tx.Transaction DbLeagueConfigId
@@ -165,7 +186,7 @@ updateLeagueConfigT lcid row = Tx.statement () $ R.run_ $ R.update R.Update
   , R.returning   = R.NoReturning
   }
 
-getByIdT :: DbLeagueConfigId -> Tx.Transaction (Maybe LeagueConfigRow)
+getByIdT :: DbLeagueConfigId -> Tx.Transaction (Maybe LoadedLeagueConfig)
 getByIdT lcid = do
   rows <- Tx.statement () $ R.run $ R.select $ do
     c <- R.each leagueConfigSchema
@@ -175,7 +196,7 @@ getByIdT lcid = do
     (c : _) -> Just (fromResult c)
     []      -> Nothing
 
-getByLeagueIdT :: Text -> Tx.Transaction (Maybe LeagueConfigRow)
+getByLeagueIdT :: Text -> Tx.Transaction (Maybe LoadedLeagueConfig)
 getByLeagueIdT lid = do
   rows <- Tx.statement () $ R.run $ R.select $ do
     c <- R.each leagueConfigSchema
@@ -185,7 +206,7 @@ getByLeagueIdT lid = do
     (c : _) -> Just (fromResult c)
     []      -> Nothing
 
-getAllT :: Tx.Transaction [LeagueConfigRow]
+getAllT :: Tx.Transaction [LoadedLeagueConfig]
 getAllT = do
   rows <- Tx.statement () $ R.run $ R.select $
     R.orderBy (_lcLeagueId >$< R.asc) (R.each leagueConfigSchema)
@@ -197,11 +218,11 @@ insertLeagueConfig pool row = runTransaction pool (insertLeagueConfigT row)
 updateLeagueConfig :: Pool -> DbLeagueConfigId -> LeagueConfigRow -> IO (Either DBError ())
 updateLeagueConfig pool lcid row = runTransaction pool (updateLeagueConfigT lcid row)
 
-getById :: Pool -> DbLeagueConfigId -> IO (Either DBError (Maybe LeagueConfigRow))
+getById :: Pool -> DbLeagueConfigId -> IO (Either DBError (Maybe LoadedLeagueConfig))
 getById pool lcid = runTransaction pool (getByIdT lcid)
 
-getByLeagueId :: Pool -> Text -> IO (Either DBError (Maybe LeagueConfigRow))
+getByLeagueId :: Pool -> Text -> IO (Either DBError (Maybe LoadedLeagueConfig))
 getByLeagueId pool lid = runTransaction pool (getByLeagueIdT lid)
 
-getAll :: Pool -> IO (Either DBError [LeagueConfigRow])
+getAll :: Pool -> IO (Either DBError [LoadedLeagueConfig])
 getAll pool = runTransaction pool getAllT

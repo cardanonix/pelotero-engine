@@ -23,16 +23,16 @@ import qualified Effectful as E
 import Effectful.Dispatch.Dynamic (interpret_, send)
 
 import qualified Pelotero.DB.LeagueTeam as LTRepo
-import           Pelotero.DB.LeagueTeam (LeagueTeamRow)
+import           Pelotero.DB.LeagueTeam (LeagueTeamRow, LoadedLeagueTeam)
 import           Pelotero.Domain.Id     (DbLeagueConfigId, DbLeagueTeamId)
 import           Pelotero.Effects.Database (Database, runTx)
 
 data LeagueTeam :: Effect where
   InsertLeagueTeam :: LeagueTeamRow                      -> LeagueTeam m DbLeagueTeamId
   UpdateLeagueTeam :: DbLeagueTeamId -> LeagueTeamRow    -> LeagueTeam m ()
-  GetById          :: DbLeagueTeamId                     -> LeagueTeam m (Maybe LeagueTeamRow)
-  LookupByKey      :: DbLeagueConfigId -> Text           -> LeagueTeam m (Maybe LeagueTeamRow)
-  GetForLeague     :: DbLeagueConfigId                   -> LeagueTeam m [LeagueTeamRow]
+  GetById          :: DbLeagueTeamId                     -> LeagueTeam m (Maybe LoadedLeagueTeam)
+  LookupByKey      :: DbLeagueConfigId -> Text           -> LeagueTeam m (Maybe LoadedLeagueTeam)
+  GetForLeague     :: DbLeagueConfigId                   -> LeagueTeam m [LoadedLeagueTeam]
   Delete           :: DbLeagueTeamId                     -> LeagueTeam m ()
 
 type instance DispatchOf LeagueTeam = 'Dynamic
@@ -43,15 +43,15 @@ insertLeagueTeam = send . InsertLeagueTeam
 updateLeagueTeam :: LeagueTeam E.:> es => DbLeagueTeamId -> LeagueTeamRow -> E.Eff es ()
 updateLeagueTeam ltid row = send (UpdateLeagueTeam ltid row)
 
-getById :: LeagueTeam E.:> es => DbLeagueTeamId -> E.Eff es (Maybe LeagueTeamRow)
+getById :: LeagueTeam E.:> es => DbLeagueTeamId -> E.Eff es (Maybe LoadedLeagueTeam)
 getById = send . GetById
 
 lookupByKey
   :: LeagueTeam E.:> es
-  => DbLeagueConfigId -> Text -> E.Eff es (Maybe LeagueTeamRow)
+  => DbLeagueConfigId -> Text -> E.Eff es (Maybe LoadedLeagueTeam)
 lookupByKey lcid key = send (LookupByKey lcid key)
 
-getForLeague :: LeagueTeam E.:> es => DbLeagueConfigId -> E.Eff es [LeagueTeamRow]
+getForLeague :: LeagueTeam E.:> es => DbLeagueConfigId -> E.Eff es [LoadedLeagueTeam]
 getForLeague = send . GetForLeague
 
 delete :: LeagueTeam E.:> es => DbLeagueTeamId -> E.Eff es ()
