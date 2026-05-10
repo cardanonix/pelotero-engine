@@ -1,5 +1,5 @@
 %bundle chase v1
-%generated 2026-05-08T21:12:59Z
+%generated 2026-05-10T13:16:06Z
 %roots /home/bismuth/git/pelotero-engine/lib
 %files 62 ok, 0 failed
 
@@ -734,10 +734,26 @@ data LeagueConfigRow = LeagueConfigRow
   }
   deriving stock (Show, Eq)
 
+data LoadedLeagueConfig = LoadedLeagueConfig
+  { llcId            :: !DbLeagueConfigId
+  , llcLeagueId      :: !Text
+  , llcCommissioner  :: !Text
+  , llcStatus        :: !Text
+  , llcScoring       :: !LeagueScoring
+  , llcRosterLimits  :: !RosterLimits
+  , llcLineupLimits  :: !LineupLimits
+  , llcDraftAuto     :: !Bool
+  , llcDraftStrategy :: !Text
+  , llcDraftAutoAt   :: !(Maybe UTCTime)
+  , llcScoringStart  :: !UTCTime
+  , llcScoringEnd    :: !UTCTime
+  }
+  deriving stock (Show, Eq)
+
 leagueConfigSchema :: TableSchema (LeagueConfig Name)
   ! table 'league_config' with surrogate id, league_id (Text), commissioner, status, JSONB scoring/roster/lineup, draft params, scoring period bounds
 
-fromResult :: LeagueConfig Result -> LeagueConfigRow
+fromResult :: LeagueConfig Result -> LoadedLeagueConfig
   ! private; rel8 Result -> public LeagueConfigRow
 
 insertLeagueConfigT :: LeagueConfigRow -> Tx.Transaction DbLeagueConfigId
@@ -746,13 +762,13 @@ insertLeagueConfigT :: LeagueConfigRow -> Tx.Transaction DbLeagueConfigId
 updateLeagueConfigT :: DbLeagueConfigId -> LeagueConfigRow -> Tx.Transaction ()
   ! WHERE id = lcid; updates everything except id
 
-getByIdT :: DbLeagueConfigId -> Tx.Transaction (Maybe LeagueConfigRow)
+getByIdT :: DbLeagueConfigId -> Tx.Transaction (Maybe LoadedLeagueConfig)
   ! single-row select via WHERE id
 
-getByLeagueIdT :: Text -> Tx.Transaction (Maybe LeagueConfigRow)
+getByLeagueIdT :: Text -> Tx.Transaction (Maybe LoadedLeagueConfig)
   ! WHERE league_id = ?; the user-facing identifier
 
-getAllT :: Tx.Transaction [LeagueConfigRow]
+getAllT :: Tx.Transaction [LoadedLeagueConfig]
   ! ORDER BY league_id; full table
 
 insertLeagueConfig :: Pool -> LeagueConfigRow -> IO (Either DBError DbLeagueConfigId)
@@ -761,13 +777,13 @@ insertLeagueConfig :: Pool -> LeagueConfigRow -> IO (Either DBError DbLeagueConf
 updateLeagueConfig :: Pool -> DbLeagueConfigId -> LeagueConfigRow -> IO (Either DBError ())
   ! Pool-flavored wrapper
 
-getById :: Pool -> DbLeagueConfigId -> IO (Either DBError (Maybe LeagueConfigRow))
+getById :: Pool -> DbLeagueConfigId -> IO (Either DBError (Maybe LoadedLeagueConfig))
   ! Pool-flavored single-row read
 
-getByLeagueId :: Pool -> Text -> IO (Either DBError (Maybe LeagueConfigRow))
+getByLeagueId :: Pool -> Text -> IO (Either DBError (Maybe LoadedLeagueConfig))
   ! Pool-flavored user-id read
 
-getAll :: Pool -> IO (Either DBError [LeagueConfigRow])
+getAll :: Pool -> IO (Either DBError [LoadedLeagueConfig])
   ! Pool-flavored full read
 
 %decision ScoringAndLimitsAsJsonbColumns
@@ -817,11 +833,20 @@ data LeagueTeamRow = LeagueTeamRow
   }
   deriving stock (Show, Eq)
 
+data LoadedLeagueTeam = LoadedLeagueTeam
+  { lltId             :: !DbLeagueTeamId
+  , lltLeagueConfigId :: !DbLeagueConfigId
+  , lltTeamKey        :: !Text
+  , lltName           :: !Text
+  , lltOwner          :: !Text
+  }
+  deriving stock (Show, Eq)
+
 leagueTeamSchema :: TableSchema (LeagueTeam Name)
   ! table 'league_team' with surrogate id, FK to league_config, team_key (stable), name, owner
   ! no last-synced metadata — league teams are user-managed, not externally synced
 
-fromResult :: LeagueTeam Result -> LeagueTeamRow
+fromResult :: LeagueTeam Result -> LoadedLeagueTeam
   ! private; rel8 Result -> LeagueTeamRow
 
 insertLeagueTeamT :: LeagueTeamRow -> Tx.Transaction DbLeagueTeamId
@@ -830,14 +855,14 @@ insertLeagueTeamT :: LeagueTeamRow -> Tx.Transaction DbLeagueTeamId
 updateLeagueTeamT :: DbLeagueTeamId -> LeagueTeamRow -> Tx.Transaction ()
   ! WHERE id = ltid; updates everything except id
 
-getByIdT :: DbLeagueTeamId -> Tx.Transaction (Maybe LeagueTeamRow)
+getByIdT :: DbLeagueTeamId -> Tx.Transaction (Maybe LoadedLeagueTeam)
   ! single-row select via WHERE id
 
 lookupByKeyT
-  :: DbLeagueConfigId -> Text -> Tx.Transaction (Maybe LeagueTeamRow)
+  :: DbLeagueConfigId -> Text -> Tx.Transaction (Maybe LoadedLeagueTeam)
   ! WHERE league_config_id AND team_key; returns the first match or Nothing
 
-getForLeagueT :: DbLeagueConfigId -> Tx.Transaction [LeagueTeamRow]
+getForLeagueT :: DbLeagueConfigId -> Tx.Transaction [LoadedLeagueTeam]
   ! ORDER BY name; all teams in a league
 
 deleteT :: DbLeagueTeamId -> Tx.Transaction ()
@@ -849,14 +874,14 @@ insertLeagueTeam :: Pool -> LeagueTeamRow -> IO (Either DBError DbLeagueTeamId)
 updateLeagueTeam :: Pool -> DbLeagueTeamId -> LeagueTeamRow -> IO (Either DBError ())
   ! Pool-flavored wrapper
 
-getById :: Pool -> DbLeagueTeamId -> IO (Either DBError (Maybe LeagueTeamRow))
+getById :: Pool -> DbLeagueTeamId -> IO (Either DBError (Maybe LoadedLeagueTeam))
   ! Pool-flavored single-row read
 
 lookupByKey
-  :: Pool -> DbLeagueConfigId -> Text -> IO (Either DBError (Maybe LeagueTeamRow))
+  :: Pool -> DbLeagueConfigId -> Text -> IO (Either DBError (Maybe LoadedLeagueTeam))
   ! Pool-flavored compound-key lookup
 
-getForLeague :: Pool -> DbLeagueConfigId -> IO (Either DBError [LeagueTeamRow])
+getForLeague :: Pool -> DbLeagueConfigId -> IO (Either DBError [LoadedLeagueTeam])
   ! Pool-flavored per-league listing
 
 delete :: Pool -> DbLeagueTeamId -> IO (Either DBError ())
@@ -955,6 +980,7 @@ replaceTeamLineup :: Pool -> DbLeagueTeamId -> [LineupSlotRow] -> IO (Either DBE
 
 %ext DataKinds, DeriveAnyClass, DeriveGeneric, DerivingStrategies, DuplicateRecordFields, OverloadedStrings, RecordWildCards, StandaloneDeriving, TypeFamilies, TypeOperators, UndecidableInstances
 
+%uses Data.Functor.Contravariant
 %uses Data.Int
 %uses Data.Text
 %uses Data.Time
@@ -962,6 +988,7 @@ replaceTeamLineup :: Pool -> DbLeagueTeamId -> [LineupSlotRow] -> IO (Either DBE
 %uses qualified Hasql.Transaction as Tx
 %uses Rel8
 %uses qualified Rel8 as R
+%uses qualified Pelotero.DB.Game as Game
 %uses Pelotero.DB.Pool
 %uses Pelotero.DB.Rel8Instances
 %uses Pelotero.Domain.Id
@@ -1015,6 +1042,9 @@ getSnapshotsForGameT :: DbGameId -> Tx.Transaction [LineupSnapshotRow]
   ! WHERE game_id; returns every snapshot row across all teams for one game
   ! useful for debugging or auditing; not on the scoring hot path
 
+getSnapshotsForDateRangeT
+  :: Day -> Day -> Tx.Transaction [LineupSnapshotRow]
+
 writeSnapshots :: Pool -> [LineupSnapshotRow] -> IO (Either DBError ())
   ! Pool-flavored wrapper
 
@@ -1032,6 +1062,9 @@ snapshotExistsForTeamGame
 getSnapshotsForGame
   :: Pool -> DbGameId -> IO (Either DBError [LineupSnapshotRow])
   ! Pool-flavored wrapper
+
+getSnapshotsForDateRange
+  :: Pool -> Day -> Day -> IO (Either DBError [LineupSnapshotRow])
 
 %decision SnapshotKeyedByLeagueTeamAndGame
   what:    lineup_snapshot has UNIQUE (league_team_id, game_id, slot, player_id); a snapshot is the team's lineup-as-of-this-specific-game
@@ -2593,6 +2626,8 @@ data DraftStateG (v :: DraftVertex) where
 data SomeDraftStateG = forall v.
   SomeDraftStateG (SDraftVertex v) (DraftStateG v)
 
+instance Show SomeDraftStateG where
+
 initialMachineState :: SomeDraftStateG
 
 draftStateVertex :: SomeDraftStateG -> DraftVertex
@@ -2736,7 +2771,6 @@ tshow :: Show a => a -> T.Text
 
 %ext LambdaCase, OverloadedStrings
 
-%uses Data.List
 %uses Data.Set
 %uses qualified Data.Set as Set
 %uses Pelotero.Domain.Id
@@ -2794,24 +2828,12 @@ data DraftError
   | DraftAlreadyComplete
   | EmptyDraftPlan
   | NotYourTurn          !DbLeagueTeamId !DbLeagueTeamId
-    -- ^ expected, actual
   | PlayerAlreadyDrafted !DbPlayerId
   | PlayerNotInPool      !DbPlayerId
   deriving stock (Show, Eq)
 
 initialState :: DraftState
   ! WaitingToStart; the empty start of any draft
-
-applyCommand
-  :: DraftCommand
-  -> DraftState
-  -> Either DraftError (DraftState, [DraftEvent])
-  ! intent: Single transition function: given a command and a state, return the next state plus events to persist, or the reason the command was refused.
-  ! Pure: same inputs -> same outputs.
-  ! Errors short-circuit without changing state.
-  ! MakePick on the last pick emits PickRecorded then DraftCompleted, in that order, and transitions to Complete.
-  ! EndDraft from Drafting transitions to Complete with the picks made so far; useful for early commissioner-driven termination.
-  ! An empty DraftPlan (dpOrder == []) returns EmptyDraftPlan rather than transitioning to a degenerate Complete state.
 
 currentPicker :: DraftState -> Maybe (DbLeagueTeamId, DraftPickNumber)
   ! Whose pick is up? Nothing if the draft hasn't started or has finished.
@@ -3182,9 +3204,9 @@ runGamesInMemory
 data LeagueConfig :: Effect where
   InsertLeagueConfig :: LeagueConfigRow                     -> LeagueConfig m DbLeagueConfigId
   UpdateLeagueConfig :: DbLeagueConfigId -> LeagueConfigRow -> LeagueConfig m ()
-  GetById            :: DbLeagueConfigId                    -> LeagueConfig m (Maybe LeagueConfigRow)
-  GetByLeagueId      :: Text                                -> LeagueConfig m (Maybe LeagueConfigRow)
-  GetAll             ::                                        LeagueConfig m [LeagueConfigRow]
+  GetById            :: DbLeagueConfigId                    -> LeagueConfig m (Maybe LoadedLeagueConfig)
+  GetByLeagueId      :: Text                                -> LeagueConfig m (Maybe LoadedLeagueConfig)
+  GetAll             ::                                        LeagueConfig m [LoadedLeagueConfig]
 
 insertLeagueConfig
   :: LeagueConfig :> es
@@ -3202,16 +3224,16 @@ updateLeagueConfig
 getById
   :: LeagueConfig :> es
   => DbLeagueConfigId
-  -> Eff es (Maybe LeagueConfigRow)
+  -> Eff es (Maybe LoadedLeagueConfig)
   ! LeagueConfig send-only
 
 getByLeagueId
   :: LeagueConfig :> es
   => Text
-  -> Eff es (Maybe LeagueConfigRow)
+  -> Eff es (Maybe LoadedLeagueConfig)
   ! LeagueConfig send-only
 
-getAll :: LeagueConfig :> es => Eff es [LeagueConfigRow]
+getAll :: LeagueConfig :> es => Eff es [LoadedLeagueConfig]
   ! LeagueConfig send-only
   ! consumed by Pelotero.Lineup.Snapshot.snapshotLineupsForGame to enumerate active leagues
 
@@ -3242,9 +3264,9 @@ runLeagueConfigDB
 data LeagueTeam :: Effect where
   InsertLeagueTeam :: LeagueTeamRow                      -> LeagueTeam m DbLeagueTeamId
   UpdateLeagueTeam :: DbLeagueTeamId -> LeagueTeamRow    -> LeagueTeam m ()
-  GetById          :: DbLeagueTeamId                     -> LeagueTeam m (Maybe LeagueTeamRow)
-  LookupByKey      :: DbLeagueConfigId -> Text           -> LeagueTeam m (Maybe LeagueTeamRow)
-  GetForLeague     :: DbLeagueConfigId                   -> LeagueTeam m [LeagueTeamRow]
+  GetById          :: DbLeagueTeamId                     -> LeagueTeam m (Maybe LoadedLeagueTeam)
+  LookupByKey      :: DbLeagueConfigId -> Text           -> LeagueTeam m (Maybe LoadedLeagueTeam)
+  GetForLeague     :: DbLeagueConfigId                   -> LeagueTeam m [LoadedLeagueTeam]
   Delete           :: DbLeagueTeamId                     -> LeagueTeam m ()
 
 insertLeagueTeam :: LeagueTeam E.:> es => LeagueTeamRow -> E.Eff es DbLeagueTeamId
@@ -3253,15 +3275,15 @@ insertLeagueTeam :: LeagueTeam E.:> es => LeagueTeamRow -> E.Eff es DbLeagueTeam
 updateLeagueTeam :: LeagueTeam E.:> es => DbLeagueTeamId -> LeagueTeamRow -> E.Eff es ()
   ! LeagueTeam send-only
 
-getById :: LeagueTeam E.:> es => DbLeagueTeamId -> E.Eff es (Maybe LeagueTeamRow)
+getById :: LeagueTeam E.:> es => DbLeagueTeamId -> E.Eff es (Maybe LoadedLeagueTeam)
   ! LeagueTeam send-only
 
 lookupByKey
   :: LeagueTeam E.:> es
-  => DbLeagueConfigId -> Text -> E.Eff es (Maybe LeagueTeamRow)
+  => DbLeagueConfigId -> Text -> E.Eff es (Maybe LoadedLeagueTeam)
   ! LeagueTeam send-only; (league_config_id, team_key) lookup
 
-getForLeague :: LeagueTeam E.:> es => DbLeagueConfigId -> E.Eff es [LeagueTeamRow]
+getForLeague :: LeagueTeam E.:> es => DbLeagueConfigId -> E.Eff es [LoadedLeagueTeam]
   ! LeagueTeam send-only; per-league listing
 
 delete :: LeagueTeam E.:> es => DbLeagueTeamId -> E.Eff es ()
@@ -3329,6 +3351,7 @@ runLineupSlotDB
 
 %ext DataKinds, FlexibleContexts, GADTs, LambdaCase, TypeFamilies, TypeOperators
 
+%uses Data.Time
 %uses Effectful
 %uses Effectful.Dispatch.Dynamic
 %uses qualified Pelotero.DB.LineupSnapshot as Repo
@@ -3337,10 +3360,16 @@ runLineupSlotDB
 %uses Pelotero.Effects.Database
 
 data LineupSnapshot :: Effect where
-  WriteSnapshots            :: [LineupSnapshotRow] -> LineupSnapshot m ()
-  GetSnapshotForTeamGame    :: DbLeagueTeamId -> DbGameId -> LineupSnapshot m [LineupSnapshotRow]
-  SnapshotExistsForTeamGame :: DbLeagueTeamId -> DbGameId -> LineupSnapshot m Bool
-  GetSnapshotsForGame       :: DbGameId -> LineupSnapshot m [LineupSnapshotRow]
+  WriteSnapshots            :: [LineupSnapshotRow]
+                            -> LineupSnapshot m ()
+  GetSnapshotForTeamGame    :: DbLeagueTeamId -> DbGameId
+                            -> LineupSnapshot m [LineupSnapshotRow]
+  SnapshotExistsForTeamGame :: DbLeagueTeamId -> DbGameId
+                            -> LineupSnapshot m Bool
+  GetSnapshotsForGame       :: DbGameId
+                            -> LineupSnapshot m [LineupSnapshotRow]
+  GetSnapshotsForDateRange  :: Day -> Day
+                            -> LineupSnapshot m [LineupSnapshotRow]
 
 writeSnapshots :: LineupSnapshot :> es => [LineupSnapshotRow] -> Eff es ()
   ! LineupSnapshot send-only; writes a list of LineupSnapshotRow with ON CONFLICT DO NOTHING; returns ()
@@ -3357,9 +3386,14 @@ snapshotExistsForTeamGame
   ! LineupSnapshot send-only; (DbLeagueTeamId, DbGameId) -> Bool
   ! consumed by Pelotero.Lineup.Snapshot.snapshotLineupsForTeam
 
-getSnapshotsForGame :: LineupSnapshot :> es => DbGameId -> Eff es [LineupSnapshotRow]
+getSnapshotsForGame
+  :: LineupSnapshot :> es => DbGameId -> Eff es [LineupSnapshotRow]
   ! LineupSnapshot send-only; DbGameId -> [LineupSnapshotRow]
   ! audit/inspection use; not on the scoring path
+
+getSnapshotsForDateRange
+  :: LineupSnapshot :> es
+  => Day -> Day -> Eff es [LineupSnapshotRow]
 
 runLineupSnapshotDB
   :: Database :> es
@@ -4544,12 +4578,10 @@ parseIntStrict :: Text -> Maybe Int
 
 %uses Data.Int
 %uses qualified Data.Map.Strict as Map
-%uses Data.Maybe
 %uses Data.Time.Calendar
 %uses Data.Time.Clock
 %uses Effectful
 %uses Pelotero.DB.BoxscoreEntry
-%uses Pelotero.DB.Game
 %uses Pelotero.DB.LeagueConfig
 %uses Pelotero.DB.LeagueTeam
 %uses Pelotero.DB.LineupSnapshot
@@ -4558,8 +4590,6 @@ parseIntStrict :: Text -> Maybe Int
 %uses Pelotero.Domain.Stats
 %uses qualified Pelotero.Effects.BoxscoreEntry as Box
 %uses Pelotero.Effects.BoxscoreEntry
-%uses qualified Pelotero.Effects.Games as G
-%uses Pelotero.Effects.Games
 %uses qualified Pelotero.Effects.LeagueConfig as LC
 %uses Pelotero.Effects.LeagueConfig
 %uses qualified Pelotero.Effects.LeagueTeam as LT
@@ -4617,7 +4647,6 @@ scoreLeague
   :: ( LeagueConfig   :> es
      , LeagueTeam     :> es
      , LineupSnapshot :> es
-     , Games          :> es
      , BoxscoreEntry  :> es
      )
   => DbLeagueConfigId
@@ -4633,7 +4662,6 @@ scoreTeam
   :: ( LeagueConfig   :> es
      , LeagueTeam     :> es
      , LineupSnapshot :> es
-     , Games          :> es
      , BoxscoreEntry  :> es
      )
   => DbLeagueConfigId
@@ -4642,11 +4670,6 @@ scoreTeam
   ! scores a single team using the league's period
   ! returns Nothing if either the league config or the team is absent
   ! does NOT validate that the team belongs to the league
-
-collectGameIds
-  :: Games :> es
-  => Day -> Day -> Eff es [DbGameId]
-  ! internal helper; calls Games.getGamesByDateRange and mapMaybes the gameRowId field
 
 buildPlayerMaps
   :: BoxscoreEntry :> es
@@ -4659,26 +4682,14 @@ buildPlayerMaps
   ! exactly N+N database round trips for an N-game period; collapsing this into a single date-range query is planned C.2 work
 
 scoreOneTeam
-  :: LineupSnapshot :> es
-  => LeagueScoring
+  :: LeagueScoring
   -> Map.Map DbPlayerId [BattingRow]
   -> Map.Map DbPlayerId [PitchingRow]
-  -> [DbGameId]
-  -> LeagueTeamRow
-  -> Eff es TeamScore
+  -> [LineupSnapshotRow]
+  -> LoadedLeagueTeam
+  -> TeamScore
   ! per-game inner loop: for each game id, fetch the team's lineup snapshot for that game via LineupSnapshot.getSnapshotForTeamGame, score that game's stats, then aggregate per-player scores across games via Map.fromListWith mergePlayerScores
   ! internal helper; not exported; signature subject to change
-
-scoreTeamForGame
-  :: LineupSnapshot :> es
-  => LeagueScoring
-  -> Map.Map DbPlayerId [BattingRow]
-  -> Map.Map DbPlayerId [PitchingRow]
-  -> DbLeagueTeamId
-  -> DbGameId
-  -> Eff es [PlayerScore]
-  ! internal; for a (team, game) pair: read the snapshot rows, look up each player's batting/pitching for that specific game, score with scorePlayerPure
-  ! filter step inside scoreOnePlayerForGame discards rows from other games in the period maps
 
 scoreOnePlayerForGame
   :: LeagueScoring
@@ -4780,13 +4791,9 @@ data BoxscoreSyncResult = BoxscoreSyncResult
   deriving stock (Show, Eq)
 
 data BoxscoreSyncError
-  = -- | The 'GameId' wasn't in the local games table. Run schedule
-    --   sync first, then retry.
-    GameNotKnown !GameId
-  | -- | HTTP or transport failure from the 'MLBClient' effect.
-    FetchFailed  !GameId !String
-  | -- | Aeson decode failure on the raw bytes.
-    ParseFailed  !GameId !String
+  = GameNotKnown !GameId
+  | FetchFailed  !GameId !String
+  | ParseFailed  !GameId !String
   deriving stock (Show, Eq)
 
 emptyResult :: BoxscoreSyncResult
@@ -4834,6 +4841,7 @@ upsertEntries
   :: ( BoxscoreEntry :> es
      , Players       :> es
      , Teams         :> es
+     , Logging       :> es
      )
   => ProviderName
   -> DbGameId
