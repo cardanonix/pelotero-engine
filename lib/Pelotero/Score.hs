@@ -20,13 +20,11 @@ module Pelotero.Score
 
 import           Data.Int                       (Int32)
 import qualified Data.Map.Strict                as Map
-import           Data.Maybe                     (mapMaybe)
 import           Data.Time.Calendar             (Day)
 import           Data.Time.Clock                (utctDay)
 import           Effectful
 
 import           Pelotero.DB.BoxscoreEntry      (BattingRow (..), PitchingRow (..))
-import           Pelotero.DB.Game               (GameRow (..))
 import           Pelotero.DB.LeagueConfig       (LoadedLeagueConfig (..))
 import           Pelotero.DB.LeagueTeam         (LoadedLeagueTeam (..))
 import           Pelotero.DB.LineupSnapshot     (LineupSnapshotRow (..))
@@ -45,8 +43,6 @@ import           Pelotero.Domain.Stats
                      (BattingStats (..), PitchingStats (..), emptyBatting, emptyPitching)
 import qualified Pelotero.Effects.BoxscoreEntry as Box
 import           Pelotero.Effects.BoxscoreEntry (BoxscoreEntry)
-import qualified Pelotero.Effects.Games         as G
-import           Pelotero.Effects.Games         (Games)
 import qualified Pelotero.Effects.LeagueConfig  as LC
 import           Pelotero.Effects.LeagueConfig  (LeagueConfig)
 import qualified Pelotero.Effects.LeagueTeam    as LT
@@ -176,11 +172,19 @@ scorePlayerPure scoring bs ps pid =
        , psTotalPoints    = addPoints bp pp
        }
 
+-- | Score every team in a league for the period defined by the league config.
+--
+-- Three batched effect calls regardless of period length:
+--   * one LeagueConfig fetch
+--   * one LeagueTeam fetch
+--   * two stats fetches (batting + pitching, both date-range)
+--   * one snapshot fetch (date-range, joined to game)
+--
+-- All cross-product/grouping work is then pure.
 scoreLeague
   :: ( LeagueConfig   :> es
      , LeagueTeam     :> es
      , LineupSnapshot :> es
-     , Games          :> es
      , BoxscoreEntry  :> es
      )
   => DbLeagueConfigId
@@ -193,10 +197,17 @@ scoreLeague lcid = do
       let startDay = utctDay (llcScoringStart config)
           endDay   = utctDay (llcScoringEnd   config)
           scoring  = llcScoring config
-      gameIds  <- collectGameIds startDay endDay
-      teams    <- LT.getForLeague lcid
-      (bm, pm) <- buildPlayerMaps startDay endDay
-      teamScores <- traverse (scoreOneTeam scoring bm pm gameIds) teams
+      teams        <- LT.getForLeague lcid
+      (bm, pm)     <- buildPlayerMaps startDay endDay
+      allSnapshots <- LSnap.getSnapshotsForDateRange startDay endDay
+      let snapsByTeam :: Map.Map DbLeagueTeamId [LineupSnapshotRow]
+          snapsByTeam = Map.fromListWith (++)
+            [(lsnapLeagueTeamId s, [s]) | s <- allSnapshots]
+          teamScores =
+            [ scoreOneTeam scoring bm pm
+                (Map.findWithDefault [] (lltId t) snapsByTeam) t
+            | t <- teams
+            ]
       pure $ Just LeagueScore
         { lscLeague      = lcid
         , lscPeriodStart = startDay
@@ -208,7 +219,6 @@ scoreTeam
   :: ( LeagueConfig   :> es
      , LeagueTeam     :> es
      , LineupSnapshot :> es
-     , Games          :> es
      , BoxscoreEntry  :> es
      )
   => DbLeagueConfigId
@@ -222,18 +232,14 @@ scoreTeam lcid ltid = do
       let startDay = utctDay (llcScoringStart config)
           endDay   = utctDay (llcScoringEnd   config)
           scoring  = llcScoring config
-      gameIds  <- collectGameIds startDay endDay
-      (bm, pm) <- buildPlayerMaps startDay endDay
-      Just <$> scoreOneTeam scoring bm pm gameIds team
+      (bm, pm)     <- buildPlayerMaps startDay endDay
+      allSnapshots <- LSnap.getSnapshotsForDateRange startDay endDay
+      let teamSnapshots =
+            filter ((== ltid) . lsnapLeagueTeamId) allSnapshots
+      pure (Just (scoreOneTeam scoring bm pm teamSnapshots team))
     _ -> pure Nothing
 
-collectGameIds
-  :: Games :> es
-  => Day -> Day -> Eff es [DbGameId]
-collectGameIds startDay endDay = do
-  games <- G.getGamesByDateRange startDay endDay
-  pure (mapMaybe gameRowId games)
-
+-- | Pre-fetch the period's batting and pitching rows, indexed by player.
 buildPlayerMaps
   :: BoxscoreEntry :> es
   => Day -> Day
@@ -247,39 +253,36 @@ buildPlayerMaps startDay endDay = do
       pm = Map.fromListWith (++) [(pitchingPlayerId r, [r]) | r <- ps]
   pure (bm, pm)
 
+-- | Pure: given a team's snapshot rows, compute its TeamScore.
+--
+-- Grouping by game is intentional: it makes per-game scoring local, which
+-- preserves the property that a player snapshotted into game G receives
+-- exactly G's stats (and zero from games where they were not snapshotted).
 scoreOneTeam
-  :: LineupSnapshot :> es
-  => LeagueScoring
+  :: LeagueScoring
   -> Map.Map DbPlayerId [BattingRow]
   -> Map.Map DbPlayerId [PitchingRow]
-  -> [DbGameId]
+  -> [LineupSnapshotRow]
   -> LoadedLeagueTeam
-  -> Eff es TeamScore
-scoreOneTeam scoring bm pm gameIds team = do
-  let ltid = lltId team
-  perGame <- traverse (scoreTeamForGame scoring bm pm ltid) gameIds
-  let allScores      = concat perGame
-      grouped        = Map.fromListWith mergePlayerScores
-                         [(psPlayer p, p) | p <- allScores]
+  -> TeamScore
+scoreOneTeam scoring bm pm snaps team =
+  let snapsByGame :: Map.Map DbGameId [DbPlayerId]
+      snapsByGame = Map.fromListWith (++)
+        [(lsnapGameId s, [lsnapPlayerId s]) | s <- snaps]
+      perGame :: [PlayerScore]
+      perGame = concat
+        [ [ scoreOnePlayerForGame scoring bm pm gid pid | pid <- pids ]
+        | (gid, pids) <- Map.toList snapsByGame
+        ]
+      grouped = Map.fromListWith mergePlayerScores
+                   [(psPlayer p, p) | p <- perGame]
       teamPlayerList = Map.elems grouped
       total          = sumPoints (map psTotalPoints teamPlayerList)
-  pure TeamScore
-    { tsTeam        = ltid
-    , tsPlayers     = teamPlayerList
-    , tsTotalPoints = total
-    }
-
-scoreTeamForGame
-  :: LineupSnapshot :> es
-  => LeagueScoring
-  -> Map.Map DbPlayerId [BattingRow]
-  -> Map.Map DbPlayerId [PitchingRow]
-  -> DbLeagueTeamId
-  -> DbGameId
-  -> Eff es [PlayerScore]
-scoreTeamForGame scoring bm pm ltid gid = do
-  snapshot <- LSnap.getSnapshotForTeamGame ltid gid
-  pure (map (scoreOnePlayerForGame scoring bm pm gid . lsnapPlayerId) snapshot)
+  in TeamScore
+       { tsTeam        = lltId team
+       , tsPlayers     = teamPlayerList
+       , tsTotalPoints = total
+       }
 
 scoreOnePlayerForGame
   :: LeagueScoring
@@ -289,8 +292,10 @@ scoreOnePlayerForGame
   -> DbPlayerId
   -> PlayerScore
 scoreOnePlayerForGame scoring bm pm gid pid =
-  let bs = filter ((== gid) . battingGameId)  (Map.findWithDefault [] pid bm)
-      ps = filter ((== gid) . pitchingGameId) (Map.findWithDefault [] pid pm)
+  let bs = filter ((== gid) . battingGameId)
+             (Map.findWithDefault [] pid bm)
+      ps = filter ((== gid) . pitchingGameId)
+             (Map.findWithDefault [] pid pm)
   in scorePlayerPure scoring bs ps pid
 
 mergePlayerScores :: PlayerScore -> PlayerScore -> PlayerScore

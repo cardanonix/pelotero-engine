@@ -10,33 +10,26 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
--- |
--- Module      : Pelotero.DB.LineupSnapshot
--- Description : Per-game frozen copies of league_team lineups.
---
--- A 'lineup_snapshot' row records that, at the time of game start
--- (in practice, whenever the operator's snapshot job ran), a given
--- team's lineup contained a given player at a given slot. Scoring
--- reads from these snapshots, NOT from current 'lineup_slot' rows,
--- so re-scoring after lineup edits gives the same answer as long as
--- the snapshot was taken before the game.
 module Pelotero.DB.LineupSnapshot
   ( LineupSnapshotRow(..)
-    -- * Transaction-flavored operations
+
   , writeSnapshotsT
   , getSnapshotForTeamGameT
   , snapshotExistsForTeamGameT
   , getSnapshotsForGameT
-    -- * Pool-flavored operations
+  , getSnapshotsForDateRangeT
+
   , writeSnapshots
   , getSnapshotForTeamGame
   , snapshotExistsForTeamGame
   , getSnapshotsForGame
+  , getSnapshotsForDateRange
   ) where
 
+import           Data.Functor.Contravariant ((>$<))
 import           Data.Int                   (Int64)
 import           Data.Text                  (Text)
-import           Data.Time                  (UTCTime)
+import           Data.Time                  (Day, UTCTime)
 import           GHC.Generics               (Generic)
 
 import qualified Hasql.Transaction          as Tx
@@ -47,16 +40,15 @@ import           Rel8                       ( Column
                                             , Result
                                             , TableSchema(..)
                                             , (==.)
+                                            , (>=.)
+                                            , (<=.)
                                             )
 import qualified Rel8                       as R
 
-import Pelotero.DB.Pool          (DBError, Pool, runTransaction)
-import Pelotero.DB.Rel8Instances ()
-import Pelotero.Domain.Id        (DbGameId, DbLeagueTeamId, DbPlayerId)
-
--- ============================================================================
--- lineup_snapshot
--- ============================================================================
+import qualified Pelotero.DB.Game            as Game
+import           Pelotero.DB.Pool            (DBError, Pool, runTransaction)
+import           Pelotero.DB.Rel8Instances   ()
+import           Pelotero.Domain.Id          (DbGameId, DbLeagueTeamId, DbPlayerId)
 
 data LineupSnapshot f = LineupSnapshot
   { _lsnapId            :: Column f Int64
@@ -85,10 +77,6 @@ lineupSnapshotSchema = TableSchema
       }
   }
 
--- ============================================================================
--- Public row type
--- ============================================================================
-
 data LineupSnapshotRow = LineupSnapshotRow
   { lsnapLeagueTeamId :: !DbLeagueTeamId
   , lsnapGameId       :: !DbGameId
@@ -105,16 +93,6 @@ fromResult LineupSnapshot{..} = LineupSnapshotRow
   , lsnapPlayerId     = _lsnapPlayerId
   }
 
--- ============================================================================
--- Transaction-flavored operations
--- ============================================================================
-
--- | Insert with ON CONFLICT DO NOTHING. Idempotent: re-running with
--- the same (league_team_id, game_id, slot, player_id) tuples is a
--- no-op. The unique constraint on the table guarantees this.
---
--- Returns no count; callers that need to know how many rows they
--- tried to insert should track 'length' on the input list.
 writeSnapshotsT :: [LineupSnapshotRow] -> Tx.Transaction ()
 writeSnapshotsT []   = pure ()
 writeSnapshotsT rows = Tx.statement () $ R.run_ $ R.insert R.Insert
@@ -161,9 +139,21 @@ getSnapshotsForGameT gid = do
     pure s
   pure (map fromResult rows)
 
--- ============================================================================
--- Pool-flavored operations
--- ============================================================================
+-- | Single SELECT: every snapshot row for games whose game_date falls in
+-- [startDay, endDay]. Replaces the per-(team, game) round-trips that the
+-- scoring engine used to do.
+getSnapshotsForDateRangeT
+  :: Day -> Day -> Tx.Transaction [LineupSnapshotRow]
+getSnapshotsForDateRangeT startDay endDay = do
+  rows <- Tx.statement () $ R.run $ R.select $
+    R.orderBy ((_lsnapLeagueTeamId >$< R.asc) <> (_lsnapGameId >$< R.asc)) $ do
+      g <- R.each Game.gameSchema
+      s <- R.each lineupSnapshotSchema
+      R.where_ (Game._gameId       g ==. _lsnapGameId s)
+      R.where_ (Game._gameGameDate g >=. R.lit startDay)
+      R.where_ (Game._gameGameDate g <=. R.lit endDay)
+      pure s
+  pure (map fromResult rows)
 
 writeSnapshots :: Pool -> [LineupSnapshotRow] -> IO (Either DBError ())
 writeSnapshots pool rs = runTransaction pool (writeSnapshotsT rs)
@@ -184,3 +174,8 @@ snapshotExistsForTeamGame pool ltid gid =
 getSnapshotsForGame
   :: Pool -> DbGameId -> IO (Either DBError [LineupSnapshotRow])
 getSnapshotsForGame pool gid = runTransaction pool (getSnapshotsForGameT gid)
+
+getSnapshotsForDateRange
+  :: Pool -> Day -> Day -> IO (Either DBError [LineupSnapshotRow])
+getSnapshotsForDateRange pool s e =
+  runTransaction pool (getSnapshotsForDateRangeT s e)

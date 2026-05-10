@@ -188,7 +188,7 @@ test-suite pelotero-test
     Pelotero.Provider.ExternalIdSpec
     Pelotero.Sync.PlayersSpec
     Pelotero.Sync.ScheduleSpec
-    Pelotero.Sync.BoxscoresSpec 
+    Pelotero.Sync.BoxscoresSpec
     Pelotero.Draft.MachineSpec
   build-depends:    base
                   , pelotero-engine
@@ -224,7 +224,8 @@ test-suite pelotero-integration-test
     IntegrationTest.DraftPickRepoSpec
     IntegrationTest.SyncPlayersSpec
     IntegrationTest.ScoreSpec
-  
+    IntegrationTest.SmokeSpec
+
   build-depends:    base
                   , pelotero-engine
                   , bytestring

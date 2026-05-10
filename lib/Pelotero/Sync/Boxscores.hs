@@ -1,4 +1,3 @@
--- lib/Pelotero/Sync/Boxscores.hs
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -27,7 +26,7 @@ import Katip (Severity (..))
 
 import Pelotero.DB.BoxscoreEntry (BattingRow (..), PitchingRow (..))
 import Pelotero.DB.FetchLog (FetchLogRow (..))
-import Pelotero.DB.Provider (ProviderName)
+import Pelotero.DB.Provider (ProviderName, renderProviderName)
 import Pelotero.Domain.Id
   ( DbGameId
   , DbPlayerId
@@ -56,23 +55,11 @@ import Pelotero.Provider.ExternalId
   , externalIdFromTeamId
   )
 
--- | Outcome of processing one game in 'syncOne'.
---
--- The 'BoxUnchanged' constructor is the Phase C.1 short-circuit: the
--- fetched payload SHA matched the prior fetch and no parse / convert /
--- upsert / fetch-log work was done. 'BoxUpserted' means the full path
--- ran; the two Ints are batting and pitching row counts and the list
--- is the per-game ConvertWarning batch.
 data BoxscoreOutcome
   = BoxUpserted !Int !Int ![Convert.ConvertWarning]
   | BoxUnchanged
   deriving stock (Show, Eq)
 
--- | Aggregate result across a batch of games. 'boxGamesUnchanged' is
--- the Phase C.1 SHA-skip counter; 'boxGamesProcessed' counts only games
--- whose full path ran. 'boxGamesSkipped' is preserved as a field for
--- backwards compatibility but is no longer incremented by this module
--- (the SHA-skip path increments 'boxGamesUnchanged' instead).
 data BoxscoreSyncResult = BoxscoreSyncResult
   { boxGamesSeen        :: !Int
   , boxGamesProcessed   :: !Int
@@ -86,13 +73,9 @@ data BoxscoreSyncResult = BoxscoreSyncResult
   deriving stock (Show, Eq)
 
 data BoxscoreSyncError
-  = -- | The 'GameId' wasn't in the local games table. Run schedule
-    --   sync first, then retry.
-    GameNotKnown !GameId
-  | -- | HTTP or transport failure from the 'MLBClient' effect.
-    FetchFailed  !GameId !String
-  | -- | Aeson decode failure on the raw bytes.
-    ParseFailed  !GameId !String
+  = GameNotKnown !GameId
+  | FetchFailed  !GameId !String
+  | ParseFailed  !GameId !String
   deriving stock (Show, Eq)
 
 emptyResult :: BoxscoreSyncResult
@@ -174,10 +157,6 @@ syncOne provider gid = do
                       <> extId <> " sha=" <> newSha
                   pure (Right BoxUnchanged)
             _ ->
-              -- IMPORTANT: the FetchLog.recordFetch call below MUST
-              -- remain the last step of this branch. Inverting it with
-              -- the upserts would let a crash mid-upsert leave a
-              -- fetch-log row that masks a partial state on re-run.
               case Aeson.eitherDecodeStrict rawBytes of
                 Left perr -> pure (Left (ParseFailed gid perr))
                 Right wireBox -> do
@@ -198,6 +177,7 @@ upsertEntries
   :: ( BoxscoreEntry :> es
      , Players       :> es
      , Teams         :> es
+     , Logging       :> es
      )
   => ProviderName
   -> DbGameId
@@ -209,7 +189,13 @@ upsertEntries provider dbGameId = foldM step (0, 0)
       let pidExt = externalIdFromPlayerId (Convert.boxPlayerId entry)
       mPlayerDb <- Players.lookupPlayerByExternalId provider pidExt
       case mPlayerDb of
-        Nothing -> pure (bat, pit)
+        Nothing -> do
+          logFM WarningS $
+            "boxscore: skipping unknown player; provider="
+              <> renderProviderName provider
+              <> " externalId=" <> pidExt
+              <> " (player not yet synced)"
+          pure (bat, pit)
         Just playerDb -> do
           mTeamDb <- case Convert.boxTeamId entry of
             Nothing -> pure Nothing

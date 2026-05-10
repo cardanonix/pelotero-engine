@@ -11,21 +11,29 @@ module Pelotero.Effects.LineupSnapshot
   , getSnapshotForTeamGame
   , snapshotExistsForTeamGame
   , getSnapshotsForGame
+  , getSnapshotsForDateRange
   , runLineupSnapshotDB
   ) where
 
+import           Data.Time                   (Day)
 import           Effectful
 import           Effectful.Dispatch.Dynamic
-import qualified Pelotero.DB.LineupSnapshot as Repo
-import           Pelotero.DB.LineupSnapshot (LineupSnapshotRow)
+import qualified Pelotero.DB.LineupSnapshot  as Repo
+import           Pelotero.DB.LineupSnapshot  (LineupSnapshotRow)
 import           Pelotero.Domain.Id
 import           Pelotero.Effects.Database
 
 data LineupSnapshot :: Effect where
-  WriteSnapshots            :: [LineupSnapshotRow] -> LineupSnapshot m ()
-  GetSnapshotForTeamGame    :: DbLeagueTeamId -> DbGameId -> LineupSnapshot m [LineupSnapshotRow]
-  SnapshotExistsForTeamGame :: DbLeagueTeamId -> DbGameId -> LineupSnapshot m Bool
-  GetSnapshotsForGame       :: DbGameId -> LineupSnapshot m [LineupSnapshotRow]
+  WriteSnapshots            :: [LineupSnapshotRow]
+                            -> LineupSnapshot m ()
+  GetSnapshotForTeamGame    :: DbLeagueTeamId -> DbGameId
+                            -> LineupSnapshot m [LineupSnapshotRow]
+  SnapshotExistsForTeamGame :: DbLeagueTeamId -> DbGameId
+                            -> LineupSnapshot m Bool
+  GetSnapshotsForGame       :: DbGameId
+                            -> LineupSnapshot m [LineupSnapshotRow]
+  GetSnapshotsForDateRange  :: Day -> Day
+                            -> LineupSnapshot m [LineupSnapshotRow]
 
 type instance DispatchOf LineupSnapshot = Dynamic
 
@@ -42,8 +50,14 @@ snapshotExistsForTeamGame
   => DbLeagueTeamId -> DbGameId -> Eff es Bool
 snapshotExistsForTeamGame ltid gid = send (SnapshotExistsForTeamGame ltid gid)
 
-getSnapshotsForGame :: LineupSnapshot :> es => DbGameId -> Eff es [LineupSnapshotRow]
+getSnapshotsForGame
+  :: LineupSnapshot :> es => DbGameId -> Eff es [LineupSnapshotRow]
 getSnapshotsForGame gid = send (GetSnapshotsForGame gid)
+
+getSnapshotsForDateRange
+  :: LineupSnapshot :> es
+  => Day -> Day -> Eff es [LineupSnapshotRow]
+getSnapshotsForDateRange s e = send (GetSnapshotsForDateRange s e)
 
 runLineupSnapshotDB
   :: Database :> es
@@ -54,3 +68,4 @@ runLineupSnapshotDB = interpret $ \_ -> \case
   GetSnapshotForTeamGame l g     -> runTx (Repo.getSnapshotForTeamGameT l g)
   SnapshotExistsForTeamGame l g  -> runTx (Repo.snapshotExistsForTeamGameT l g)
   GetSnapshotsForGame g          -> runTx (Repo.getSnapshotsForGameT g)
+  GetSnapshotsForDateRange s e   -> runTx (Repo.getSnapshotsForDateRangeT s e)
