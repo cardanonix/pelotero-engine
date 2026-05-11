@@ -2,8 +2,10 @@ cabal-version: 3.6
 
 name:          pelotero-engine
 version:       0.1.4.0
-data-files:         integration-test/fixtures/mlb/teams-2025.json
-                  , integration-test/fixtures/mlb/players-2025.json
+data-files:         integration-test/fixtures/mlb/teams-*.json
+                  , integration-test/fixtures/mlb/players-*.json
+                  , integration-test/fixtures/mlb/schedule-*.json
+                  , integration-test/fixtures/mlb/boxscore-*.json
 synopsis:      Fantasy baseball points engine
 description:   Phase 1: domain types and MLB wire layer.
                Phase 2a: schema, connection pool, migrations.
@@ -223,6 +225,8 @@ test-suite pelotero-integration-test
     IntegrationTest.PlayerRankingRepoSpec
     IntegrationTest.DraftPickRepoSpec
     IntegrationTest.SyncPlayersSpec
+    IntegrationTest.SyncScheduleSpec
+    IntegrationTest.SyncBoxscoresSpec
     IntegrationTest.ScoreSpec
     IntegrationTest.SmokeSpec
     IntegrationTest.Fixtures
@@ -235,7 +239,7 @@ test-suite pelotero-integration-test
                   , effectful-core
                   , hasql-pool
                   , hasql-transaction
+                  , time
                   , hspec
                   , text
-                  , time
   ghc-options:      -O0 -threaded

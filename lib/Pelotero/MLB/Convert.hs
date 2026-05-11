@@ -1,20 +1,16 @@
--- | Wire-to-domain conversion for MLB API responses.
 module Pelotero.MLB.Convert
   ( -- * Conversion
     convertPlayer
   , convertPlayers
   , convertSchedule
   , convertBoxscore
-    -- * Reporting
   , ConvertWarning(..)
   , renderWarning
-  -- , logWarnings
-    -- * Box-score entries
   , BoxscoreEntry(..)
   ) where
 
 import qualified Data.Map.Strict as Map
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, isJust)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time.Calendar (Day)
@@ -34,8 +30,6 @@ import qualified Pelotero.MLB.Wire.Boxscore as WB
 import qualified Pelotero.MLB.Wire.Player as WP
 import qualified Pelotero.MLB.Wire.Schedule as WS
 
---------------------------------------------------------------------------------
--- Warnings
 
 data ConvertWarning
   = InvalidPlayerId !Int
@@ -43,7 +37,7 @@ data ConvertWarning
   | UnknownHandedness !Int !Text
   | InvalidGameDate !Int !Text
   | MissingTeamRef !Int
-  | WireFieldDiscrepancy !Int !Text !Int   -- ^ player id, wire IP text, wire outs
+  | WireFieldDiscrepancy !Int !Text !Int
   deriving stock (Show, Eq)
 
 renderWarning :: ConvertWarning -> Text
@@ -68,15 +62,6 @@ renderWarning = \case
       <> " wire field discrepancy: ip=" <> ip
       <> " outs=" <> tshow outs
 
--- logWarnings :: [ConvertWarning] -> IO ()
--- logWarnings = logWarningsTo stderr
-
--- logWarningsTo :: Handle -> [ConvertWarning] -> IO ()
--- logWarningsTo h ws = unless (null ws) $
---   mapM_ (\w -> hPutStrLn h (T.unpack (renderWarning w))) ws
-
---------------------------------------------------------------------------------
--- Players
 
 convertPlayer :: WP.WirePlayer -> ([ConvertWarning], Maybe Player)
 convertPlayer wp
@@ -133,8 +118,6 @@ convertHand pid (Just (WP.WireHandRef (Just code))) =
     Just h  -> ([], Just h)
     Nothing -> ([UnknownHandedness pid code], Nothing)
 
---------------------------------------------------------------------------------
--- Schedule
 
 convertSchedule :: WS.WireScheduleEnvelope -> ([ConvertWarning], GameSchedule)
 convertSchedule env =
@@ -175,20 +158,7 @@ convertGame day wg =
 parseDate :: Text -> Maybe Day
 parseDate t = parseTimeM True defaultTimeLocale "%Y-%-m-%-d" (T.unpack t)
 
---------------------------------------------------------------------------------
--- Boxscore
 
--- | One entry per player appearance per side. The 'GameId' is supplied by
--- the caller; the wire format doesn't carry it because by the time you have
--- a boxscore in hand you also have the game ID from the URL it was fetched
--- at.
---
--- 'boxBatting' and 'boxPitching' are 'Maybe' to preserve the wire-level
--- distinction between "this player batted" and "this player did not bat" /
--- "this player pitched" and "this player did not pitch". A position player
--- in an AL game has 'Nothing' for pitching; a relief pitcher who did not
--- come to the plate has 'Nothing' for batting. The DB-write layer skips
--- 'Nothing' rather than inserting an all-null row.
 data BoxscoreEntry = BoxscoreEntry
   { boxGameId   :: !GameId
   , boxPlayerId :: !PlayerId
@@ -217,7 +187,9 @@ boxsideEntries gid team =
           (pitWarns, mPitching) = case stats >>= WB.wbsPitching of
             Just wbpitch ->
               let (ws, ps) = convertPitching pid wbpitch
-              in (ws, Just ps)
+              in if pitchingHasAppearance ps
+                   then (ws, Just ps)
+                   else (ws, Nothing)
             Nothing -> ([], Nothing)
       in (pitWarns, BoxscoreEntry
             { boxGameId   = gid
@@ -226,6 +198,18 @@ boxsideEntries gid team =
             , boxBatting  = batting
             , boxPitching = mPitching
             })
+
+-- | MLB Stats API serializes non-pitchers with an empty `"pitching": {}` object,
+-- which decodes successfully as a `WireBoxPitching` with every field `Nothing`.
+-- A pitching row only makes sense for a player who actually pitched, so we drop
+-- entries with no appearance signal at all.
+pitchingHasAppearance :: PitchingStats -> Bool
+pitchingHasAppearance p = any isJust
+  [ pitGamesPlayed p
+  , pitOuts p
+  , pitBattersFaced p
+  , pitNumberOfPitches p
+  ]
 
 convertBatting :: WB.WireBoxBatting -> BattingStats
 convertBatting WB.WireBoxBatting{..} = BattingStats
@@ -310,8 +294,6 @@ convertPitching playerId wp =
         }
   in (warns, stats)
 
---------------------------------------------------------------------------------
--- Internal helpers
 
 orEmpty :: Maybe Text -> Text
 orEmpty = maybe T.empty id

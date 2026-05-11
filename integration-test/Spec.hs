@@ -14,16 +14,13 @@ import qualified IntegrationTest.PlayerRepoSpec          as PlayerRepoSpec
 import qualified IntegrationTest.RosterSlotRepoSpec      as RosterSlotRepoSpec
 import qualified IntegrationTest.ScoreSpec               as ScoreSpec
 import qualified IntegrationTest.SmokeSpec               as SmokeSpec
+import qualified IntegrationTest.SyncBoxscoresSpec       as SyncBoxscoresSpec
 import qualified IntegrationTest.SyncPlayersSpec         as SyncPlayersSpec
+import qualified IntegrationTest.SyncScheduleSpec        as SyncScheduleSpec
 import qualified IntegrationTest.TeamRepoSpec            as TeamRepoSpec
 
 import           IntegrationTest.Setup                   (withTestPool)
 
--- | One pool, shared across the entire suite via 'aroundAll'. Each
--- repo test still uses 'runRolledBack' inside, so the pool is reused
--- but per-test data isolation is preserved. Effect-interpreter specs
--- (Score, Smoke, SyncPlayers) call 'cleanDatabase' explicitly when
--- they need to commit across multiple transactions.
 main :: IO ()
 main = hspec $ aroundAll withTestPool $ do
   TeamRepoSpec.spec
@@ -38,5 +35,7 @@ main = hspec $ aroundAll withTestPool $ do
   PlayerRankingRepoSpec.spec
   DraftPickRepoSpec.spec
   SyncPlayersSpec.spec
+  SyncScheduleSpec.spec
+  SyncBoxscoresSpec.spec
   ScoreSpec.spec
   SmokeSpec.spec

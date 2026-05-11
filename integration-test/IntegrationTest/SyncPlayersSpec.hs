@@ -39,9 +39,9 @@ import           IntegrationTest.Setup
                    )
 
 spec :: SpecWith Pool
-spec = describe "Pelotero.Sync.Players (with fixture interpreter)" $ do
+spec = describe "Pelotero.Sync.Players (with real-shape MLB fixtures)" $ do
 
-  it "syncs teams and players from a fixture into the database" $ \pool -> do
+  it "syncs every team and player from the 2025 fixture into the database" $ \pool -> do
     cleanDatabase pool
 
     result <- runEffectsOrFail
@@ -62,29 +62,47 @@ spec = describe "Pelotero.Sync.Players (with fixture interpreter)" $ do
                                >> error "unreachable"
                   Right f  -> pure f
 
+                let expectedTeams   = length (frTeams   fetched)
+                    expectedPlayers = length (frPlayers fetched)
+
                 sr <- Sync.syncRosters
                         ProviderMLB
                         "2025"
                         (frPayloadSha fetched)
-                        (frTeams fetched)
+                        (frTeams   fetched)
                         (frPlayers fetched)
 
-                mAstros <- lookupTeamRow   ProviderMLB "117"
-                mMets   <- lookupTeamRow   ProviderMLB "121"
-                mAltuve <- lookupPlayerRow ProviderMLB "514888"
-                mAlonso <- lookupPlayerRow ProviderMLB "624413"
-                mFetch  <- runTx (FL.getLastFetchT
+                mAstros  <- lookupTeamRow   ProviderMLB "117"
+                mMets    <- lookupTeamRow   ProviderMLB "121"
+                mAltuve  <- lookupPlayerRow ProviderMLB "514888"
+                mAlonso  <- lookupPlayerRow ProviderMLB "624413"
+                mAlvarez <- lookupPlayerRow ProviderMLB "670541"
+                mLindor  <- lookupPlayerRow ProviderMLB "596019"
+                mFetch   <- runTx (FL.getLastFetchT
                                     ProviderMLB "active-rosters" "2025")
 
                 pure ( sr
                      , frPayloadSha fetched
-                     , mAstros, mMets, mAltuve, mAlonso, mFetch
+                     , expectedTeams
+                     , expectedPlayers
+                     , mAstros, mMets
+                     , mAltuve, mAlonso, mAlvarez, mLindor
+                     , mFetch
                      )
 
-    let (syncResult, payloadSha, mAstros, mMets, mAltuve, mAlonso, mFetch) = result
+    let ( syncResult, payloadSha, expectedTeams, expectedPlayers
+          , mAstros, mMets
+          , mAltuve, mAlonso, mAlvarez, mLindor
+          , mFetch
+          ) = result
 
-    Sync.syncTeamsUpserted   syncResult `shouldBe` 2
-    Sync.syncPlayersUpserted syncResult `shouldBe` 2
+    -- Sanity-check the fixture itself.  These pin the totals so accidental
+    -- pruning of the fixture trips the test instead of silently passing.
+    expectedTeams   `shouldBe` 30
+    expectedPlayers `shouldBe` 4
+
+    Sync.syncTeamsUpserted   syncResult `shouldBe` expectedTeams
+    Sync.syncPlayersUpserted syncResult `shouldBe` expectedPlayers
     Sync.syncFetchSha256     syncResult `shouldBe` payloadSha
 
     case mAstros of
@@ -109,13 +127,25 @@ spec = describe "Pelotero.Sync.Players (with fixture interpreter)" $ do
         playerRowPosition  p `shouldBe` Just "1B"
       Nothing -> expectationFailure "Alonso not in DB"
 
+    case mAlvarez of
+      Just p  -> do
+        playerRowFirstName p `shouldBe` "Yordan"
+        playerRowLastName  p `shouldBe` "Alvarez"
+      Nothing -> expectationFailure "Alvarez not in DB"
+
+    case mLindor of
+      Just p  -> do
+        playerRowFirstName p `shouldBe` "Francisco"
+        playerRowLastName  p `shouldBe` "Lindor"
+      Nothing -> expectationFailure "Lindor not in DB"
+
     case mFetch of
       Just fl -> do
         fetchLogProvider      fl `shouldBe` ProviderMLB
         fetchLogResource      fl `shouldBe` "active-rosters"
         fetchLogScope         fl `shouldBe` "2025"
         fetchLogPayloadSha256 fl `shouldBe` payloadSha
-        fetchLogRecordCount   fl `shouldBe` 2
+        fetchLogRecordCount   fl `shouldBe` fromIntegral expectedPlayers
       Nothing -> expectationFailure "fetch log not recorded"
 
 lookupTeamRow

@@ -1,5 +1,5 @@
 %bundle chase v1
-%generated 2026-05-10T13:16:06Z
+%generated 2026-05-11T11:44:59Z
 %roots /home/bismuth/git/pelotero-engine/lib
 %files 62 ok, 0 failed
 
@@ -3989,7 +3989,7 @@ data ConvertWarning
   | UnknownHandedness !Int !Text
   | InvalidGameDate !Int !Text
   | MissingTeamRef !Int
-  | WireFieldDiscrepancy !Int !Text !Int   -- ^ player id, wire IP text, wire outs
+  | WireFieldDiscrepancy !Int !Text !Int
   deriving stock (Show, Eq)
 
 data BoxscoreEntry = BoxscoreEntry
@@ -4059,6 +4059,8 @@ convertBoxscore :: GameId -> WB.WireBoxscore -> ([ConvertWarning], [BoxscoreEntr
 boxsideEntries :: GameId -> WB.WireBoxTeam -> ([ConvertWarning], [BoxscoreEntry])
   ! iterates Map.elems of the players map; the wire keys ('ID660271') are discarded
   ! missing batting or pitching stats default to emptyBatting / emptyPitching
+
+pitchingHasAppearance :: PitchingStats -> Bool
 
 convertBatting :: WB.WireBoxBatting -> BattingStats
   ! mechanical field-by-field copy from WireBoxBatting to BattingStats; no derivation, parsing, or fallback
