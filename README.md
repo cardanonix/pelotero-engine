@@ -6,29 +6,32 @@ This app provides functions to scrape game data from a baseball API for a given 
 
 Ensure that you have the necessary Haskell libraries installed, such as:
 
-- base >=4.11 && <4.18
-- random
-- memory
-- filepath
-- http-conduit
+- base       >= 4.11 && < 4.22
+- aeson
+- bytestring
+- containers
+- contravariant     >= 1.5   && < 1.6
+- text
 - time
-- bytestring
-- aeson
 - vector
-- unordered-containers
-- text
-- containers
-- cryptohash-sha256
+- hasql              >= 1.9   && < 1.10
+- hasql-pool         >= 1.3   && < 1.5
+- hasql-transaction  >= 1.1   && < 1.2
+- directory          >= 1.3   && < 1.4
+- filepath           >= 1.4   && < 1.6
+- cryptohash-sha256  >= 0.11  && < 0.12
+- base16-bytestring  >= 1.0   && < 1.1
 - crypton
-- scientific
-- directory
-- debug-trace-var
-- bytestring
-- aeson
-- text
-- containers
-- async
-- cassava
+- memory
+- effectful          >= 2.5   && < 3
+- http-client        >= 0.7   && < 0.8
+- http-conduit
+- http-types         >= 0.12  && < 0.13
+- rel8               >= 1.7   && < 1.8
+- katip
+- crem
+- singletons
+- singletons-base
 
 If you use nix, making sure all dependencies are covered is as simple as cloning and running:
 ```
