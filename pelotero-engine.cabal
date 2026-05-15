@@ -208,6 +208,7 @@ test-suite pelotero-integration-test
     IntegrationTest.LineupSlotRepoSpec
     IntegrationTest.PlayerRankingRepoSpec
     IntegrationTest.DraftPickRepoSpec
+    IntegrationTest.DraftRunSpec
     IntegrationTest.SyncPlayersSpec
     IntegrationTest.SyncScheduleSpec
     IntegrationTest.SyncBoxscoresSpec

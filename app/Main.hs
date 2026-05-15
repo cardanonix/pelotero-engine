@@ -23,9 +23,8 @@
 module Main (main) where
 
 import           Control.Exception              (bracket)
-import           Control.Monad                  (forM_, unless)
+import           Control.Monad                  (forM_)
 import           Data.Foldable                  (traverse_)
-import           Data.Maybe                     (catMaybes)
 import qualified Data.Text                      as T
 import qualified Data.Text.IO                   as TIO
 import           Data.Time
@@ -45,19 +44,14 @@ import qualified Effectful                      as E
 
 import qualified Pelotero.DB.Migration          as Mig
 import qualified Pelotero.DB.Pool               as Pool
-import           Pelotero.DB.Pool               (DBError, Pool, renderDBError)
+import           Pelotero.DB.Pool               (renderDBError)
 import           Pelotero.DB.Provider           (ProviderName (..))
-import           Pelotero.DB.Game               (LoadedGameRow (..))
 
 import           Pelotero.App                   (AppEffects, runApp)
-import           Pelotero.Domain.Id
-                     ( DbLeagueConfigId (..)
-                     , GameId
-                     )
+import           Pelotero.Domain.Id             (DbLeagueConfigId (..))
 import qualified Pelotero.Domain.Scoring        as Scoring
 import qualified Pelotero.Draft                 as Draft
 import qualified Pelotero.Draft.Run             as DraftRun
-import qualified Pelotero.Effects.Games         as Games
 import           Pelotero.Effects.Logging
                      ( Namespace (..)
                      , Severity (..)
@@ -72,7 +66,6 @@ import           Pelotero.MLB.Fetch
                      ( FetchedRosters (..)
                      , FetchedSchedule (..)
                      )
-import qualified Pelotero.Provider.ExternalId   as ExtId
 import qualified Pelotero.Score                 as Score
 import qualified Pelotero.Sync.Boxscores        as Box
 import qualified Pelotero.Sync.Players          as SyncPlayers
@@ -237,17 +230,7 @@ workSyncBoxscores :: DateRangeOpts -> Eff AppEffects ()
 workSyncBoxscores (DateRangeOpts fromDate toDate) =
   addNamespace (Namespace ["sync"]) $ do
     logFM InfoS $ "syncing boxscores for " <> scopeOf fromDate toDate
-    games <- Games.getGamesByDateRange fromDate toDate
-    -- Resolve each DbGameId back to its provider external id, then
-    -- parse to a GameId. A library helper would absorb this loop, but
-    -- the open-code is cheap enough at this layer.
-    resolved <- traverse resolveGameId games
-    let gameIds = catMaybes resolved
-        missing = length games - length gameIds
-    unless (missing == 0) $
-      logFM WarningS $ tshow missing
-                    <> " games in range have no MLB external id; skipping"
-    result <- Box.syncBoxscores ProviderMLB gameIds
+    result <- Box.syncBoxscoresForDateRange ProviderMLB fromDate toDate
     logFM InfoS $ "boxscores: "
       <> tshow (Box.boxGamesProcessed   result) <> " processed, "
       <> tshow (Box.boxGamesUnchanged   result) <> " unchanged, "
@@ -259,11 +242,6 @@ workSyncBoxscores (DateRangeOpts fromDate toDate) =
               (Box.boxConvertWarnings result)
     forM_ (Box.boxErrors result) $ \err ->
       logFM WarningS $ "boxscore error: " <> tshow err
-  where
-    resolveGameId :: LoadedGameRow -> Eff AppEffects (Maybe GameId)
-    resolveGameId g = do
-      mExt <- Games.getGameExternalId (lgrId g) ProviderMLB
-      pure (mExt >>= ExtId.externalIdToGameId)
 
 -- ---------------------------------------------------------------------
 -- snapshot lineups

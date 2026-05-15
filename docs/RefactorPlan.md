@@ -391,3 +391,7 @@ integration-test/IntegrationTest/TeamRepoSpec.hs
 
 (IntegrationTest.SyncPlayersSpec I already have from the earlier paste; that one I can update without re-requesting.)
 If you'd rather knock out E.2 or the ScoreSpec import cleanup first as quick wins, say so — both are sub-minute changes.
+
+
+_______
+The remaining open follow-ups (runTransaction read/write split, B.2 order_index) are project-scoped work that deserves their own scoping conversations when the time comes.

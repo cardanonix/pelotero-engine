@@ -20,7 +20,7 @@ import qualified Pelotero.DB.Team           as Tm
 import           Pelotero.DB.FetchLog       (FetchLogRow(..))
 import           Pelotero.DB.Player         (LoadedPlayerRow(..))
 import           Pelotero.DB.Pool           (DBError, Pool)
-import           Pelotero.DB.Team           (TeamRow(..))
+import           Pelotero.DB.Team           (LoadedTeamRow(..))
 import           Pelotero.DB.Provider       (ProviderName(..))
 import           Pelotero.Effects.Clock     (runClockFixed)
 import           Pelotero.Effects.Database  (Database, runDatabasePool, runTx)
@@ -106,11 +106,11 @@ spec = describe "Pelotero.Sync.Players (with real-shape MLB fixtures)" $ do
     Sync.syncFetchSha256     syncResult `shouldBe` payloadSha
 
     case mAstros of
-      Just t  -> teamRowName t `shouldBe` "Houston Astros"
+      Just t  -> ltrName t `shouldBe` "Houston Astros"
       Nothing -> expectationFailure "Astros not in DB"
 
     case mMets of
-      Just t  -> teamRowName t `shouldBe` "New York Mets"
+      Just t  -> ltrName t `shouldBe` "New York Mets"
       Nothing -> expectationFailure "Mets not in DB"
 
     case mAltuve of
@@ -150,7 +150,7 @@ spec = describe "Pelotero.Sync.Players (with real-shape MLB fixtures)" $ do
 
 lookupTeamRow
   :: Database E.:> es
-  => ProviderName -> Text -> E.Eff es (Maybe TeamRow)
+  => ProviderName -> Text -> E.Eff es (Maybe LoadedTeamRow)
 lookupTeamRow provider extId = do
   mTid <- runTx (Tm.lookupByExternalIdT provider extId)
   case mTid of

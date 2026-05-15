@@ -7,6 +7,7 @@ module Pelotero.Sync.Boxscores
   , BoxscoreOutcome (..)
   , BoxscoreUpsertCounts (..)
   , syncBoxscores
+  , syncBoxscoresForDateRange
   , syncOne
   , upsertEntries
   , battingRowFor
@@ -14,19 +15,22 @@ module Pelotero.Sync.Boxscores
   , sha256Hex
   ) where
 
-import Control.Monad (foldM)
+import Control.Monad (foldM, when)
 import qualified Crypto.Hash.SHA256 as SHA256
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as B16
 import Data.Int (Int32)
+import Data.Maybe (catMaybes)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
+import Data.Time.Calendar (Day)
 import Effectful
 import Katip (Severity (..))
 
 import Pelotero.DB.BoxscoreEntry (BattingRow (..), PitchingRow (..))
 import Pelotero.DB.FetchLog (FetchLogRow (..))
+import Pelotero.DB.Game (LoadedGameRow (..))
 import Pelotero.DB.Provider (ProviderName, renderProviderName)
 import Pelotero.Domain.Id
   ( DbGameId
@@ -54,6 +58,7 @@ import Pelotero.Provider.ExternalId
   ( externalIdFromGameId
   , externalIdFromPlayerId
   , externalIdFromTeamId
+  , externalIdToGameId
   )
 
 -- | Per-game upsert counts. 'bucPlayersSkipped' is the number of
@@ -144,6 +149,44 @@ syncBoxscores provider = foldM step emptyResult
       , boxPlayersSkipped   = boxPlayersSkipped acc + bucPlayersSkipped counts
       , boxConvertWarnings  = boxConvertWarnings acc ++ warns
       }
+
+-- | Sync boxscores for every game scheduled in the given inclusive
+-- date range. Looks the games up via 'Games.getGamesByDateRange',
+-- resolves each to its provider-side 'GameId' via
+-- 'Games.getGameExternalId' and 'externalIdToGameId', and delegates
+-- to 'syncBoxscores'. Games in the range that have no recorded
+-- external id under the given provider are dropped with a single
+-- WarningS log line naming the count; this is normal during initial
+-- bootstrap of a new provider, abnormal during steady-state operation.
+syncBoxscoresForDateRange
+  :: ( BoxscoreEntry :> es
+     , Games         :> es
+     , Players       :> es
+     , Teams         :> es
+     , MLBClient     :> es
+     , FetchLog      :> es
+     , Logging       :> es
+     )
+  => ProviderName
+  -> Day
+  -> Day
+  -> Eff es BoxscoreSyncResult
+syncBoxscoresForDateRange provider from to_ = do
+  games    <- Games.getGamesByDateRange from to_
+  resolved <- traverse resolve games
+  let gameIds = catMaybes resolved
+      missing = length games - length gameIds
+  when (missing > 0) $
+    logFM WarningS $
+      T.pack (show missing)
+        <> " games in range have no "
+        <> renderProviderName provider
+        <> " external id; skipping"
+  syncBoxscores provider gameIds
+  where
+    resolve g = do
+      mExt <- Games.getGameExternalId (lgrId g) provider
+      pure (mExt >>= externalIdToGameId)
 
 syncOne
   :: ( BoxscoreEntry :> es

@@ -18,6 +18,8 @@ import qualified IntegrationTest.SyncBoxscoresSpec       as SyncBoxscoresSpec
 import qualified IntegrationTest.SyncPlayersSpec         as SyncPlayersSpec
 import qualified IntegrationTest.SyncScheduleSpec        as SyncScheduleSpec
 import qualified IntegrationTest.TeamRepoSpec            as TeamRepoSpec
+import qualified IntegrationTest.DraftRunSpec            as DraftRunSpec
+
 
 import           IntegrationTest.Setup                   (withTestPool)
 
@@ -39,3 +41,4 @@ main = hspec $ aroundAll withTestPool $ do
   SyncBoxscoresSpec.spec
   ScoreSpec.spec
   SmokeSpec.spec
+  DraftRunSpec.spec

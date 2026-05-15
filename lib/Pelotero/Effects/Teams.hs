@@ -23,7 +23,7 @@ import Effectful (Effect, IOE, Dispatch(Dynamic), DispatchOf)
 import qualified Effectful as E
 import Effectful.Dispatch.Dynamic (interpret_, send)
 
-import Pelotero.DB.Team      (TeamRow(..))
+import Pelotero.DB.Team      (LoadedTeamRow, TeamRow, teamRowToLoaded)
 import qualified Pelotero.DB.Team as TeamRepo
 import Pelotero.DB.Provider  (ProviderName)
 import Pelotero.Domain.Id    (DbTeamId(..))
@@ -32,8 +32,8 @@ import Pelotero.Effects.Database (Database, runTx)
 data Teams :: Effect where
   UpsertTeamByExternalId :: ProviderName -> Text -> TeamRow -> Teams m DbTeamId
   LookupTeamByExternalId :: ProviderName -> Text -> Teams m (Maybe DbTeamId)
-  GetTeamById            :: DbTeamId -> Teams m (Maybe TeamRow)
-  GetAllTeams            :: Teams m [TeamRow]
+  GetTeamById            :: DbTeamId -> Teams m (Maybe LoadedTeamRow)
+  GetAllTeams            :: Teams m [LoadedTeamRow]
 
 type instance DispatchOf Teams = 'Dynamic
 
@@ -47,10 +47,10 @@ lookupTeamByExternalId
 lookupTeamByExternalId provider extId =
   send (LookupTeamByExternalId provider extId)
 
-getTeamById :: Teams E.:> es => DbTeamId -> E.Eff es (Maybe TeamRow)
+getTeamById :: Teams E.:> es => DbTeamId -> E.Eff es (Maybe LoadedTeamRow)
 getTeamById = send . GetTeamById
 
-getAllTeams :: Teams E.:> es => E.Eff es [TeamRow]
+getAllTeams :: Teams E.:> es => E.Eff es [LoadedTeamRow]
 getAllTeams = send GetAllTeams
 
 runTeamsDB
@@ -69,7 +69,7 @@ runTeamsDB = interpret_ $ \case
 
 data TeamStore = TeamStore
   { teamExternalIdToDb :: !(Map.Map (ProviderName, Text) DbTeamId)
-  , teamRowsByDb       :: !(Map.Map DbTeamId TeamRow)
+  , teamLoadedByDb     :: !(Map.Map DbTeamId LoadedTeamRow)
   , teamNextId         :: !Int
   }
 
@@ -93,25 +93,25 @@ runTeamsInMemory action = do
         pure (Map.lookup (provider, extId) (teamExternalIdToDb store))
       GetTeamById tid -> do
         store <- E.liftIO (readIORef ref)
-        pure (Map.lookup tid (teamRowsByDb store))
+        pure (Map.lookup tid (teamLoadedByDb store))
       GetAllTeams -> do
         store <- E.liftIO (readIORef ref)
-        pure (map snd (Map.toList (teamRowsByDb store)))
+        pure (map snd (Map.toList (teamLoadedByDb store)))
 
     upsertOp provider extId incoming store =
       case Map.lookup (provider, extId) (teamExternalIdToDb store) of
         Just tid ->
-          let updated = incoming { teamRowId = Just tid }
+          let updated = teamRowToLoaded tid incoming
               store'  = store
-                { teamRowsByDb = Map.insert tid updated (teamRowsByDb store) }
+                { teamLoadedByDb = Map.insert tid updated (teamLoadedByDb store) }
           in (store', tid)
         Nothing ->
           let tid    = DbTeamId (fromIntegral (teamNextId store))
-              stored = incoming { teamRowId = Just tid }
+              stored = teamRowToLoaded tid incoming
               store' = TeamStore
                 { teamExternalIdToDb =
                     Map.insert (provider, extId) tid (teamExternalIdToDb store)
-                , teamRowsByDb = Map.insert tid stored (teamRowsByDb store)
+                , teamLoadedByDb = Map.insert tid stored (teamLoadedByDb store)
                 , teamNextId   = teamNextId store + 1
                 }
           in (store', tid)

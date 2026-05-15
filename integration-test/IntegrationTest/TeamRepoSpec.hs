@@ -6,7 +6,7 @@ import           Test.Hspec
 
 import qualified Pelotero.DB.Team         as Team
 import           Pelotero.DB.Pool         (Pool)
-import           Pelotero.DB.Team         (TeamRow(..))
+import           Pelotero.DB.Team         (LoadedTeamRow(..), TeamRow(..))
 import           Pelotero.DB.Provider     (ProviderName(..))
 
 import           IntegrationTest.Fixtures (mkTeamRow)
@@ -22,8 +22,8 @@ spec = describe "Pelotero.DB.Team" $ do
       Team.getByIdT tid
     case got of
       Just t  -> do
-        teamRowName t         `shouldBe` "Test Team"
-        teamRowAbbreviation t `shouldBe` "TST"
+        ltrName t         `shouldBe` "Test Team"
+        ltrAbbreviation t `shouldBe` "TST"
       Nothing -> expectationFailure "round-trip read returned Nothing"
 
   it "links and looks up an external id" $ \pool -> do
@@ -49,7 +49,7 @@ spec = describe "Pelotero.DB.Team" $ do
       pure (tid1 == tid2, mAfter)
     case result of
       (sameId, Just got) -> do
-        sameId          `shouldBe` True
-        teamRowName got `shouldBe` "Updated Name"
+        sameId      `shouldBe` True
+        ltrName got `shouldBe` "Updated Name"
       (_, Nothing) ->
         expectationFailure "expected to find the upserted team"
