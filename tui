@@ -1,118 +1,385 @@
-#! /usr/bin/env bash
+#!/usr/bin/env bash
+#
+# Pelotero Engine TUI
+#
+# Two modes:
+#   ./tui --build-all     CI-friendly: nix-build every cabal executable.
+#                         No gum, no dev shell, no postgres required.
+#   ./tui                 Interactive menu. Requires gum (use inside `nix develop`).
+#
+# Interactive mode wraps the `pelotero` CLI with prompts for the seasons,
+# dates, and league ids you'd otherwise have to type by hand.
+#
+# The executable list is discovered from the .cabal file so adding a new
+# executable later requires no change here.
 
-# Turn off command echo
-set +x
+set -uo pipefail
 
-# Function to load project name and executables from .cabal file
-load_project_info_from_cabal() {
-  # Find the .cabal file in the current directory
-  local cabal_file=$(find . -maxdepth 1 -name "*.cabal")
-  if [[ -z "$cabal_file" ]]; then
-    echo "No .cabal file found in the current directory."
-    exit 1
-  fi
+# ----------------------------------------------------------------------
+# Project discovery
+# ----------------------------------------------------------------------
 
-  # Parse the .cabal file for the project name
-  local project_name=$(grep "^name:" "$cabal_file" | awk '{print $2}')
-  if [[ -z "$project_name" ]]; then
-    echo "No project name found in the .cabal file."
-    exit 1
-  fi
-  export PROJECT_NAME="$project_name"
-
-  # Initialize the executables array
-  declare -gA executables
-
-  # Parse the .cabal file for executable names
-  while IFS= read -r line; do
-    local exe_name=$(echo "$line" | awk '{print $2}')
-    executables["$exe_name"]=""
-  done < <(grep "^executable" "$cabal_file")
-}
-
-# Function to build a specific executable
-build_exe() {
-  local exeName=$1
-  echo "Building $exeName..."
-  nix build .#$PROJECT_NAME:exe:$exeName --show-trace --accept-flake-config
-}
-
-# Function to build all executables
-build_all_exes() {
-  echo "Building all executables..."
-  for exe in "${!executables[@]}"; do
-    build_exe "$exe"
-  done
-}
-
-# Function to run a specific executable, optionally with arguments
-run_exe() {
-  local exeName=$1
-  shift # Remove the first argument, which is the executable name
-  local args="$@"
-  echo "Running $exeName with arguments: $args"
-  ./result/bin/$exeName $args
-}
-
-# Function to collect garbage
-collect_garbage() {
-  echo "Collecting garbage..."
-  nix-collect-garbage -d
-  echo "Garbage collection complete."
-}
-
-# Function to update the flake
-update_flake() {
-  echo "Updating flake..."
-  nix flake update
-  echo "Flake update complete."
-}
-
-# Load project info from the .cabal file
-load_project_info_from_cabal
-
-# Check for command-line arguments
-if [[ "$1" == "--build-all" ]]; then
-  build_all_exes
-  exit 0
+CABAL_FILE="$(find . -maxdepth 1 -name '*.cabal' -print -quit)"
+if [ -z "${CABAL_FILE:-}" ]; then
+  echo "No .cabal file in $(pwd)" >&2
+  exit 1
 fi
 
-# Main menu
-PS3='Please enter your choice: '
-options=("Build all executables" "Build and Run specific executable" "Collect Garbage" "Update Flake" "Quit")
+PROJECT_NAME="$(grep -i '^name:' "$CABAL_FILE" | head -n1 | awk '{print $2}')"
+if [ -z "$PROJECT_NAME" ]; then
+  echo "No 'name:' field in $CABAL_FILE" >&2
+  exit 1
+fi
 
-select opt in "${options[@]}"
-do
-    case $opt in
-        "Build all executables")
-            build_all_exes
-            break
-            ;;
-        "Build and Run specific executable")
-            echo "Select an executable to build and run:"
-            select exe in "${!executables[@]}"
-            do
-                prompt=${executables[$exe]}
-                if [[ -n $prompt ]]; then
-                    echo "$prompt"
-                    read additional_args
-                fi
-                build_exe $exe
-                run_exe $exe $additional_args
-                break 2
-            done
-            ;;
-        "Collect Garbage")
-            collect_garbage
-            break
-            ;;
-        "Update Flake")
-            update_flake
-            break
-            ;;
-        "Quit")
-            break
-            ;;
-        *) echo "Invalid option $REPLY";;
-    esac
+EXECUTABLES=()
+while IFS= read -r line; do
+  exe="$(echo "$line" | awk '{print $2}')"
+  [ -n "$exe" ] && EXECUTABLES+=("$exe")
+done < <(grep -E '^executable[[:space:]]+' "$CABAL_FILE")
+
+if [ "${#EXECUTABLES[@]}" -eq 0 ]; then
+  echo "No executables in $CABAL_FILE" >&2
+  exit 1
+fi
+
+# ----------------------------------------------------------------------
+# Build-all (CI mode, no gum needed)
+# ----------------------------------------------------------------------
+
+build_all() {
+  echo "Project:     $PROJECT_NAME"
+  echo "Executables: ${EXECUTABLES[*]}"
+  echo ""
+  local failed=0
+  for exe in "${EXECUTABLES[@]}"; do
+    echo "==> nix build .#${PROJECT_NAME}:exe:${exe}"
+    if ! nix build ".#${PROJECT_NAME}:exe:${exe}" --show-trace --accept-flake-config; then
+      echo "    FAILED: $exe"
+      failed=$((failed + 1))
+    fi
+    echo ""
+  done
+  if [ "$failed" -gt 0 ]; then
+    echo "$failed executable(s) failed to build."
+    exit 1
+  fi
+  echo "All builds succeeded."
+}
+
+case "${1:-}" in
+  --build-all)
+    build_all
+    exit 0
+    ;;
+  --help|-h)
+    cat <<EOF
+Usage:
+  $0                 Interactive menu (requires gum; use inside 'nix develop')
+  $0 --build-all     Build all executables via nix (CI-friendly)
+  $0 --help          Show this help
+
+Project: $PROJECT_NAME
+Executables discovered: ${EXECUTABLES[*]}
+EOF
+    exit 0
+    ;;
+esac
+
+# ----------------------------------------------------------------------
+# Interactive mode (gum required)
+# ----------------------------------------------------------------------
+
+if ! command -v gum >/dev/null 2>&1; then
+  cat >&2 <<EOF
+gum is not on PATH.
+
+Either:
+  - run this inside 'nix develop' (gum is in the dev shell), or
+  - use './tui --build-all' for non-interactive builds.
+EOF
+  exit 1
+fi
+
+# ----- gum helpers -----
+
+header() {
+  clear
+  gum style \
+    --foreground 10 --border-foreground 2 --border double \
+    --align center --width 64 --margin "1 2" --padding "1 3" \
+    "$(echo "$PROJECT_NAME" | tr '[:lower:]' '[:upper:]')" "fantasy baseball engine"
+  echo ""
+}
+
+section() {
+  gum style --foreground 6 --bold --margin "0 2" "$1"
+  echo ""
+}
+
+ok()   { gum style --foreground 2 "  ok    $*"; }
+err()  { gum style --foreground 1 "  fail  $*"; }
+info() { gum style --foreground 3 "  ..    $*"; }
+dim()  { gum style --foreground 8 "  $*"; }
+
+pause() {
+  echo ""
+  read -r -p "  press enter to continue..." _
+}
+
+# ----- date helpers (BSD + GNU compatible) -----
+
+today()    { date +%Y-%m-%d; }
+week_ago() { date -d '7 days ago' +%Y-%m-%d 2>/dev/null || date -v-7d +%Y-%m-%d; }
+this_year(){ date +%Y; }
+
+prompt_value() {
+  # prompt_value LABEL DEFAULT PLACEHOLDER -> stdout
+  local label="$1" default="$2" placeholder="$3"
+  gum input --prompt "  $label > " --value "$default" --placeholder "$placeholder"
+}
+
+# ----- postgres reachability check -----
+
+pg_ok() {
+  command -v pg_isready >/dev/null 2>&1 && \
+    pg_isready -h "${PGHOST:-localhost}" -p "${PGPORT:-5433}" -q 2>/dev/null
+}
+
+# ----- build menu -----
+
+menu_build() {
+  header
+  section "Build"
+  local choice
+  choice=$(gum choose \
+    --header "What to build:" \
+    "nix build all executables" \
+    "cabal build all" \
+    "cabal build $PROJECT_NAME (library + pelotero)" \
+    "Back") || return
+
+  case "$choice" in
+    "nix build all executables")
+      header; section "Build all via nix"
+      if build_all; then ok "Done."; else err "One or more builds failed."; fi
+      pause ;;
+    "cabal build all")
+      header; section "cabal build all"
+      if cabal build all; then ok "Done."; else err "Build failed."; fi
+      pause ;;
+    "cabal build $PROJECT_NAME (library + pelotero)")
+      header; section "cabal build $PROJECT_NAME pelotero"
+      if cabal build "$PROJECT_NAME" pelotero; then ok "Done."; else err "Build failed."; fi
+      pause ;;
+    "Back") return ;;
+  esac
+}
+
+# ----- run app menu -----
+
+menu_run_app() {
+  header
+  section "Run pelotero"
+
+  if ! pg_ok; then
+    info "Postgres not reachable; the CLI will fail at the migration step."
+    info "Use the Database menu to start it first."
+    echo ""
+  fi
+
+  local choice
+  choice=$(gum choose \
+    --header "Subcommand:" \
+    "db check" \
+    "sync rosters" \
+    "sync schedule" \
+    "sync boxscores" \
+    "snapshot lineups" \
+    "score" \
+    "draft run" \
+    "Back") || return
+
+  case "$choice" in
+    "db check")
+      header; section "pelotero db check"
+      cabal run pelotero -- db check
+      pause ;;
+
+    "sync rosters")
+      header; section "pelotero sync rosters"
+      local season
+      season=$(prompt_value "Season" "$(this_year)" "YYYY") || return
+      [ -z "$season" ] && return
+      cabal run pelotero -- sync rosters --season "$season"
+      pause ;;
+
+    "sync schedule")
+      header; section "pelotero sync schedule"
+      local from to
+      from=$(prompt_value "From" "$(week_ago)" "YYYY-MM-DD") || return
+      to=$(prompt_value   "To"   "$(today)"    "YYYY-MM-DD") || return
+      { [ -z "$from" ] || [ -z "$to" ]; } && return
+      cabal run pelotero -- sync schedule --from "$from" --to "$to"
+      pause ;;
+
+    "sync boxscores")
+      header; section "pelotero sync boxscores"
+      local from to
+      from=$(prompt_value "From" "$(week_ago)" "YYYY-MM-DD") || return
+      to=$(prompt_value   "To"   "$(today)"    "YYYY-MM-DD") || return
+      { [ -z "$from" ] || [ -z "$to" ]; } && return
+      cabal run pelotero -- sync boxscores --from "$from" --to "$to"
+      pause ;;
+
+    "snapshot lineups")
+      header; section "pelotero snapshot lineups"
+      local on
+      on=$(prompt_value "On date" "$(today)" "YYYY-MM-DD") || return
+      [ -z "$on" ] && return
+      cabal run pelotero -- snapshot lineups --on-date "$on"
+      pause ;;
+
+    "score")
+      header; section "pelotero score"
+      local lid
+      lid=$(prompt_value "League id" "1" "positive integer") || return
+      [ -z "$lid" ] && return
+      cabal run pelotero -- score --league-id "$lid"
+      pause ;;
+
+    "draft run")
+      header; section "pelotero draft run"
+      local lid
+      lid=$(prompt_value "League id" "1" "positive integer") || return
+      [ -z "$lid" ] && return
+      cabal run pelotero -- draft run --league-id "$lid"
+      pause ;;
+
+    "Back") return ;;
+  esac
+}
+
+# ----- test menu -----
+
+menu_tests() {
+  header
+  section "Tests"
+  local choice
+  choice=$(gum choose \
+    --header "Test suite:" \
+    "Unit + property (pelotero-test)" \
+    "Integration (pelotero-integration-test, needs Postgres)" \
+    "All test suites" \
+    "Back") || return
+
+  case "$choice" in
+    "Unit + property (pelotero-test)")
+      header; section "cabal test pelotero-test"
+      cabal test pelotero-test
+      pause ;;
+    "Integration (pelotero-integration-test, needs Postgres)")
+      header; section "cabal test pelotero-integration-test"
+      if ! pg_ok; then
+        err "Postgres not reachable at ${PGHOST:-localhost}:${PGPORT:-5433}"
+        info "Start it from the Database menu first."
+      else
+        cabal test pelotero-integration-test
+      fi
+      pause ;;
+    "All test suites")
+      header; section "cabal test"
+      cabal test
+      pause ;;
+    "Back") return ;;
+  esac
+}
+
+# ----- database menu -----
+
+menu_database() {
+  header
+  section "Database"
+  local choice
+  choice=$(gum choose \
+    --header "Action:" \
+    "Start postgres (pg-start)" \
+    "Stop postgres (pg-stop)" \
+    "Status (pg-stats)" \
+    "Connect (pg-connect)" \
+    "Backup (pg-backup)" \
+    "Restore from backup (pg-restore)" \
+    "Rotate credentials (pg-rotate-credentials)" \
+    "Apply migrations (pelotero db check)" \
+    "Back") || return
+
+  case "$choice" in
+    "Start postgres (pg-start)")
+      header; section "pg-start"
+      pg-start; pause ;;
+    "Stop postgres (pg-stop)")
+      header; section "pg-stop"
+      pg-stop; pause ;;
+    "Status (pg-stats)")
+      header; section "pg-stats"
+      pg-stats; pause ;;
+    "Connect (pg-connect)")
+      pg-connect ;;
+    "Backup (pg-backup)")
+      header; section "pg-backup"
+      pg-backup; pause ;;
+    "Restore from backup (pg-restore)")
+      header; section "pg-restore"
+      local backup_dir="$HOME/.local/share/$PROJECT_NAME/backups"
+      if [ ! -d "$backup_dir" ] || [ -z "$(ls -A "$backup_dir" 2>/dev/null)" ]; then
+        err "No backups in $backup_dir"
+        pause
+        return
+      fi
+      local choice_file
+      choice_file=$(ls -1t "$backup_dir" | gum choose --header "Backup file:") || return
+      [ -z "$choice_file" ] && return
+      pg-restore "$backup_dir/$choice_file"
+      pause ;;
+    "Rotate credentials (pg-rotate-credentials)")
+      header; section "pg-rotate-credentials"
+      pg-rotate-credentials; pause ;;
+    "Apply migrations (pelotero db check)")
+      header; section "pelotero db check"
+      cabal run pelotero -- db check
+      pause ;;
+    "Back") return ;;
+  esac
+}
+
+# ----- main loop -----
+
+while true; do
+  header
+  if pg_ok; then
+    ok "Postgres reachable at ${PGHOST:-localhost}:${PGPORT:-5433}"
+  else
+    info "Postgres not reachable (Database -> Start postgres)"
+  fi
+  echo ""
+
+  ACTION=$(gum choose \
+    --cursor "> " \
+    --header "  Choose:" \
+    "Build" \
+    "Run pelotero" \
+    "Tests" \
+    "Database" \
+    "Quit") || break
+
+  case "$ACTION" in
+    "Build")        menu_build ;;
+    "Run pelotero") menu_run_app ;;
+    "Tests")        menu_tests ;;
+    "Database")     menu_database ;;
+    "Quit"|*)       break ;;
+  esac
 done
+
+clear
+gum style --foreground 2 --align center --width 64 --margin "1 2" \
+  "Goodbye from $PROJECT_NAME."

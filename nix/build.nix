@@ -76,10 +76,10 @@ let
         hsConfig    = appConfig.haskell;
       };
 
-      defaultPackage =
-        backendFlake.packages."${name}:exe:pelotero" or
-        backendFlake.packages."${name}:exe:fetch-rosters" or
-        (builtins.head (builtins.attrValues backendFlake.packages));
+      # Single canonical executable. If this attr is missing it means the
+      # cabal file no longer defines `executable pelotero`, which is a real
+      # build problem rather than something to paper over with a fallback.
+      defaultPackage = backendFlake.packages."${name}:exe:pelotero";
 
     in {
       legacyPackages = pkgs;
@@ -106,7 +106,6 @@ let
 
             deployModule.db-start
             deployModule.db-stop
-            deployModule.fetch-rosters
             deployModule.dev
             deployModule.deploy
             deployModule.stop
@@ -149,8 +148,8 @@ let
             export SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/pelotero-engine.txt"
 
             mkdir -p "$(pwd)/script/concat_archive/output" \
-                    "$(pwd)/script/concat_archive/archive" \
-                    "$(pwd)/script/concat_archive/.hashes"
+                     "$(pwd)/script/concat_archive/archive" \
+                     "$(pwd)/script/concat_archive/.hashes"
 
             echo ""
             echo "  Pelotero Engine Dev Environment"
@@ -170,20 +169,22 @@ let
             echo "    pg-stats               Show DB statistics"
             echo ""
             echo "  Development:"
-            echo "    pe-dev                 Start DB + dev shell"
-            echo "    pe-deploy              Deploy with tmux"
-            echo "    pe-stop                Stop everything"
-            echo "    fetch-rosters [year]   Fetch MLB rosters (default: 2025)"
+            echo "    pe-dev                 Ensure DB is up, print connection info"
+            echo "    pe-deploy              tmux session with DB stats + dev panes"
+            echo "    pe-stop                Backup, stop DB, kill tmux session"
             echo ""
-            echo "  Build:"
-            echo "    cabal build            Build all targets"
-            echo "    cabal run pelotero     Run the CLI entry point"
+            echo "  Build / run:"
+            echo "    cabal build all        Build library + executable + tests"
+            echo "    cabal run pelotero     Run the CLI (try '-- --help')"
+            echo "    cabal test             Run unit + property tests"
+            echo "    ./tui                  Interactive build/run/test/db menu"
+            echo "    ./tui --build-all      Non-interactive: nix-build all executables"
             echo ""
             echo "  LLM context:"
             echo "    generate-manifest      Scan source -> script/manifest.json"
             echo "    compile-manifest       Bundle source files for review"
             echo "    llm-context            Generate context from git diff"
-            echo "    manifest-tui           Interactive TUI"
+            echo "    manifest-tui           Interactive TUI for the above"
             echo ""
           '';
         };

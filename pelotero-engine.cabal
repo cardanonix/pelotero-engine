@@ -1,11 +1,8 @@
 cabal-version: 3.6
 
 name:          pelotero-engine
-version:       0.1.4.0
-data-files:         integration-test/fixtures/mlb/teams-*.json
-                  , integration-test/fixtures/mlb/players-*.json
-                  , integration-test/fixtures/mlb/schedule-*.json
-                  , integration-test/fixtures/mlb/boxscore-*.json
+version:       0.2.0.0
+data-files:    integration-test/fixtures/mlb/*.json
 synopsis:      Fantasy baseball points engine
 description:   Phase 1: domain types and MLB wire layer.
                Phase 2a: schema, connection pool, migrations.
