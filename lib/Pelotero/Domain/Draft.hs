@@ -59,6 +59,11 @@ renderDraftOrderStrategy = \case
 -- effect. Whatever shuffling the *team order* needs (e.g. a coin flip for
 -- who picks first) happens upstream and is passed in already-shuffled.
 --
+-- Polymorphic in the team-id type. Domain-layer callers can pass
+-- 'FantasyTeamId' (upstream user-facing ids); persistence-layer callers
+-- can pass 'DbLeagueTeamId' (surrogate ids) without going through a
+-- lossy conversion at the layer boundary.
+--
 -- The result is the team that picks at each position, paired with that
 -- pick's ordinal number (1-indexed). If 'totalPicks' isn't a multiple of
 -- 'length teams', the trailing partial round is truncated rather than
@@ -66,8 +71,8 @@ renderDraftOrderStrategy = \case
 generateDraftOrder
   :: DraftOrderStrategy
   -> Int                       -- ^ total picks across the entire draft
-  -> [FantasyTeamId]           -- ^ teams in initial order
-  -> [(FantasyTeamId, DraftPickNumber)]
+  -> [a]                       -- ^ teams in initial order
+  -> [(a, DraftPickNumber)]
 generateDraftOrder _        _    []    = []
 generateDraftOrder strategy total teams =
   let perRound = length teams

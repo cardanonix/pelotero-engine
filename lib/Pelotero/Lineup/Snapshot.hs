@@ -11,25 +11,35 @@
 -- snapshot already exists for that pair, leave it alone; never
 -- overwrite (a snapshot is the lineup AT GAME START, by contract).
 --
--- 'snapshotLineupsForGame' is the operator-facing entry point:
--- iterate over all teams in all leagues whose status is "active",
--- and snapshot each. Returns a 'SnapshotResult' summary so the
--- caller can log or surface counts.
+-- 'snapshotLineupsForGame' is the per-game entry point: iterate over
+-- all teams in all leagues whose status is "active", and snapshot
+-- each. Returns a 'SnapshotResult' summary so the caller can log or
+-- surface counts.
+--
+-- 'snapshotLineupsForDate' is the operator-facing entry point used by
+-- the CLI: snapshots every game scheduled on a given day. Equivalent
+-- to running 'snapshotLineupsForGame' over every game id returned by
+-- 'Games.getGamesByDate'.
 module Pelotero.Lineup.Snapshot
   ( PerTeamResult (..)
   , SnapshotResult (..)
   , snapshotLineupsForTeam
   , snapshotLineupsForGame
+  , snapshotLineupsForDate
   ) where
 
+import           Data.Time.Calendar              (Day)
 import qualified Data.Text                       as T
 import           Effectful
 
+import           Pelotero.DB.Game                (LoadedGameRow (..))
 import qualified Pelotero.DB.LeagueConfig        as DBLC
 import qualified Pelotero.DB.LeagueTeam          as DBLT
 import qualified Pelotero.DB.LineupSlot          as DBLS
 import qualified Pelotero.DB.LineupSnapshot      as DBSnap
 import           Pelotero.Domain.Id
+import qualified Pelotero.Effects.Games          as Games
+import           Pelotero.Effects.Games          (Games)
 import qualified Pelotero.Effects.LeagueConfig   as LC
 import           Pelotero.Effects.LeagueConfig   (LeagueConfig)
 import qualified Pelotero.Effects.LeagueTeam     as LT
@@ -119,6 +129,37 @@ snapshotLineupsForGame gid = do
              <> " teams_already=" <> tshow (snapTeamsAlreadyDone summary)
              <> " rows=" <> tshow (snapRowsInserted summary)
   pure summary
+
+-- | Snapshot every game scheduled on the given day. Loops over
+-- 'Games.getGamesByDate' and calls 'snapshotLineupsForGame' for each.
+-- Emits a top-line InfoS describing the work and a final summary
+-- aggregated across all games. Empty days short-circuit cleanly.
+snapshotLineupsForDate
+  :: ( Games          :> es
+     , LeagueConfig   :> es
+     , LeagueTeam     :> es
+     , LineupSlot     :> es
+     , LineupSnapshot :> es
+     , Logging        :> es
+     )
+  => Day
+  -> Eff es SnapshotResult
+snapshotLineupsForDate day = do
+  games <- Games.getGamesByDate day
+  case games of
+    [] -> do
+      logFM InfoS $ "snapshot: no games on " <> tshow day
+      pure mempty
+    _ -> do
+      logFM InfoS $ "snapshot: " <> tshow (length games)
+                 <> " games on " <> tshow day
+      perGame <- traverse (snapshotLineupsForGame . lgrId) games
+      let summary = mconcat perGame
+      logFM InfoS $ "snapshot complete date=" <> tshow day
+                 <> " teams_new=" <> tshow (snapTeamsSnapshotted summary)
+                 <> " teams_already=" <> tshow (snapTeamsAlreadyDone summary)
+                 <> " rows=" <> tshow (snapRowsInserted summary)
+      pure summary
 
 snapshotLeagueTeams
   :: ( LeagueTeam     :> es

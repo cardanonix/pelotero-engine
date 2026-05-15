@@ -8,14 +8,19 @@
 {-# LANGUAGE TypeOperators #-}
 
 -- | Effectful handler that drives the 'Pelotero.Draft.Machine' state
--- machine and persists its events. Two layers:
+-- machine and persists its events. Three layers:
 --
 -- * 'applyAndPersist' is the per-command primitive — used both by
 --   'runAutoDraft' and (eventually) by a manual-pick UI.
 --
 -- * 'runAutoDraft' is the auto-pick loop — drives the state machine
 --   from start to finish, picking for whichever team is up by reading
---   their 'PlayerRanking'.
+--   their 'PlayerRanking'. Takes a pre-built 'DraftPlan'.
+--
+-- * 'runAutoDraftForLeague' is the operator-facing entry point used
+--   by the CLI. Builds the 'DraftPlan' from a league config id
+--   (resolving teams, players, strategy, and pick count) and delegates
+--   to 'runAutoDraft'.
 --
 -- League lifecycle (transitioning @league_config.status@ from
 -- @"draft"@ to @"active"@ on completion) is intentionally NOT done
@@ -27,21 +32,31 @@ module Pelotero.Draft.Run
   , applyAndPersist
     -- * Auto-draft loop
   , runAutoDraft
+    -- * Operator-facing entry point
+  , runAutoDraftForLeague
   ) where
 
-import           Data.Foldable            (traverse_)
-import qualified Data.Set                 as Set
-import qualified Data.Text                as T
+import           Data.Foldable             (traverse_)
+import qualified Data.Set                  as Set
+import qualified Data.Text                 as T
 import           Effectful
-import qualified Katip                    as K
+import qualified Katip                     as K
 
-import           Pelotero.DB.DraftPick    (DraftPickRow (..))
+import           Pelotero.DB.DraftPick     (DraftPickRow (..))
+import           Pelotero.DB.LeagueConfig  (LoadedLeagueConfig (..))
+import           Pelotero.DB.LeagueTeam    (LoadedLeagueTeam (..))
+import           Pelotero.DB.Player        (LoadedPlayerRow (..))
 import           Pelotero.DB.PlayerRanking (PlayerRankingRow (..))
+import           Pelotero.Domain.Draft
+                     ( generateDraftOrder
+                     , parseDraftOrderStrategy
+                     )
 import           Pelotero.Domain.Id
                      ( DbLeagueConfigId
                      , DbLeagueTeamId
                      , DraftPickNumber (..)
                      )
+import           Pelotero.Domain.Roster    (totalRosterSize)
 import           Pelotero.Draft
                      ( DraftCommand (..)
                      , DraftContext (..)
@@ -62,10 +77,16 @@ import           Pelotero.Effects.Clock         (Clock)
 import qualified Pelotero.Effects.Clock         as Clock
 import           Pelotero.Effects.DraftPick     (DraftPick)
 import qualified Pelotero.Effects.DraftPick     as DP
+import           Pelotero.Effects.LeagueConfig  (LeagueConfig)
+import qualified Pelotero.Effects.LeagueConfig  as LC
+import           Pelotero.Effects.LeagueTeam    (LeagueTeam)
+import qualified Pelotero.Effects.LeagueTeam    as LT
 import           Pelotero.Effects.Logging       (Logging)
 import qualified Pelotero.Effects.Logging       as Logging
 import           Pelotero.Effects.PlayerRanking (PlayerRanking)
 import qualified Pelotero.Effects.PlayerRanking as PR
+import           Pelotero.Effects.Players       (Players)
+import qualified Pelotero.Effects.Players       as Players
 
 -- ---------------------------------------------------------------------
 -- Errors
@@ -75,18 +96,29 @@ import qualified Pelotero.Effects.PlayerRanking as PR
 -- 'DraftError' (the pure state-machine rejections) because the loop
 -- has its own ways to fail beyond what the state machine cares about.
 data AutoDraftError
-  = AutoDraftRejected    !DraftError
+  = AutoDraftRejected      !DraftError
     -- ^ State machine rejected a command issued by the loop itself —
     --   indicates a bug in this module, not a user-facing problem.
-  | AutoDraftNoCandidate !DbLeagueTeamId
+  | AutoDraftNoCandidate   !DbLeagueTeamId
     -- ^ Team's ranking is empty AND no player remains in the
     --   available pool. Genuine end-of-draft if it happens before
     --   the pick order runs out.
-  | AutoDraftStuck       !DraftVertex
+  | AutoDraftStuck         !DraftVertex
     -- ^ Loop saw the state machine in an unexpected vertex
     --   (e.g. 'WaitingToStartV' after StartDraft was supposed to
     --   succeed). Should be unreachable; included as a defensive
     --   catch.
+  | AutoDraftConfigMissing !DbLeagueConfigId
+    -- ^ 'runAutoDraftForLeague' was called for a league id that
+    --   doesn't exist in 'league_config'. Either a stale CLI argument
+    --   or a logic bug in the orchestrator.
+  | AutoDraftNoTeams       !DbLeagueConfigId
+    -- ^ 'runAutoDraftForLeague' found the league config but no rows
+    --   in 'league_team' for it. Drafts with zero teams are not a
+    --   degenerate case to silently complete; they're a setup error.
+  | AutoDraftBadStrategy   !T.Text
+    -- ^ 'llcDraftStrategy' didn't parse via 'parseDraftOrderStrategy'.
+    --   Carries the offending Text so operators can grep for it.
   deriving stock (Show, Eq)
 
 -- ---------------------------------------------------------------------
@@ -245,6 +277,72 @@ autoPickCommand ctx = case dcRemaining ctx of
           pure (Right (MakePick team pid))
         Nothing ->
           pure (Left (AutoDraftNoCandidate team))
+
+-- ---------------------------------------------------------------------
+-- Operator-facing entry point
+-- ---------------------------------------------------------------------
+
+-- | Build a 'DraftPlan' from a league config id and run the
+-- auto-draft loop. Fails fast on three pre-loop conditions:
+--
+-- * 'AutoDraftConfigMissing' if 'LC.getById' returns 'Nothing'.
+-- * 'AutoDraftBadStrategy'   if 'llcDraftStrategy' doesn't parse via
+--   'parseDraftOrderStrategy'.
+-- * 'AutoDraftNoTeams'       if 'LT.getForLeague' returns an empty list.
+--
+-- On success, delegates to 'runAutoDraft' which carries the full
+-- effect cost of pick persistence.
+--
+-- Picks per team is derived from 'totalRosterSize' over the league's
+-- 'RosterLimits'; total pick count is @picksPerTeam * length teams@.
+-- The resulting 'DraftPlan' uses 'DbLeagueTeamId' directly thanks to
+-- the polymorphic 'generateDraftOrder'.
+runAutoDraftForLeague
+  :: ( DraftPick     :> es
+     , PlayerRanking :> es
+     , Clock         :> es
+     , Logging       :> es
+     , LeagueConfig  :> es
+     , LeagueTeam    :> es
+     , Players       :> es
+     )
+  => DbLeagueConfigId
+  -> Eff es (Either AutoDraftError DraftSummary)
+runAutoDraftForLeague lcid = do
+  mConfig <- LC.getById lcid
+  case mConfig of
+    Nothing -> do
+      Logging.logFM K.ErrorS $
+        "Auto-draft requested for unknown league " <> tshow lcid
+      pure (Left (AutoDraftConfigMissing lcid))
+    Just config ->
+      case parseDraftOrderStrategy (llcDraftStrategy config) of
+        Nothing -> do
+          Logging.logFM K.ErrorS $
+            "Auto-draft: unparseable strategy '"
+              <> llcDraftStrategy config
+              <> "' for league " <> tshow lcid
+          pure (Left (AutoDraftBadStrategy (llcDraftStrategy config)))
+        Just strategy -> do
+          teams <- LT.getForLeague lcid
+          case teams of
+            [] -> do
+              Logging.logFM K.ErrorS $
+                "Auto-draft: league " <> tshow lcid <> " has no teams"
+              pure (Left (AutoDraftNoTeams lcid))
+            _ -> do
+              activePlayers <- Players.getActivePlayers
+              let teamIds      = map lltId teams
+                  picksPerTeam = totalRosterSize (llcRosterLimits config)
+                  totalPicks   = picksPerTeam * length teamIds
+                  order        = generateDraftOrder strategy totalPicks teamIds
+                  available    = Set.fromList (map lprId activePlayers)
+                  plan         = DraftPlan
+                                   { dpLeague    = lcid
+                                   , dpOrder     = order
+                                   , dpAvailable = available
+                                   }
+              runAutoDraft plan
 
 -- ---------------------------------------------------------------------
 -- Internal helper

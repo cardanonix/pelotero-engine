@@ -5,6 +5,7 @@ module Pelotero.Sync.Boxscores
   ( BoxscoreSyncResult (..)
   , BoxscoreSyncError (..)
   , BoxscoreOutcome (..)
+  , BoxscoreUpsertCounts (..)
   , syncBoxscores
   , syncOne
   , upsertEntries
@@ -55,8 +56,23 @@ import Pelotero.Provider.ExternalId
   , externalIdFromTeamId
   )
 
+-- | Per-game upsert counts. 'bucPlayersSkipped' is the number of
+-- boxscore entries whose 'Convert.boxPlayerId' could not be resolved
+-- against the local 'player_external_id' table; those entries were
+-- logged at 'WarningS' and dropped. Operators monitor this to detect
+-- when roster sync is falling behind boxscore sync at scale.
+data BoxscoreUpsertCounts = BoxscoreUpsertCounts
+  { bucBatting        :: !Int
+  , bucPitching       :: !Int
+  , bucPlayersSkipped :: !Int
+  }
+  deriving stock (Show, Eq)
+
+emptyUpsertCounts :: BoxscoreUpsertCounts
+emptyUpsertCounts = BoxscoreUpsertCounts 0 0 0
+
 data BoxscoreOutcome
-  = BoxUpserted !Int !Int ![Convert.ConvertWarning]
+  = BoxUpserted !BoxscoreUpsertCounts ![Convert.ConvertWarning]
   | BoxUnchanged
   deriving stock (Show, Eq)
 
@@ -64,9 +80,12 @@ data BoxscoreSyncResult = BoxscoreSyncResult
   { boxGamesSeen        :: !Int
   , boxGamesProcessed   :: !Int
   , boxGamesUnchanged   :: !Int
-  , boxGamesSkipped     :: !Int
   , boxBattingUpserted  :: !Int
   , boxPitchingUpserted :: !Int
+  , boxPlayersSkipped   :: !Int
+    -- ^ Total boxscore entries dropped because the player was not in
+    --   the local DB. Symmetric to 'boxConvertWarnings' but for a
+    --   different category (sync ordering, not wire data quality).
   , boxErrors           :: ![BoxscoreSyncError]
   , boxConvertWarnings  :: ![Convert.ConvertWarning]
   }
@@ -83,9 +102,9 @@ emptyResult = BoxscoreSyncResult
   { boxGamesSeen        = 0
   , boxGamesProcessed   = 0
   , boxGamesUnchanged   = 0
-  , boxGamesSkipped     = 0
   , boxBattingUpserted  = 0
   , boxPitchingUpserted = 0
+  , boxPlayersSkipped   = 0
   , boxErrors           = []
   , boxConvertWarnings  = []
   }
@@ -117,11 +136,12 @@ syncBoxscores provider = foldM step emptyResult
       { boxGamesSeen      = boxGamesSeen acc + 1
       , boxGamesUnchanged = boxGamesUnchanged acc + 1
       }
-    folded acc (Right (BoxUpserted bat pit warns)) = acc
+    folded acc (Right (BoxUpserted counts warns)) = acc
       { boxGamesSeen        = boxGamesSeen acc + 1
       , boxGamesProcessed   = boxGamesProcessed acc + 1
-      , boxBattingUpserted  = boxBattingUpserted acc + bat
-      , boxPitchingUpserted = boxPitchingUpserted acc + pit
+      , boxBattingUpserted  = boxBattingUpserted acc + bucBatting counts
+      , boxPitchingUpserted = boxPitchingUpserted acc + bucPitching counts
+      , boxPlayersSkipped   = boxPlayersSkipped acc + bucPlayersSkipped counts
       , boxConvertWarnings  = boxConvertWarnings acc ++ warns
       }
 
@@ -161,7 +181,7 @@ syncOne provider gid = do
                 Left perr -> pure (Left (ParseFailed gid perr))
                 Right wireBox -> do
                   let (warns, entries) = Convert.convertBoxscore gid wireBox
-                  (batCount, pitCount) <- upsertEntries provider dbId entries
+                  counts <- upsertEntries provider dbId entries
                   FetchLog.recordFetch FetchLogRow
                     { fetchLogId            = Nothing
                     , fetchLogProvider      = provider
@@ -171,7 +191,7 @@ syncOne provider gid = do
                     , fetchLogPayloadSha256 = newSha
                     , fetchLogRecordCount   = fromIntegral (length entries)
                     }
-                  pure (Right (BoxUpserted batCount pitCount warns))
+                  pure (Right (BoxUpserted counts warns))
 
 upsertEntries
   :: ( BoxscoreEntry :> es
@@ -182,10 +202,10 @@ upsertEntries
   => ProviderName
   -> DbGameId
   -> [Convert.BoxscoreEntry]
-  -> Eff es (Int, Int)
-upsertEntries provider dbGameId = foldM step (0, 0)
+  -> Eff es BoxscoreUpsertCounts
+upsertEntries provider dbGameId = foldM step emptyUpsertCounts
   where
-    step (bat, pit) entry = do
+    step counts entry = do
       let pidExt = externalIdFromPlayerId (Convert.boxPlayerId entry)
       mPlayerDb <- Players.lookupPlayerByExternalId provider pidExt
       case mPlayerDb of
@@ -195,14 +215,12 @@ upsertEntries provider dbGameId = foldM step (0, 0)
               <> renderProviderName provider
               <> " externalId=" <> pidExt
               <> " (player not yet synced)"
-          pure (bat, pit)
+          pure counts { bucPlayersSkipped = bucPlayersSkipped counts + 1 }
         Just playerDb -> do
           mTeamDb <- case Convert.boxTeamId entry of
             Nothing -> pure Nothing
             Just t  ->
               Teams.lookupTeamByExternalId provider (externalIdFromTeamId t)
-          let bat' = bat + maybeOne (Convert.boxBatting entry)
-              pit' = pit + maybeOne (Convert.boxPitching entry)
           case Convert.boxBatting entry of
             Just bs ->
               Box.upsertBatting (battingRowFor dbGameId playerDb mTeamDb bs)
@@ -211,11 +229,12 @@ upsertEntries provider dbGameId = foldM step (0, 0)
             Just ps ->
               Box.upsertPitching (pitchingRowFor dbGameId playerDb mTeamDb ps)
             Nothing -> pure ()
-          pure (bat', pit')
-
-    maybeOne :: Maybe a -> Int
-    maybeOne Nothing  = 0
-    maybeOne (Just _) = 1
+          let bumpBat = maybe 0 (const 1) (Convert.boxBatting entry)
+              bumpPit = maybe 0 (const 1) (Convert.boxPitching entry)
+          pure counts
+            { bucBatting  = bucBatting counts  + bumpBat
+            , bucPitching = bucPitching counts + bumpPit
+            }
 
 battingRowFor
   :: DbGameId

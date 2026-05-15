@@ -6,7 +6,7 @@ import           Test.Hspec
 
 import qualified Pelotero.DB.Player       as Player
 import qualified Pelotero.DB.Team         as Team
-import           Pelotero.DB.Player       (PlayerRow(..))
+import           Pelotero.DB.Player       (PlayerRow(..), LoadedPlayerRow(..))
 import           Pelotero.DB.Pool         (Pool)
 import           Pelotero.DB.Provider     (ProviderName(..))
 import           Pelotero.DB.Team         (TeamRow(..))
@@ -30,8 +30,8 @@ spec = describe "Pelotero.DB.Player" $ do
       Player.getByIdT pid
     case got of
       Just p -> do
-        playerRowLastName p `shouldBe` "Player"
-        playerRowPosition p `shouldBe` Just "1B"
+        lprLastName p `shouldBe` "Player"
+        lprPosition p `shouldBe` Just "1B"
       Nothing ->
         expectationFailure "round-trip read returned Nothing"
 
@@ -53,7 +53,7 @@ spec = describe "Pelotero.DB.Player" $ do
       pure (tid, gotPlayer)
     case got of
       (tid, Just p) ->
-        playerRowCurrentTeamId p `shouldBe` Just tid
+        lprCurrentTeamId p `shouldBe` Just tid
       (_, Nothing) ->
         expectationFailure "round-trip read returned Nothing"
 
@@ -72,7 +72,7 @@ spec = describe "Pelotero.DB.Player" $ do
       pure (pid1 == pid2, mAfter)
     case got of
       (sameId, Just p) -> do
-        sameId               `shouldBe` True
-        playerRowFirstName p `shouldBe` "Updated"
+        sameId         `shouldBe` True
+        lprFirstName p `shouldBe` "Updated"
       (_, Nothing) ->
         expectationFailure "expected to find the upserted player"

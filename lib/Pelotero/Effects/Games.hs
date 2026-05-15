@@ -26,7 +26,7 @@ import Effectful (Effect, IOE, Dispatch(Dynamic), DispatchOf)
 import qualified Effectful as E
 import Effectful.Dispatch.Dynamic (interpret_, send)
 
-import Pelotero.DB.Game      (GameRow(..))
+import Pelotero.DB.Game      (GameRow, LoadedGameRow(..), gameRowToLoaded)
 import qualified Pelotero.DB.Game as GameRepo
 import Pelotero.DB.Provider  (ProviderName)
 import Pelotero.Domain.Id    (DbGameId(..))
@@ -36,9 +36,9 @@ data Games :: Effect where
   UpsertGameByExternalId :: ProviderName -> Text -> GameRow -> Games m DbGameId
   LookupGameByExternalId :: ProviderName -> Text -> Games m (Maybe DbGameId)
   GetGameExternalId      :: DbGameId -> ProviderName -> Games m (Maybe Text)
-  GetGameById            :: DbGameId -> Games m (Maybe GameRow)
-  GetGamesByDate         :: Day -> Games m [GameRow]
-  GetGamesByDateRange    :: Day -> Day -> Games m [GameRow]
+  GetGameById            :: DbGameId -> Games m (Maybe LoadedGameRow)
+  GetGamesByDate         :: Day -> Games m [LoadedGameRow]
+  GetGamesByDateRange    :: Day -> Day -> Games m [LoadedGameRow]
 
 type instance DispatchOf Games = 'Dynamic
 
@@ -56,14 +56,14 @@ getGameExternalId
   :: Games E.:> es => DbGameId -> ProviderName -> E.Eff es (Maybe Text)
 getGameExternalId gid provider = send (GetGameExternalId gid provider)
 
-getGameById :: Games E.:> es => DbGameId -> E.Eff es (Maybe GameRow)
+getGameById :: Games E.:> es => DbGameId -> E.Eff es (Maybe LoadedGameRow)
 getGameById = send . GetGameById
 
-getGamesByDate :: Games E.:> es => Day -> E.Eff es [GameRow]
+getGamesByDate :: Games E.:> es => Day -> E.Eff es [LoadedGameRow]
 getGamesByDate = send . GetGamesByDate
 
 -- | Inclusive on both ends.
-getGamesByDateRange :: Games E.:> es => Day -> Day -> E.Eff es [GameRow]
+getGamesByDateRange :: Games E.:> es => Day -> Day -> E.Eff es [LoadedGameRow]
 getGamesByDateRange s e = send (GetGamesByDateRange s e)
 
 runGamesDB
@@ -87,7 +87,7 @@ runGamesDB = interpret_ $ \case
 data GameStore = GameStore
   { gameExternalIdToDb :: !(Map.Map (ProviderName, Text) DbGameId)
   , gameDbToExternalId :: !(Map.Map (DbGameId, ProviderName) Text)
-  , gameRowsByDb       :: !(Map.Map DbGameId GameRow)
+  , gameLoadedByDb     :: !(Map.Map DbGameId LoadedGameRow)
   , gameNextId         :: !Int
   }
 
@@ -114,33 +114,33 @@ runGamesInMemory action = do
         pure (Map.lookup (gid, provider) (gameDbToExternalId store))
       GetGameById gid -> do
         store <- E.liftIO (readIORef ref)
-        pure (Map.lookup gid (gameRowsByDb store))
+        pure (Map.lookup gid (gameLoadedByDb store))
       GetGamesByDate day -> do
         store <- E.liftIO (readIORef ref)
-        pure [ r | r <- Map.elems (gameRowsByDb store)
-                 , gameRowGameDate r == day ]
+        pure [ r | r <- Map.elems (gameLoadedByDb store)
+                 , lgrGameDate r == day ]
       GetGamesByDateRange s e -> do
         store <- E.liftIO (readIORef ref)
-        pure [ r | r <- Map.elems (gameRowsByDb store)
-                 , gameRowGameDate r >= s
-                 , gameRowGameDate r <= e ]
+        pure [ r | r <- Map.elems (gameLoadedByDb store)
+                 , lgrGameDate r >= s
+                 , lgrGameDate r <= e ]
 
     upsertOp provider extId incoming store =
       case Map.lookup (provider, extId) (gameExternalIdToDb store) of
         Just gid ->
-          let updated = incoming { gameRowId = Just gid }
+          let updated = gameRowToLoaded gid incoming
               store'  = store
-                { gameRowsByDb = Map.insert gid updated (gameRowsByDb store) }
+                { gameLoadedByDb = Map.insert gid updated (gameLoadedByDb store) }
           in (store', gid)
         Nothing ->
           let gid    = DbGameId (fromIntegral (gameNextId store))
-              stored = incoming { gameRowId = Just gid }
+              stored = gameRowToLoaded gid incoming
               store' = store
                 { gameExternalIdToDb =
                     Map.insert (provider, extId) gid (gameExternalIdToDb store)
                 , gameDbToExternalId =
                     Map.insert (gid, provider) extId (gameDbToExternalId store)
-                , gameRowsByDb = Map.insert gid stored (gameRowsByDb store)
-                , gameNextId   = gameNextId store + 1
+                , gameLoadedByDb = Map.insert gid stored (gameLoadedByDb store)
+                , gameNextId     = gameNextId store + 1
                 }
           in (store', gid)

@@ -5,7 +5,7 @@
 
 module IntegrationTest.ScoreSpec (spec) where
 
-import qualified Data.Map.Strict          as Map
+import Data.Map.Strict()
 import           Data.Time                (UTCTime(..), fromGregorian, secondsToDiffTime)
 import           Test.Hspec
 
@@ -25,7 +25,7 @@ import           Pelotero.DB.LeagueTeam    (LeagueTeamRow(..))
 import           Pelotero.DB.LineupSlot    (LineupSlotRow(..))
 import           Pelotero.DB.Pool          (DBError, Pool)
 import           Pelotero.Domain.Id        (DbLeagueConfigId(..))
-import           Pelotero.Domain.Roster    (LineupLimits(..), RosterLimits(..))
+import Pelotero.Domain.Roster()
 import           Pelotero.Domain.Scoring   (Points(..))
 
 import           Pelotero.Effects.BoxscoreEntry  (runBoxscoreEntryDB)

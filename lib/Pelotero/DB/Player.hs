@@ -17,6 +17,8 @@ module Pelotero.DB.Player
   , playerSchema
   , playerExternalIdSchema
   , PlayerRow (..)
+  , LoadedPlayerRow (..)
+  , playerRowToLoaded
   , insertPlayerT
   , updatePlayerT
   , getByIdT
@@ -72,9 +74,12 @@ data Player f = Player
   deriving anyclass (Rel8able)
 
 -- ---------------------------------------------------------------------
--- Public row type
+-- Public row types
 -- ---------------------------------------------------------------------
 
+-- | Write-path row. 'playerRowId' is 'Nothing' on insert (the DB assigns
+-- the surrogate id) and 'Just' on update. Reads return 'LoadedPlayerRow'
+-- instead, where the id is total.
 data PlayerRow = PlayerRow
   { playerRowId                 :: !(Maybe DbPlayerId)
   , playerRowFirstName          :: !Text
@@ -89,6 +94,42 @@ data PlayerRow = PlayerRow
   , playerRowLastSyncedAt       :: !(Maybe UTCTime)
   }
   deriving stock (Show, Eq)
+
+-- | Read-path row. Every row returned by a SELECT against the 'player'
+-- table has an id by construction; modeling that totality at the type
+-- level removes the partial-function smell at every read site.
+data LoadedPlayerRow = LoadedPlayerRow
+  { lprId                 :: !DbPlayerId
+  , lprFirstName          :: !Text
+  , lprLastName           :: !Text
+  , lprNameSlug           :: !Text
+  , lprPosition           :: !(Maybe Text)
+  , lprBatSide            :: !(Maybe Char)
+  , lprPitchHand          :: !(Maybe Char)
+  , lprActive             :: !Bool
+  , lprCurrentTeamId      :: !(Maybe DbTeamId)
+  , lprLastSyncedProvider :: !(Maybe ProviderName)
+  , lprLastSyncedAt       :: !(Maybe UTCTime)
+  }
+  deriving stock (Show, Eq)
+
+-- | Project a 'PlayerRow' onto a 'LoadedPlayerRow' given a known id.
+-- Used by the in-memory effect interpreter where the id is assigned
+-- outside of the SQL roundtrip.
+playerRowToLoaded :: DbPlayerId -> PlayerRow -> LoadedPlayerRow
+playerRowToLoaded pid r = LoadedPlayerRow
+  { lprId                 = pid
+  , lprFirstName          = playerRowFirstName r
+  , lprLastName           = playerRowLastName r
+  , lprNameSlug           = playerRowNameSlug r
+  , lprPosition           = playerRowPosition r
+  , lprBatSide            = playerRowBatSide r
+  , lprPitchHand          = playerRowPitchHand r
+  , lprActive             = playerRowActive r
+  , lprCurrentTeamId      = playerRowCurrentTeamId r
+  , lprLastSyncedProvider = playerRowLastSyncedProvider r
+  , lprLastSyncedAt       = playerRowLastSyncedAt r
+  }
 
 -- ---------------------------------------------------------------------
 -- Schemas
@@ -134,22 +175,22 @@ textToChar :: Maybe Text -> Maybe Char
 textToChar = (>>= fmap fst . T.uncons)
 
 -- ---------------------------------------------------------------------
--- Result <-> public row
+-- Result -> public row (read path)
 -- ---------------------------------------------------------------------
 
-fromResult :: Player Result -> PlayerRow
-fromResult Player{..} = PlayerRow
-  { playerRowId                 = Just _playerId
-  , playerRowFirstName          = _playerFirstName
-  , playerRowLastName           = _playerLastName
-  , playerRowNameSlug           = _playerNameSlug
-  , playerRowPosition           = _playerPosition
-  , playerRowBatSide            = textToChar _playerBatSide
-  , playerRowPitchHand          = textToChar _playerPitchHand
-  , playerRowActive             = _playerActive
-  , playerRowCurrentTeamId      = _playerCurrentTeamId
-  , playerRowLastSyncedProvider = _playerLastSyncedProvider
-  , playerRowLastSyncedAt       = _playerLastSyncedAt
+fromResult :: Player Result -> LoadedPlayerRow
+fromResult Player{..} = LoadedPlayerRow
+  { lprId                 = _playerId
+  , lprFirstName          = _playerFirstName
+  , lprLastName           = _playerLastName
+  , lprNameSlug           = _playerNameSlug
+  , lprPosition           = _playerPosition
+  , lprBatSide            = textToChar _playerBatSide
+  , lprPitchHand          = textToChar _playerPitchHand
+  , lprActive             = _playerActive
+  , lprCurrentTeamId      = _playerCurrentTeamId
+  , lprLastSyncedProvider = _playerLastSyncedProvider
+  , lprLastSyncedAt       = _playerLastSyncedAt
   }
 
 playerRowToExpr :: PlayerRow -> Player Expr
@@ -196,7 +237,7 @@ updatePlayerT pid row =
 -- Reads
 -- ---------------------------------------------------------------------
 
-getByIdT :: DbPlayerId -> Tx.Transaction (Maybe PlayerRow)
+getByIdT :: DbPlayerId -> Tx.Transaction (Maybe LoadedPlayerRow)
 getByIdT pid = do
   rows <- Tx.statement () $ run $ select $ do
     p <- each playerSchema
@@ -206,12 +247,12 @@ getByIdT pid = do
     (r : _) -> Just (fromResult r)
     []      -> Nothing
 
-getAllT :: Tx.Transaction [PlayerRow]
+getAllT :: Tx.Transaction [LoadedPlayerRow]
 getAllT = do
   rows <- Tx.statement () $ run $ select $ each playerSchema
   pure (map fromResult rows)
 
-getActiveT :: Tx.Transaction [PlayerRow]
+getActiveT :: Tx.Transaction [LoadedPlayerRow]
 getActiveT = do
   rows <- Tx.statement () $ run $ select $ do
     p <- each playerSchema
@@ -259,13 +300,13 @@ insertPlayer pool row = runTransaction pool (insertPlayerT row)
 updatePlayer :: Pool -> DbPlayerId -> PlayerRow -> IO (Either DBError ())
 updatePlayer pool pid row = runTransaction pool (updatePlayerT pid row)
 
-getById :: Pool -> DbPlayerId -> IO (Either DBError (Maybe PlayerRow))
+getById :: Pool -> DbPlayerId -> IO (Either DBError (Maybe LoadedPlayerRow))
 getById pool pid = runTransaction pool (getByIdT pid)
 
-getAll :: Pool -> IO (Either DBError [PlayerRow])
+getAll :: Pool -> IO (Either DBError [LoadedPlayerRow])
 getAll pool = runTransaction pool getAllT
 
-getActive :: Pool -> IO (Either DBError [PlayerRow])
+getActive :: Pool -> IO (Either DBError [LoadedPlayerRow])
 getActive pool = runTransaction pool getActiveT
 
 linkExternalId :: Pool -> DbPlayerId -> ProviderName -> Text -> IO (Either DBError ())

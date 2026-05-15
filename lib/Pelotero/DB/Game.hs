@@ -17,6 +17,8 @@ module Pelotero.DB.Game
   , gameSchema
   , gameExternalIdSchema
   , GameRow (..)
+  , LoadedGameRow (..)
+  , gameRowToLoaded
   , insertGameT
   , updateGameT
   , getByIdT
@@ -67,9 +69,12 @@ data Game f = Game
   deriving anyclass (Rel8able)
 
 -- ---------------------------------------------------------------------
--- Public row type
+-- Public row types
 -- ---------------------------------------------------------------------
 
+-- | Write-path row. 'gameRowId' is 'Nothing' on insert (the DB assigns
+-- the surrogate id) and 'Just' on update. Reads return 'LoadedGameRow'
+-- instead, where the id is total.
 data GameRow = GameRow
   { gameRowId                 :: !(Maybe DbGameId)
   , gameRowGameDate           :: !Day
@@ -79,6 +84,32 @@ data GameRow = GameRow
   , gameRowLastSyncedAt       :: !(Maybe UTCTime)
   }
   deriving stock (Show, Eq)
+
+-- | Read-path row. Every row returned by a SELECT against the 'game'
+-- table has an id by construction; modeling that totality at the type
+-- level removes the partial-function smell at every read site.
+data LoadedGameRow = LoadedGameRow
+  { lgrId                 :: !DbGameId
+  , lgrGameDate           :: !Day
+  , lgrAwayTeamId         :: !DbTeamId
+  , lgrHomeTeamId         :: !DbTeamId
+  , lgrLastSyncedProvider :: !(Maybe ProviderName)
+  , lgrLastSyncedAt       :: !(Maybe UTCTime)
+  }
+  deriving stock (Show, Eq)
+
+-- | Project a 'GameRow' onto a 'LoadedGameRow' given a known id. Used
+-- by the in-memory effect interpreter where the id is assigned outside
+-- of the SQL roundtrip.
+gameRowToLoaded :: DbGameId -> GameRow -> LoadedGameRow
+gameRowToLoaded gid r = LoadedGameRow
+  { lgrId                 = gid
+  , lgrGameDate           = gameRowGameDate r
+  , lgrAwayTeamId         = gameRowAwayTeamId r
+  , lgrHomeTeamId         = gameRowHomeTeamId r
+  , lgrLastSyncedProvider = gameRowLastSyncedProvider r
+  , lgrLastSyncedAt       = gameRowLastSyncedAt r
+  }
 
 -- ---------------------------------------------------------------------
 -- Schemas
@@ -109,17 +140,17 @@ gameExternalIdSchema = TableSchema
   }
 
 -- ---------------------------------------------------------------------
--- Result <-> public row
+-- Result -> public row (read path)
 -- ---------------------------------------------------------------------
 
-fromResult :: Game Result -> GameRow
-fromResult Game{..} = GameRow
-  { gameRowId                 = Just _gameId
-  , gameRowGameDate           = _gameGameDate
-  , gameRowAwayTeamId         = _gameAwayTeamId
-  , gameRowHomeTeamId         = _gameHomeTeamId
-  , gameRowLastSyncedProvider = _gameLastSyncedProvider
-  , gameRowLastSyncedAt       = _gameLastSyncedAt
+fromResult :: Game Result -> LoadedGameRow
+fromResult Game{..} = LoadedGameRow
+  { lgrId                 = _gameId
+  , lgrGameDate           = _gameGameDate
+  , lgrAwayTeamId         = _gameAwayTeamId
+  , lgrHomeTeamId         = _gameHomeTeamId
+  , lgrLastSyncedProvider = _gameLastSyncedProvider
+  , lgrLastSyncedAt       = _gameLastSyncedAt
   }
 
 gameRowToExpr :: GameRow -> Game Expr
@@ -161,7 +192,7 @@ updateGameT gid row =
 -- Reads
 -- ---------------------------------------------------------------------
 
-getByIdT :: DbGameId -> Tx.Transaction (Maybe GameRow)
+getByIdT :: DbGameId -> Tx.Transaction (Maybe LoadedGameRow)
 getByIdT gid = do
   rows <- Tx.statement () $ run $ select $ do
     g <- each gameSchema
@@ -171,7 +202,7 @@ getByIdT gid = do
     (g : _) -> Just (fromResult g)
     []      -> Nothing
 
-getByDateT :: Day -> Tx.Transaction [GameRow]
+getByDateT :: Day -> Tx.Transaction [LoadedGameRow]
 getByDateT d = do
   rows <- Tx.statement () $ run $ select $
     orderBy (_gameId >$< asc) $ do
@@ -182,7 +213,7 @@ getByDateT d = do
 
 -- | Inclusive on both ends. Use this when scoring a period rather than
 -- iterating 'getByDateT' day-by-day.
-getByDateRangeT :: Day -> Day -> Tx.Transaction [GameRow]
+getByDateRangeT :: Day -> Day -> Tx.Transaction [LoadedGameRow]
 getByDateRangeT startDay endDay = do
   rows <- Tx.statement () $ run $ select $
     orderBy ((_gameGameDate >$< asc) <> (_gameId >$< asc)) $ do
@@ -234,13 +265,13 @@ insertGame pool row = runTransaction pool (insertGameT row)
 updateGame :: Pool -> DbGameId -> GameRow -> IO (Either DBError ())
 updateGame pool gid row = runTransaction pool (updateGameT gid row)
 
-getById :: Pool -> DbGameId -> IO (Either DBError (Maybe GameRow))
+getById :: Pool -> DbGameId -> IO (Either DBError (Maybe LoadedGameRow))
 getById pool gid = runTransaction pool (getByIdT gid)
 
-getByDate :: Pool -> Day -> IO (Either DBError [GameRow])
+getByDate :: Pool -> Day -> IO (Either DBError [LoadedGameRow])
 getByDate pool d = runTransaction pool (getByDateT d)
 
-getByDateRange :: Pool -> Day -> Day -> IO (Either DBError [GameRow])
+getByDateRange :: Pool -> Day -> Day -> IO (Either DBError [LoadedGameRow])
 getByDateRange pool s e = runTransaction pool (getByDateRangeT s e)
 
 linkExternalId :: Pool -> DbGameId -> ProviderName -> Text -> IO (Either DBError ())

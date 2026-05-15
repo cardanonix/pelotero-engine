@@ -150,26 +150,10 @@ executable pelotero
   main-is:          Main.hs
   build-depends:    base
                   , pelotero-engine
+                  , effectful            >= 2.5   && < 3
+                  , optparse-applicative >= 0.17  && < 0.20
                   , text
-  ghc-options:      -O2 -threaded
-
-executable pelotero-db-check
-  import:           warnings, lang
-  hs-source-dirs:   app
-  main-is:          DbCheck.hs
-  build-depends:    base
-                  , pelotero-engine
-                  , text
-  ghc-options:      -O2 -threaded
-
-executable pelotero-fetch-roster
-  import:           warnings, lang
-  hs-source-dirs:   app
-  main-is:          FetchRoster.hs
-  build-depends:    base
-                  , pelotero-engine
-                  , effectful          >= 2.5   && < 3
-                  , text
+                  , time
   ghc-options:      -O2 -threaded
 
 test-suite pelotero-test

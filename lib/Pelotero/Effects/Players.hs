@@ -23,7 +23,7 @@ import Effectful (Effect, IOE, Dispatch(Dynamic), DispatchOf)
 import qualified Effectful as E
 import Effectful.Dispatch.Dynamic (interpret_, send)
 
-import Pelotero.DB.Player    (PlayerRow(..))
+import Pelotero.DB.Player    (PlayerRow, LoadedPlayerRow(..), playerRowToLoaded)
 import qualified Pelotero.DB.Player as PlayerRepo
 import Pelotero.DB.Provider  (ProviderName)
 import Pelotero.Domain.Id    (DbPlayerId(..))
@@ -32,8 +32,8 @@ import Pelotero.Effects.Database (Database, runTx)
 data Players :: Effect where
   UpsertPlayerByExternalId :: ProviderName -> Text -> PlayerRow -> Players m DbPlayerId
   LookupPlayerByExternalId :: ProviderName -> Text -> Players m (Maybe DbPlayerId)
-  GetPlayerById            :: DbPlayerId -> Players m (Maybe PlayerRow)
-  GetActivePlayers         :: Players m [PlayerRow]
+  GetPlayerById            :: DbPlayerId -> Players m (Maybe LoadedPlayerRow)
+  GetActivePlayers         :: Players m [LoadedPlayerRow]
 
 type instance DispatchOf Players = 'Dynamic
 
@@ -49,10 +49,10 @@ lookupPlayerByExternalId
 lookupPlayerByExternalId provider extId =
   send (LookupPlayerByExternalId provider extId)
 
-getPlayerById :: Players E.:> es => DbPlayerId -> E.Eff es (Maybe PlayerRow)
+getPlayerById :: Players E.:> es => DbPlayerId -> E.Eff es (Maybe LoadedPlayerRow)
 getPlayerById = send . GetPlayerById
 
-getActivePlayers :: Players E.:> es => E.Eff es [PlayerRow]
+getActivePlayers :: Players E.:> es => E.Eff es [LoadedPlayerRow]
 getActivePlayers = send GetActivePlayers
 
 runPlayersDB
@@ -71,7 +71,7 @@ runPlayersDB = interpret_ $ \case
 
 data PlayerStore = PlayerStore
   { externalIdToDb :: !(Map.Map (ProviderName, Text) DbPlayerId)
-  , rowsByDb       :: !(Map.Map DbPlayerId PlayerRow)
+  , loadedByDb     :: !(Map.Map DbPlayerId LoadedPlayerRow)
   , nextId         :: !Int
   }
 
@@ -95,24 +95,24 @@ runPlayersInMemory action = do
         pure (Map.lookup (provider, extId) (externalIdToDb store))
       GetPlayerById pid -> do
         store <- E.liftIO (readIORef ref)
-        pure (Map.lookup pid (rowsByDb store))
+        pure (Map.lookup pid (loadedByDb store))
       GetActivePlayers -> do
         store <- E.liftIO (readIORef ref)
-        pure $ filter playerRowActive $ map snd $ Map.toList (rowsByDb store)
+        pure $ filter lprActive $ Map.elems (loadedByDb store)
 
     upsertOp provider extId incoming store =
       case Map.lookup (provider, extId) (externalIdToDb store) of
         Just pid ->
-          let updated = incoming { playerRowId = Just pid }
+          let updated = playerRowToLoaded pid incoming
               store'  = store
-                { rowsByDb = Map.insert pid updated (rowsByDb store) }
+                { loadedByDb = Map.insert pid updated (loadedByDb store) }
           in (store', pid)
         Nothing ->
           let pid     = DbPlayerId (fromIntegral (nextId store))
-              stored  = incoming { playerRowId = Just pid }
+              stored  = playerRowToLoaded pid incoming
               store'  = PlayerStore
                 { externalIdToDb = Map.insert (provider, extId) pid (externalIdToDb store)
-                , rowsByDb       = Map.insert pid stored (rowsByDb store)
+                , loadedByDb     = Map.insert pid stored (loadedByDb store)
                 , nextId         = nextId store + 1
                 }
           in (store', pid)

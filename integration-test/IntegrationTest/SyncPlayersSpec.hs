@@ -18,7 +18,7 @@ import qualified Pelotero.DB.FetchLog       as FL
 import qualified Pelotero.DB.Player         as P
 import qualified Pelotero.DB.Team           as Tm
 import           Pelotero.DB.FetchLog       (FetchLogRow(..))
-import           Pelotero.DB.Player         (PlayerRow(..))
+import           Pelotero.DB.Player         (LoadedPlayerRow(..))
 import           Pelotero.DB.Pool           (DBError, Pool)
 import           Pelotero.DB.Team           (TeamRow(..))
 import           Pelotero.DB.Provider       (ProviderName(..))
@@ -115,28 +115,28 @@ spec = describe "Pelotero.Sync.Players (with real-shape MLB fixtures)" $ do
 
     case mAltuve of
       Just p  -> do
-        playerRowFirstName p `shouldBe` "Jose"
-        playerRowLastName  p `shouldBe` "Altuve"
-        playerRowPosition  p `shouldBe` Just "2B"
+        lprFirstName p `shouldBe` "Jose"
+        lprLastName  p `shouldBe` "Altuve"
+        lprPosition  p `shouldBe` Just "2B"
       Nothing -> expectationFailure "Altuve not in DB"
 
     case mAlonso of
       Just p  -> do
-        playerRowFirstName p `shouldBe` "Pete"
-        playerRowLastName  p `shouldBe` "Alonso"
-        playerRowPosition  p `shouldBe` Just "1B"
+        lprFirstName p `shouldBe` "Pete"
+        lprLastName  p `shouldBe` "Alonso"
+        lprPosition  p `shouldBe` Just "1B"
       Nothing -> expectationFailure "Alonso not in DB"
 
     case mAlvarez of
       Just p  -> do
-        playerRowFirstName p `shouldBe` "Yordan"
-        playerRowLastName  p `shouldBe` "Alvarez"
+        lprFirstName p `shouldBe` "Yordan"
+        lprLastName  p `shouldBe` "Alvarez"
       Nothing -> expectationFailure "Alvarez not in DB"
 
     case mLindor of
       Just p  -> do
-        playerRowFirstName p `shouldBe` "Francisco"
-        playerRowLastName  p `shouldBe` "Lindor"
+        lprFirstName p `shouldBe` "Francisco"
+        lprLastName  p `shouldBe` "Lindor"
       Nothing -> expectationFailure "Lindor not in DB"
 
     case mFetch of
@@ -159,7 +159,7 @@ lookupTeamRow provider extId = do
 
 lookupPlayerRow
   :: Database E.:> es
-  => ProviderName -> Text -> E.Eff es (Maybe PlayerRow)
+  => ProviderName -> Text -> E.Eff es (Maybe LoadedPlayerRow)
 lookupPlayerRow provider extId = do
   mPid <- runTx (P.lookupByExternalIdT provider extId)
   case mPid of

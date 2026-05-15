@@ -5,7 +5,7 @@ import Test.Hspec
 
 import Effectful (runEff)
 
-import Pelotero.DB.Player   (PlayerRow(..))
+import Pelotero.DB.Player   (PlayerRow(..), LoadedPlayerRow(..))
 import Pelotero.DB.Provider (ProviderName(..))
 import Pelotero.Domain.Id   (DbPlayerId(..))
 import Pelotero.Effects.Players
@@ -20,8 +20,8 @@ spec = describe "Pelotero.Effects.Players (in-memory)" $ do
       getPlayerById pid
     case result of
       Just got -> do
-        playerRowFirstName got `shouldBe` "Test"
-        playerRowLastName  got `shouldBe` "Player"
+        lprFirstName got `shouldBe` "Test"
+        lprLastName  got `shouldBe` "Player"
       Nothing  ->
         expectationFailure "expected to find the upserted player"
 
@@ -42,7 +42,7 @@ spec = describe "Pelotero.Effects.Players (in-memory)" $ do
       pid <- upsertPlayerByExternalId ProviderMLB "ext-3" row2
       getPlayerById pid
     case result of
-      Just got -> playerRowFirstName got `shouldBe` "Updated"
+      Just got -> lprFirstName got `shouldBe` "Updated"
       Nothing  -> expectationFailure "expected to find the upserted player"
 
   it "getActivePlayers filters out inactive ones" $ do
@@ -55,7 +55,7 @@ spec = describe "Pelotero.Effects.Players (in-memory)" $ do
       _ <- upsertPlayerByExternalId ProviderMLB "i1" inactive
       getActivePlayers
     length rows `shouldBe` 2
-    all playerRowActive rows `shouldBe` True
+    all lprActive rows `shouldBe` True
 
   it "getPlayerById returns Nothing for unknown ids" $ do
     result <- runEff $ runPlayersInMemory $ do

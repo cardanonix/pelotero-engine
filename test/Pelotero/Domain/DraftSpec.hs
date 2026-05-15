@@ -31,7 +31,7 @@ spec = do
       length (generateDraftOrder SerpentineOrder 7 teams) `shouldBe` 6
 
     it "returns nothing for empty teams" $
-      generateDraftOrder SerpentineOrder 10 [] `shouldBe` []
+      generateDraftOrder SerpentineOrder 10 ([] :: [FantasyTeamId]) `shouldBe` []
 
   describe "extendRankingsWithUnranked" $ do
     it "appends universe-but-not-ranked, preserving universe order" $ do

@@ -7,7 +7,7 @@ import           Test.Hspec
 
 import qualified Pelotero.DB.Game         as Game
 import qualified Pelotero.DB.Team         as Team
-import           Pelotero.DB.Game         (GameRow(..))
+import           Pelotero.DB.Game         (GameRow(..), LoadedGameRow(..))
 import           Pelotero.DB.Pool         (Pool)
 import           Pelotero.DB.Provider     (ProviderName(..))
 
@@ -28,9 +28,9 @@ spec = describe "Pelotero.DB.Game" $ do
       pure (atid, htid, got)
     case result of
       (atid, htid, Just g) -> do
-        gameRowGameDate   g `shouldBe` fromGregorian 2025 4 12
-        gameRowAwayTeamId g `shouldBe` atid
-        gameRowHomeTeamId g `shouldBe` htid
+        lgrGameDate   g `shouldBe` fromGregorian 2025 4 12
+        lgrAwayTeamId g `shouldBe` atid
+        lgrHomeTeamId g `shouldBe` htid
       (_, _, Nothing) ->
         expectationFailure "round-trip read returned Nothing"
 
@@ -59,7 +59,7 @@ spec = describe "Pelotero.DB.Game" $ do
       _ <- Game.insertGameT (mkGameRow otherDate  atid1 htid2)
       Game.getByDateT targetDate
     length gamesOnTarget `shouldBe` 2
-    all (\g -> gameRowGameDate g == targetDate) gamesOnTarget `shouldBe` True
+    all (\g -> lgrGameDate g == targetDate) gamesOnTarget `shouldBe` True
 
   it "upsertByExternalIdT inserts then updates" $ \pool -> do
     let extId = "game-upsert-test-id"
@@ -80,7 +80,7 @@ spec = describe "Pelotero.DB.Game" $ do
       pure (gid1 == gid2, mAfter)
     case result of
       (sameId, Just g) -> do
-        sameId             `shouldBe` True
-        gameRowGameDate g  `shouldBe` fromGregorian 2025 7 2
+        sameId         `shouldBe` True
+        lgrGameDate g  `shouldBe` fromGregorian 2025 7 2
       (_, Nothing) ->
         expectationFailure "expected the upserted game"

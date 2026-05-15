@@ -60,6 +60,7 @@ spec = describe "Pelotero.Sync.Boxscores.syncBoxscores" $ do
     boxGamesSeen      res `shouldBe` 1
     boxGamesProcessed res `shouldBe` 1
     boxGamesUnchanged res `shouldBe` 0
+    boxPlayersSkipped res `shouldBe` 0
     boxErrors         res `shouldBe` []
 
   it "short-circuits with BoxUnchanged when bytes are byte-identical" $ do
@@ -144,6 +145,39 @@ spec = describe "Pelotero.Sync.Boxscores.syncBoxscores" $ do
         msg `shouldSatisfy` ("HTTP go boom" `T.isInfixOf`) . T.pack
       other -> error ("expected one FetchFailed, got " <> show other)
 
+  it "logs WarningS and bumps boxPlayersSkipped for unsynced players" $ do
+    bytesRef <- IORef.newIORef (constResponse boxscoreWithUnknownPlayer)
+    logsRef  <- IORef.newIORef []
+    res <- runEff
+      $ runLoggingCapture logsRef
+      $ runMLBClientStub bytesRef
+      $ runFetchLogInMemory
+      $ runBoxscoreEntryNever
+      $ runGamesInMemory
+      $ runPlayersInMemory
+      $ runTeamsInMemory
+      $ do
+          seedGame
+          -- deliberately NO player seeding; the boxscore references id 660271.
+          -- The skipped-player path must avoid the BoxscoreEntry effect
+          -- entirely (we're using runBoxscoreEntryNever, which errors on any
+          -- operation). If this test starts blowing up with that error, the
+          -- regression is in upsertEntries calling upsertBatting/upsertPitching
+          -- for an entry whose player lookup returned Nothing.
+          syncBoxscores ProviderMLB [knownGameId]
+    boxGamesProcessed   res `shouldBe` 1
+    boxGamesUnchanged   res `shouldBe` 0
+    boxBattingUpserted  res `shouldBe` 0
+    boxPitchingUpserted res `shouldBe` 0
+    boxPlayersSkipped   res `shouldBe` 1
+    boxErrors           res `shouldBe` []
+    logs <- IORef.readIORef logsRef
+    let warns = filter isUnknownPlayerLine logs
+    length warns              `shouldBe` 1
+    map logLineSeverity warns `shouldBe` [WarningS]
+    map logLineMessage  warns
+      `shouldSatisfy` all (T.isInfixOf "660271")
+
 
 -- Stack ----------------------------------------------------------------
 
@@ -197,6 +231,10 @@ isBoxscoreSkipLine :: LogLine -> Bool
 isBoxscoreSkipLine line =
   "boxscore: payload unchanged, skipping" `T.isInfixOf` logLineMessage line
 
+isUnknownPlayerLine :: LogLine -> Bool
+isUnknownPlayerLine line =
+  "boxscore: skipping unknown player" `T.isInfixOf` logLineMessage line
+
 seedGame :: (Teams :> es, Games :> es) => Eff es ()
 seedGame = do
   awayDb <- Teams.upsertTeamByExternalId
@@ -240,7 +278,7 @@ knownGameExtId :: T.Text
 knownGameExtId = externalIdFromGameId knownGameId
 
 -- | Minimal valid 'WireBoxscore' JSON: empty player maps for both
--- teams. No entries means upsertEntries returns (0, 0) and the
+-- teams. No entries means upsertEntries returns zero counts and the
 -- 'runBoxscoreEntryNever' interpreter is never invoked.
 cleanBoxscoreBytes :: BS.ByteString
 cleanBoxscoreBytes =
@@ -250,3 +288,11 @@ cleanBoxscoreBytes =
 mutatedBoxscoreBytes :: BS.ByteString
 mutatedBoxscoreBytes =
   "{\"teams\":{\"away\":{\"players\":{}},\"home\":{\"players\":{}}}} "
+
+-- | A boxscore with exactly one player entry (id 660271). When no
+-- player with that external id is seeded, 'upsertEntries' must log a
+-- WarningS and bump 'boxPlayersSkipped' without calling the
+-- 'BoxscoreEntry' interpreter.
+boxscoreWithUnknownPlayer :: BS.ByteString
+boxscoreWithUnknownPlayer =
+  "{\"teams\":{\"away\":{\"players\":{\"ID660271\":{\"person\":{\"id\":660271},\"parentTeamId\":117,\"stats\":{\"batting\":{\"hits\":2}}}}},\"home\":{\"players\":{}}}}"

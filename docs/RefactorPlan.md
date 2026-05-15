@@ -333,3 +333,29 @@ Drop one game's snapshot, re-score. Team's total should decrease by exactly that
 
 Once those are green, E.1 is safe. Until then it's premature.
 One last thing: you said you want full files when you ask for code. Nothing here required code edits. When you're ready to address #1, #3, or #4 above, ask and I'll cut the files.
+
+______
+
+Latest report:
+
+Changes vs. your previous cabal:
+
+- Dropped the `pelotero-db-check` and `pelotero-fetch-roster` executable stanzas. Their functionality moved into the `pelotero db check` and `pelotero sync rosters` subcommands.
+- Added `effectful`, `optparse-applicative`, and `time` to the `pelotero` executable deps.
+
+Cleanup:
+
+- Delete `app/DbCheck.hs` and `app/FetchRoster.hs`. They no longer correspond to any executable in the cabal; leaving them in the tree is dead code that will eventually rot.
+- If anything outside the repo (systemd units, deployment scripts, CI) references the binary names `pelotero-db-check` or `pelotero-fetch-roster`, those references need to switch to `pelotero db check` and `pelotero sync rosters --season YEAR`.
+
+After this compiles, what's left of the original plan:
+
+- **E.2** (delete `old_src/`): mechanical once you're satisfied nothing in `old_src/` is still load-bearing.
+- **Smoke test**: the originally-recommended gate. Now that all the subcommands exist, the smoke can run as a literal sequence: `pelotero db check` → `pelotero sync rosters --season 2025` → `pelotero sync schedule --from … --to …` → `pelotero sync boxscores --from … --to …` → `pelotero snapshot lineups --on-date …` → `pelotero score --league-id …`, then edit a lineup row in psql and re-run score, asserting that games before the edit score against the old snapshot.
+
+Open follow-ups that aren't on the original plan but came up during piece 2:
+
+- A `LoadedTeamRow` to match the Loaded* pattern on `Pelotero.DB.Team` (currently asymmetric).
+- A `syncBoxscoresForDateRange :: Day -> Day -> Eff es BoxscoreSyncResult` library helper that absorbs the `getGamesByDateRange` → `getGameExternalId` → `externalIdToGameId` loop currently open-coded in `workSyncBoxscores`. Small enough that the CLI inlining is fine for now.
+- `runTransaction` always uses `TxS.Write`; a read/write split is non-blocking but worth doing whenever concurrent reads become a real concern.
+- B.2 `order_index` on `roster_slot`/`lineup_slot` (and `lineup_snapshot` once it's added) for batting-order positional scoring.
