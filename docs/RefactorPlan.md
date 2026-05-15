@@ -359,3 +359,35 @@ Open follow-ups that aren't on the original plan but came up during piece 2:
 - A `syncBoxscoresForDateRange :: Day -> Day -> Eff es BoxscoreSyncResult` library helper that absorbs the `getGamesByDateRange` → `getGameExternalId` → `externalIdToGameId` loop currently open-coded in `workSyncBoxscores`. Small enough that the CLI inlining is fine for now.
 - `runTransaction` always uses `TxS.Write`; a read/write split is non-blocking but worth doing whenever concurrent reads become a real concern.
 - B.2 `order_index` on `roster_slot`/`lineup_slot` (and `lineup_snapshot` once it's added) for batting-order positional scoring.
+
+
+_____
+
+Notes on the design:
+The four players I look up — Altuve (514888), Alonso (624413), Alvarez (670541), Lindor (596019) — are the same four SyncPlayersSpec already verifies are present in players-2025.json. Three are used; if any goes missing the test fails fast at requirePlayer with a clear message instead of later with confused scoring output.
+Snap.snapshotLineupsForDate requires llcStatus == "active", hence pipelineConfig setting it explicitly. If you ever decide leagues with status "draft" should also snapshot, the test wouldn't catch that change.
+There's nothing in here that exercises the negative side of the invariant — that a game without a snapshot picks up the current lineup. That's a worthwhile second test (snapshot only days 1–3, leave 4–7 unsnapshotted, assert scores differ on 4–7 but match on 1–3), but it requires inspecting the per-game contribution to a team's total, which the current LeagueScore/TeamScore output may or may not expose at fine enough granularity. If you want that test next, paste lib/Pelotero/Score.hs so I can see what's exposed at the per-game level.
+After this compiles and passes, piece 2 is complete. Open follow-ups remain: LoadedTeamRow, runTransaction read/write split, B.2 order_index, syncBoxscoresForDateRange helper, and old_src/ deletion.
+
+____
+
+Original plan is done — piece 2, E.1, and the deterministic smoke all green. Where we land now is end-of-refactor with a clean tree and a few open follow-ups that came up along the way.
+Open items, roughly in order of correctness value:
+
+LoadedTeamRow — finish the Loaded* pattern on Pelotero.DB.Team. Currently asymmetric: Game and Player reads return Loaded* with a total id, but Team reads still return TeamRow with Maybe DbTeamId. Same wart we fixed twice already, this is the third instance. Cascade hits IntegrationTest.TeamRepoSpec and the lookupTeamRow/teamRowName site in IntegrationTest.SyncPlayersSpec. Mechanical.
+E.2 — rm -rf old_src/ — one command, but worth eyeballing first to confirm nothing in the legacy tree is still imported anywhere.
+runTransaction read/write split in lib/Pelotero/DB/Pool.hs. Currently always TxS.Write. Small change, but read transactions taking write locks is real correctness debt the longer it sits.
+Integration test for runAutoDraftForLeague. The smoke test covers snapshotLineupsForDate end-to-end but never touches the draft path. A fixture-light test seeding a league + two teams + rankings, calling runAutoDraftForLeague, and asserting the resulting DraftSummary shape would close the gap.
+syncBoxscoresForDateRange library helper to absorb the open-coded getGamesByDateRange → getGameExternalId → externalIdToGameId loop in app/Main.hs. Five lines saved, low value.
+Two unused imports in integration-test/IntegrationTest/ScoreSpec.hs (Data.Map.Strict and Pelotero.Domain.Roster). One-line cleanup.
+B.2 order_index on roster_slot/lineup_slot/lineup_snapshot for positional batting-order persistence. Net-new feature work, biggest scope.
+
+My recommendation is item 1 next — LoadedTeamRow. It's the natural close to the pattern, it's the kind of thing that gets harder to fix the longer the codebase grows around the asymmetry, and the diff is predictable since we've done it twice already.
+If you want me to proceed, paste these three files and I'll cut the changes in one turn:
+
+lib/Pelotero/DB/Team.hs
+lib/Pelotero/Effects/Teams.hs
+integration-test/IntegrationTest/TeamRepoSpec.hs
+
+(IntegrationTest.SyncPlayersSpec I already have from the earlier paste; that one I can update without re-requesting.)
+If you'd rather knock out E.2 or the ScoreSpec import cleanup first as quick wins, say so — both are sub-minute changes.
