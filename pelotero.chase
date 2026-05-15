@@ -1,6 +1,6 @@
 %bundle chase v1
-%generated 2026-05-12T14:29:31Z
-%roots /home/bismuth/git/pelotero-engine/lib
+%generated 2026-05-15T21:45:24Z
+%roots /home/bismuth/git/pelotero-engine/lib/
 %files 62 ok, 0 failed
 
 # This file is a chase bundle: structural skeletons of multiple
@@ -289,12 +289,12 @@ upsertBattingT :: BattingRow -> Tx.Transaction ()
   ! INSERT ... ON CONFLICT (game_id, player_id) DO UPDATE
   ! set: keeps id-like columns from old, takes stats from new, preserves created_at, sets updated_at = NOW()
   ! updateWhere = lit True (always update on conflict)
-  ? no test references
+  ? tested by: IntegrationTest.BoxscoreEntryRepoSpec.spec, IntegrationTest.ScoreSpec.spec, IntegrationTest.SmokeSpec.spec
 
 getBattingForGameT :: DbGameId -> Tx.Transaction [BattingRow]
   ! WHERE game_id; ORDER BY player_id
   ! consumed by Pelotero.Score.buildPlayerMaps (one call per game id in the period)
-  ? no test references
+  ? tested by: IntegrationTest.BoxscoreEntryRepoSpec.spec, IntegrationTest.SyncBoxscoresSpec.spec
 
 getBattingForDateRangeT :: Day -> Day -> Tx.Transaction [BattingRow]
   ? no test references
@@ -302,16 +302,16 @@ getBattingForDateRangeT :: Day -> Day -> Tx.Transaction [BattingRow]
 deleteBattingForGameT :: DbGameId -> Tx.Transaction ()
   ! DELETE WHERE game_id
   ! useful when re-ingesting a corrected boxscore
-  ? no test references
+  ? tested by: IntegrationTest.BoxscoreEntryRepoSpec.spec
 
 upsertPitchingT :: PitchingRow -> Tx.Transaction ()
   ! mirror of upsertBattingT for pitching
-  ? no test references
+  ? tested by: IntegrationTest.BoxscoreEntryRepoSpec.spec, IntegrationTest.ScoreSpec.spec
 
 getPitchingForGameT :: DbGameId -> Tx.Transaction [PitchingRow]
   ! WHERE game_id; ORDER BY player_id
   ! consumed by Pelotero.Score.buildPlayerMaps
-  ? no test references
+  ? tested by: IntegrationTest.BoxscoreEntryRepoSpec.spec
 
 getPitchingForDateRangeT :: Day -> Day -> Tx.Transaction [PitchingRow]
   ? no test references
@@ -416,16 +416,16 @@ fromResult :: DraftPickE Result -> DraftPickRow
 recordPickT :: DraftPickRow -> Tx.Transaction DbDraftPickId
   ! INSERT ... RETURNING id; Abort on conflict
   ! intended consumer is the planned Pelotero.Draft state machine (D.1); no consumer in tree today
-  ? no test references
+  ? tested by: IntegrationTest.DraftPickRepoSpec.spec
 
 getPicksForLeagueT :: DbLeagueConfigId -> Tx.Transaction [DraftPickRow]
   ! WHERE league_config_id; ORDER BY pick_number
-  ? no test references
+  ? tested by: IntegrationTest.DraftPickRepoSpec.spec, IntegrationTest.DraftRunSpec.spec
 
 getPickCountT :: DbLeagueConfigId -> Tx.Transaction Int64
   ! COUNT(*) WHERE league_config_id
   ! used to figure out 'whose pick is next?' as count + 1
-  ? no test references
+  ? tested by: IntegrationTest.DraftPickRepoSpec.spec
 
 recordPick :: Pool -> DraftPickRow -> IO (Either DBError DbDraftPickId)
   ! Pool-flavored insert
@@ -499,17 +499,17 @@ fromResult :: FetchLogE Result -> Maybe FetchLogRow
 
 recordFetchT :: FetchLogRow -> Tx.Transaction ()
   ! INSERT ... ON CONFLICT Abort; the fetch log is append-only
-  ? no test references
+  ? tested by: IntegrationTest.FetchLogRepoSpec.spec
 
 getLastFetchT
   :: ProviderName -> Text -> Text -> Tx.Transaction (Maybe FetchLogRow)
   ! ORDER BY fetched_at DESC, id DESC LIMIT 1; the id-DESC tiebreaker handles same-millisecond fetches
-  ? no test references
+  ? tested by: IntegrationTest.FetchLogRepoSpec.spec, IntegrationTest.SyncPlayersSpec.spec, IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.spec
 
 getRecentFetchesT
   :: ProviderName -> Text -> Int32 -> Tx.Transaction [FetchLogRow]
   ! same ORDER BY pattern, LIMIT lim; returns up to `lim` parseable rows
-  ? no test references
+  ? tested by: IntegrationTest.FetchLogRepoSpec.spec
 
 recordFetch :: Pool -> FetchLogRow -> IO (Either DBError ())
   ! Pool-flavored wrapper
@@ -577,7 +577,20 @@ data GameRow = GameRow
   }
   deriving stock (Show, Eq)
 
+data LoadedGameRow = LoadedGameRow
+  { lgrId                 :: !DbGameId
+  , lgrGameDate           :: !Day
+  , lgrAwayTeamId         :: !DbTeamId
+  , lgrHomeTeamId         :: !DbTeamId
+  , lgrLastSyncedProvider :: !(Maybe ProviderName)
+  , lgrLastSyncedAt       :: !(Maybe UTCTime)
+  }
+  deriving stock (Show, Eq)
+
 instance ProviderKeyed GameRow where
+
+gameRowToLoaded :: DbGameId -> GameRow -> LoadedGameRow
+  ? no test references
 
 gameSchema :: TableSchema (Game Name)
   ! table 'game' with surrogate id, game_date (Day), away/home team FKs to team.id, last-synced metadata
@@ -587,7 +600,7 @@ gameExternalIdSchema :: TableSchema (ExternalIdE DbGameId Name)
   ! same shape as player_external_id and team_external_id
   ? no test references
 
-fromResult :: Game Result -> GameRow
+fromResult :: Game Result -> LoadedGameRow
   ! private; rel8 Result -> public GameRow
   ? no test references
 
@@ -596,33 +609,33 @@ gameRowToExpr :: GameRow -> Game Expr
 
 insertGameT :: GameRow -> Tx.Transaction DbGameId
   ! INSERT ... RETURNING id; Abort on conflict
-  ? no test references
+  ? tested by: IntegrationTest.GameRepoSpec.spec, IntegrationTest.BoxscoreEntryRepoSpec.spec, IntegrationTest.ScoreSpec.spec, IntegrationTest.SmokeSpec.spec, IntegrationTest.Fixtures.addGameT
 
 updateGameT :: DbGameId -> GameRow -> Tx.Transaction ()
   ! WHERE id = gid; updates everything except id
   ? no test references
 
-getByIdT :: DbGameId -> Tx.Transaction (Maybe GameRow)
+getByIdT :: DbGameId -> Tx.Transaction (Maybe LoadedGameRow)
   ! single-row select via WHERE id
-  ? no test references
+  ? tested by: IntegrationTest.TeamRepoSpec.spec, IntegrationTest.PlayerRepoSpec.spec, IntegrationTest.GameRepoSpec.spec, IntegrationTest.LeagueTeamRepoSpec.spec, IntegrationTest.LeagueConfigRepoSpec.spec, IntegrationTest.SyncPlayersSpec.lookupTeamRow, IntegrationTest.SyncPlayersSpec.lookupPlayerRow
 
-getByDateT :: Day -> Tx.Transaction [GameRow]
+getByDateT :: Day -> Tx.Transaction [LoadedGameRow]
   ! WHERE game_date = ? ORDER BY id
-  ? no test references
+  ? tested by: IntegrationTest.GameRepoSpec.spec
 
-getByDateRangeT :: Day -> Day -> Tx.Transaction [GameRow]
+getByDateRangeT :: Day -> Day -> Tx.Transaction [LoadedGameRow]
   ! WHERE game_date BETWEEN startDay AND endDay (inclusive both ends)
   ! ORDER BY game_date ASC, id ASC for stable cross-day display
-  ! consumed by Pelotero.Score.collectGameIds
+  ! consumed by Pelotero.Effects.Games.getGamesByDateRange and indirectly by Pelotero.Score.buildPlayerMaps via the date-range box queries
   ? no test references
 
 linkExternalIdT :: DbGameId -> ProviderName -> Text -> Tx.Transaction ()
   ! INSERT ... ON CONFLICT DO NOTHING into game_external_id
-  ? no test references
+  ? tested by: IntegrationTest.TeamRepoSpec.spec, IntegrationTest.GameRepoSpec.spec
 
 lookupByExternalIdT :: ProviderName -> Text -> Tx.Transaction (Maybe DbGameId)
   ! SELECT game_id WHERE provider AND external_id
-  ? no test references
+  ? tested by: IntegrationTest.TeamRepoSpec.spec, IntegrationTest.GameRepoSpec.spec, IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.spec, IntegrationTest.SyncPlayersSpec.lookupTeamRow, IntegrationTest.SyncPlayersSpec.lookupPlayerRow, IntegrationTest.SmokeSpec.requirePlayer
 
 getExternalIdT :: DbGameId -> ProviderName -> Tx.Transaction (Maybe Text)
   ! reverse lookup
@@ -630,7 +643,7 @@ getExternalIdT :: DbGameId -> ProviderName -> Tx.Transaction (Maybe Text)
 
 upsertByExternalIdT :: ProviderName -> Text -> GameRow -> Tx.Transaction DbGameId
   ! lookup-then-update or insert-and-link
-  ? no test references
+  ? tested by: IntegrationTest.TeamRepoSpec.spec, IntegrationTest.PlayerRepoSpec.spec, IntegrationTest.GameRepoSpec.spec
 
 insertGame :: Pool -> GameRow -> IO (Either DBError DbGameId)
   ! Pool-flavored wrapper
@@ -640,15 +653,15 @@ updateGame :: Pool -> DbGameId -> GameRow -> IO (Either DBError ())
   ! Pool-flavored wrapper
   ? no test references
 
-getById :: Pool -> DbGameId -> IO (Either DBError (Maybe GameRow))
+getById :: Pool -> DbGameId -> IO (Either DBError (Maybe LoadedGameRow))
   ! Pool-flavored single-game read
   ? no test references
 
-getByDate :: Pool -> Day -> IO (Either DBError [GameRow])
+getByDate :: Pool -> Day -> IO (Either DBError [LoadedGameRow])
   ! Pool-flavored per-date read
   ? no test references
 
-getByDateRange :: Pool -> Day -> Day -> IO (Either DBError [GameRow])
+getByDateRange :: Pool -> Day -> Day -> IO (Either DBError [LoadedGameRow])
   ! Pool-flavored wrapper; inclusive on both ends
   ? no test references
 
@@ -738,7 +751,12 @@ instance FromJSON JsonbLineupLimits where
 
 %decision InternalSubrecordWrappers
   what:    JsonbBattingMultipliers and JsonbPitchingMultipliers are private to this module and used only inside JsonbScoring's ToJSON / FromJSON
-  why:     Each sub-record gets its own field-by-field encoding, mirroring the original split per type at the Domain layer. Keeps the LeagueScoring wrapper instance short and locally readable — the inner records' encoding lives next to the inner records' wrappers. Not exported because nothing outside JsonB needs to talk about the multipliers in JSONB form independently.
+  why:     Each sub-record gets its own field-by-field encoding, mirroring the original split per type at the Domain layer. Keeps the LeagueScoring wrapper instance short and locally readable: the inner records' encoding lives next to the inner records' wrappers. Not exported because nothing outside JsonB needs to talk about the multipliers in JSONB form independently.
+  affects: 
+
+%decision WrapperContentRationale
+  what:    JsonbScoring, JsonbRosterLimits, and JsonbLineupLimits are public newtypes around LeagueScoring, RosterLimits, and LineupLimits respectively; their DBType instances are derived via JSONBEncoded and the on-the-wire JSON is byte-equivalent to the pre-A.4 instances
+  why:     These three wrappers exist for one job: carry the Aeson instances at the DB boundary without leaking Aeson into Domain. On-the-wire JSON parity with pre-A.4 is load-bearing; any existing league_config row in the database is read back through these wrappers without a migration. Captured as a decision rather than per-newtype invariants because chase resolves top-level value bindings, not newtype constructors; the documentation belongs at module level.
   affects: 
 
 
@@ -822,19 +840,19 @@ fromResult :: LeagueConfig Result -> LoadedLeagueConfig
 
 insertLeagueConfigT :: LeagueConfigRow -> Tx.Transaction DbLeagueConfigId
   ! INSERT ... RETURNING id; Abort on conflict
-  ? no test references
+  ? tested by: IntegrationTest.LeagueConfigRepoSpec.spec, IntegrationTest.ScoreSpec.spec, IntegrationTest.DraftRunSpec.spec, IntegrationTest.SmokeSpec.spec, IntegrationTest.Fixtures.addLeagueConfigT
 
 updateLeagueConfigT :: DbLeagueConfigId -> LeagueConfigRow -> Tx.Transaction ()
   ! WHERE id = lcid; updates everything except id
-  ? no test references
+  ? tested by: IntegrationTest.LeagueConfigRepoSpec.spec
 
 getByIdT :: DbLeagueConfigId -> Tx.Transaction (Maybe LoadedLeagueConfig)
   ! single-row select via WHERE id
-  ? no test references
+  ? tested by: IntegrationTest.TeamRepoSpec.spec, IntegrationTest.PlayerRepoSpec.spec, IntegrationTest.GameRepoSpec.spec, IntegrationTest.LeagueTeamRepoSpec.spec, IntegrationTest.LeagueConfigRepoSpec.spec, IntegrationTest.SyncPlayersSpec.lookupTeamRow, IntegrationTest.SyncPlayersSpec.lookupPlayerRow
 
 getByLeagueIdT :: Text -> Tx.Transaction (Maybe LoadedLeagueConfig)
   ! WHERE league_id = ?; the user-facing identifier
-  ? no test references
+  ? tested by: IntegrationTest.LeagueConfigRepoSpec.spec
 
 getAllT :: Tx.Transaction [LoadedLeagueConfig]
   ! ORDER BY league_id; full table
@@ -927,28 +945,28 @@ fromResult :: LeagueTeam Result -> LoadedLeagueTeam
 
 insertLeagueTeamT :: LeagueTeamRow -> Tx.Transaction DbLeagueTeamId
   ! INSERT ... RETURNING id; Abort on conflict
-  ? no test references
+  ? tested by: IntegrationTest.LeagueTeamRepoSpec.spec, IntegrationTest.ScoreSpec.spec, IntegrationTest.DraftRunSpec.spec, IntegrationTest.SmokeSpec.spec, IntegrationTest.Fixtures.addLeagueTeamT
 
 updateLeagueTeamT :: DbLeagueTeamId -> LeagueTeamRow -> Tx.Transaction ()
   ! WHERE id = ltid; updates everything except id
-  ? no test references
+  ? tested by: IntegrationTest.LeagueTeamRepoSpec.spec
 
 getByIdT :: DbLeagueTeamId -> Tx.Transaction (Maybe LoadedLeagueTeam)
   ! single-row select via WHERE id
-  ? no test references
+  ? tested by: IntegrationTest.TeamRepoSpec.spec, IntegrationTest.PlayerRepoSpec.spec, IntegrationTest.GameRepoSpec.spec, IntegrationTest.LeagueTeamRepoSpec.spec, IntegrationTest.LeagueConfigRepoSpec.spec, IntegrationTest.SyncPlayersSpec.lookupTeamRow, IntegrationTest.SyncPlayersSpec.lookupPlayerRow
 
 lookupByKeyT
   :: DbLeagueConfigId -> Text -> Tx.Transaction (Maybe LoadedLeagueTeam)
   ! WHERE league_config_id AND team_key; returns the first match or Nothing
-  ? no test references
+  ? tested by: IntegrationTest.LeagueTeamRepoSpec.spec
 
 getForLeagueT :: DbLeagueConfigId -> Tx.Transaction [LoadedLeagueTeam]
   ! ORDER BY name; all teams in a league
-  ? no test references
+  ? tested by: IntegrationTest.LeagueTeamRepoSpec.spec
 
 deleteT :: DbLeagueTeamId -> Tx.Transaction ()
   ! DELETE WHERE id; cascading deletes on dependent rows handled by FK ON DELETE
-  ? no test references
+  ? tested by: IntegrationTest.LeagueTeamRepoSpec.spec
 
 insertLeagueTeam :: Pool -> LeagueTeamRow -> IO (Either DBError DbLeagueTeamId)
   ! Pool-flavored wrapper
@@ -1029,23 +1047,23 @@ fromResult :: LineupSlotE Result -> LineupSlotRow
 
 addSlotT :: LineupSlotRow -> Tx.Transaction ()
   ! same upsert pattern as RosterSlot.addSlotT
-  ? no test references
+  ? tested by: IntegrationTest.RosterSlotRepoSpec.spec, IntegrationTest.LineupSlotRepoSpec.spec, IntegrationTest.ScoreSpec.spec, IntegrationTest.SmokeSpec.spec
 
 getSlotsForTeamT :: DbLeagueTeamId -> Tx.Transaction [LineupSlotRow]
   ! WHERE league_team_id; ORDER BY slot, player_id
-  ? no test references
+  ? tested by: IntegrationTest.RosterSlotRepoSpec.spec, IntegrationTest.LineupSlotRepoSpec.spec
 
 removeSlotT :: DbLeagueTeamId -> DbPlayerId -> Tx.Transaction ()
   ! DELETE WHERE league_team_id AND player_id
-  ? no test references
+  ? tested by: IntegrationTest.RosterSlotRepoSpec.spec, IntegrationTest.LineupSlotRepoSpec.spec, IntegrationTest.SmokeSpec.spec
 
 clearTeamLineupT :: DbLeagueTeamId -> Tx.Transaction ()
   ! DELETE WHERE league_team_id
-  ? no test references
+  ? tested by: IntegrationTest.LineupSlotRepoSpec.spec
 
 replaceTeamLineupT :: DbLeagueTeamId -> [LineupSlotRow] -> Tx.Transaction ()
   ! clear-then-fill within the caller's transaction
-  ? no test references
+  ? tested by: IntegrationTest.LineupSlotRepoSpec.spec
 
 getSlotsForTeam :: Pool -> DbLeagueTeamId -> IO (Either DBError [LineupSlotRow])
   ! Pool-flavored wrapper
@@ -1134,7 +1152,7 @@ writeSnapshotsT :: [LineupSnapshotRow] -> Tx.Transaction ()
 getSnapshotForTeamGameT
   :: DbLeagueTeamId -> DbGameId -> Tx.Transaction [LineupSnapshotRow]
   ! WHERE league_team_id AND game_id; no SQL-level ordering
-  ! consumed by Pelotero.Score.scoreTeamForGame (the canonical scoring read)
+  ! consumed by Pelotero.Lineup.Snapshot.snapshotLineupsForTeam for the 'is this snapshot already locked in?' guard; Pelotero.Score reads via the date-range variant (getSnapshotsForDateRangeT) and groups in-memory
   ? no test references
 
 snapshotExistsForTeamGameT
@@ -1344,7 +1362,25 @@ data PlayerRow = PlayerRow
   }
   deriving stock (Show, Eq)
 
+data LoadedPlayerRow = LoadedPlayerRow
+  { lprId                 :: !DbPlayerId
+  , lprFirstName          :: !Text
+  , lprLastName           :: !Text
+  , lprNameSlug           :: !Text
+  , lprPosition           :: !(Maybe Text)
+  , lprBatSide            :: !(Maybe Char)
+  , lprPitchHand          :: !(Maybe Char)
+  , lprActive             :: !Bool
+  , lprCurrentTeamId      :: !(Maybe DbTeamId)
+  , lprLastSyncedProvider :: !(Maybe ProviderName)
+  , lprLastSyncedAt       :: !(Maybe UTCTime)
+  }
+  deriving stock (Show, Eq)
+
 instance ProviderKeyed PlayerRow where
+
+playerRowToLoaded :: DbPlayerId -> PlayerRow -> LoadedPlayerRow
+  ? no test references
 
 playerSchema :: TableSchema (Player Name)
   ! table 'player' with surrogate id, denormalised name, position, batting/pitching hand as text, active flag, FK to team, last-synced metadata
@@ -1364,7 +1400,7 @@ textToChar :: Maybe Text -> Maybe Char
   ! if the stored text has more than one character (data corruption), silently truncates
   ? no test references
 
-fromResult :: Player Result -> PlayerRow
+fromResult :: Player Result -> LoadedPlayerRow
   ! private; converts the rel8 Player Result row to the public PlayerRow
   ? no test references
 
@@ -1374,33 +1410,33 @@ playerRowToExpr :: PlayerRow -> Player Expr
 insertPlayerT :: PlayerRow -> Tx.Transaction DbPlayerId
   ! INSERT ... RETURNING id; uses Abort on conflict
   ! the surrogate id is unsafeDefault (DB-assigned BIGSERIAL); all other fields come from the row
-  ? no test references
+  ? tested by: IntegrationTest.PlayerRepoSpec.spec, IntegrationTest.BoxscoreEntryRepoSpec.spec, IntegrationTest.ScoreSpec.spec, IntegrationTest.DraftRunSpec.spec, IntegrationTest.SmokeSpec.spec, IntegrationTest.Fixtures.addPlayerT
 
 updatePlayerT :: DbPlayerId -> PlayerRow -> Tx.Transaction ()
   ! WHERE id = pid; updates everything except id
   ! no-op if pid doesn't exist
   ? no test references
 
-getByIdT :: DbPlayerId -> Tx.Transaction (Maybe PlayerRow)
+getByIdT :: DbPlayerId -> Tx.Transaction (Maybe LoadedPlayerRow)
   ! single-row select via WHERE; returns the first match or Nothing
-  ? no test references
+  ? tested by: IntegrationTest.TeamRepoSpec.spec, IntegrationTest.PlayerRepoSpec.spec, IntegrationTest.GameRepoSpec.spec, IntegrationTest.LeagueTeamRepoSpec.spec, IntegrationTest.LeagueConfigRepoSpec.spec, IntegrationTest.SyncPlayersSpec.lookupTeamRow, IntegrationTest.SyncPlayersSpec.lookupPlayerRow
 
-getAllT :: Tx.Transaction [PlayerRow]
+getAllT :: Tx.Transaction [LoadedPlayerRow]
   ! ORDER BY last_name, first_name; returns the entire table
   ? no test references
 
-getActiveT :: Tx.Transaction [PlayerRow]
+getActiveT :: Tx.Transaction [LoadedPlayerRow]
   ! ORDER BY last_name, first_name; WHERE active = TRUE
   ? no test references
 
 linkExternalIdT :: DbPlayerId -> ProviderName -> Text -> Tx.Transaction ()
   ! INSERT ... ON CONFLICT DO NOTHING into player_external_id
   ! idempotent; safe to call repeatedly during re-syncs
-  ? no test references
+  ? tested by: IntegrationTest.TeamRepoSpec.spec, IntegrationTest.GameRepoSpec.spec
 
 lookupByExternalIdT :: ProviderName -> Text -> Tx.Transaction (Maybe DbPlayerId)
   ! SELECT player_id WHERE provider AND external_id; returns Maybe DbPlayerId
-  ? no test references
+  ? tested by: IntegrationTest.TeamRepoSpec.spec, IntegrationTest.GameRepoSpec.spec, IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.spec, IntegrationTest.SyncPlayersSpec.lookupTeamRow, IntegrationTest.SyncPlayersSpec.lookupPlayerRow, IntegrationTest.SmokeSpec.requirePlayer
 
 getExternalIdT :: DbPlayerId -> ProviderName -> Tx.Transaction (Maybe Text)
   ! reverse lookup: given a DbPlayerId and provider, returns Maybe Text
@@ -1409,7 +1445,7 @@ getExternalIdT :: DbPlayerId -> ProviderName -> Tx.Transaction (Maybe Text)
 upsertByExternalIdT :: ProviderName -> Text -> PlayerRow -> Tx.Transaction DbPlayerId
   ! two-step: lookup via (provider, external_id); if found, update player; if not, insert and link
   ! atomic within the caller's transaction
-  ? no test references
+  ? tested by: IntegrationTest.TeamRepoSpec.spec, IntegrationTest.PlayerRepoSpec.spec, IntegrationTest.GameRepoSpec.spec
 
 insertPlayer :: Pool -> PlayerRow -> IO (Either DBError DbPlayerId)
   ! Pool-flavored wrapper around insertPlayerT
@@ -1419,15 +1455,15 @@ updatePlayer :: Pool -> DbPlayerId -> PlayerRow -> IO (Either DBError ())
   ! Pool-flavored wrapper around updatePlayerT
   ? no test references
 
-getById :: Pool -> DbPlayerId -> IO (Either DBError (Maybe PlayerRow))
+getById :: Pool -> DbPlayerId -> IO (Either DBError (Maybe LoadedPlayerRow))
   ! Pool-flavored single-player read
   ? no test references
 
-getAll :: Pool -> IO (Either DBError [PlayerRow])
+getAll :: Pool -> IO (Either DBError [LoadedPlayerRow])
   ! Pool-flavored full table read
   ? no test references
 
-getActive :: Pool -> IO (Either DBError [PlayerRow])
+getActive :: Pool -> IO (Either DBError [LoadedPlayerRow])
   ! Pool-flavored active-only read
   ? no test references
 
@@ -1508,20 +1544,20 @@ insertOneT :: PlayerRankingRow -> Tx.Transaction ()
 getRankingsForTeamT :: DbLeagueTeamId -> Tx.Transaction [PlayerRankingRow]
   ! WHERE league_team_id; ORDER BY rank_slot
   ! intended consumer is the planned Pelotero.Draft state machine (D.1); no consumer in tree today
-  ? no test references
+  ? tested by: IntegrationTest.PlayerRankingRepoSpec.spec
 
 clearRankingsT :: DbLeagueTeamId -> Tx.Transaction ()
   ! DELETE WHERE league_team_id
-  ? no test references
+  ? tested by: IntegrationTest.PlayerRankingRepoSpec.spec
 
 replaceRankingsT :: DbLeagueTeamId -> [PlayerRankingRow] -> Tx.Transaction ()
   ! clearRankingsT then mapM_ insertOneT
   ! atomic within the caller's transaction
-  ? no test references
+  ? tested by: IntegrationTest.PlayerRankingRepoSpec.spec
 
 getRankingCountT :: DbLeagueTeamId -> Tx.Transaction Int64
   ! COUNT(*) WHERE league_team_id
-  ? no test references
+  ? tested by: IntegrationTest.PlayerRankingRepoSpec.spec
 
 getRankingsForTeam :: Pool -> DbLeagueTeamId -> IO (Either DBError [PlayerRankingRow])
   ! Pool-flavored wrapper
@@ -1529,7 +1565,7 @@ getRankingsForTeam :: Pool -> DbLeagueTeamId -> IO (Either DBError [PlayerRankin
 
 replaceRankings :: Pool -> DbLeagueTeamId -> [PlayerRankingRow] -> IO (Either DBError ())
   ! Pool-flavored replace
-  ? no test references
+  ? tested by: IntegrationTest.DraftRunSpec.spec
 
 clearRankings :: Pool -> DbLeagueTeamId -> IO (Either DBError ())
   ! Pool-flavored clear
@@ -1599,7 +1635,7 @@ loadDBConfig :: IO DBConfig
   ! PGHOST/PGPORT/PGDATABASE/PGUSER/PGPASSWORD: standard libpq names
   ! PELOTERO_DB_POOL_SIZE / PELOTERO_DB_ACQUIRE_TIMEOUT: app-specific tunables
   ! missing or unparseable env vars fall back to defaultDBConfig field-by-field
-  ? no test references
+  ? tested by: IntegrationTest.Setup.withTestPool
 
 poolConfig :: DBConfig -> PoolConfig.Config
   ! private; constructs PoolConfig.Config from a DBConfig
@@ -1609,23 +1645,23 @@ poolConfig :: DBConfig -> PoolConfig.Config
 acquire :: DBConfig -> IO Pool
   ! non-blocking; returns immediately. Pool only opens connections lazily on first runSession.
   ! no validation that the database is reachable until first use
-  ? no test references
+  ? tested by: IntegrationTest.Setup.withTestPool
 
 release :: Pool -> IO ()
   ! drains the pool; safe to call on a partially-used pool
   ! does NOT abort in-flight transactions; finishes them then closes connections
-  ? no test references
+  ? tested by: IntegrationTest.Setup.withTestPool
 
 runSession :: Pool -> Session a -> IO (Either DBError a)
   ! single-statement (or multi-statement) Session execution
   ! wraps Pool.use; converts hasql-pool errors to DBError
   ! preserves the Right value type a as-is
-  ? no test references
+  ? tested by: IntegrationTest.Setup.cleanDatabase
 
 runTransaction :: Pool -> Tx.Transaction a -> IO (Either DBError a)
   ! convenience wrapper: ReadCommitted, Write, single Transaction
   ! atomicity: write commits on success, rolls back on Tx error or thrown exception
-  ? no test references
+  ? tested by: IntegrationTest.Setup.runRolledBack
 
 renderDBError :: DBError -> Text
   ! converts to user-facing Text with a category prefix ('DB pool usage error: ', 'Migration error: ')
@@ -1726,14 +1762,14 @@ linkExternalIdT
   => RowId row -> ProviderName -> Text -> Tx.Transaction ()
   ! INSERT into externalIdSchema with ON CONFLICT DO NOTHING; idempotent on re-runs
   ! _eidFetchedAt set via unsafeDefault — the DB column has DEFAULT NOW()
-  ? no test references
+  ? tested by: IntegrationTest.TeamRepoSpec.spec, IntegrationTest.GameRepoSpec.spec
 
 lookupByExternalIdT
   :: forall row. ProviderKeyed row
   => ProviderName -> Text -> Tx.Transaction (Maybe (RowId row))
   ! SELECT _eidEntityId WHERE provider AND external_id; returns the first row or Nothing
   ! Phase A.5: replaces the inline lookup that was duplicated across DB.Player / DB.Team / DB.Game
-  ? no test references
+  ? tested by: IntegrationTest.TeamRepoSpec.spec, IntegrationTest.GameRepoSpec.spec, IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.spec, IntegrationTest.SyncPlayersSpec.lookupTeamRow, IntegrationTest.SyncPlayersSpec.lookupPlayerRow, IntegrationTest.SmokeSpec.requirePlayer
 
 getExternalIdT
   :: forall row. ProviderKeyed row
@@ -1746,7 +1782,7 @@ upsertByExternalIdT
   => ProviderName -> Text -> row -> Tx.Transaction (RowId row)
   ! Atomic within the caller's transaction: lookupByExternalIdT, then either updateRowByIdT (existing entity) or insertRowT + linkExternalIdT (new entity)
   ! Returns the surrogate id either way — caller doesn't need to distinguish insert vs. update
-  ? no test references
+  ? tested by: IntegrationTest.TeamRepoSpec.spec, IntegrationTest.PlayerRepoSpec.spec, IntegrationTest.GameRepoSpec.spec
 
 linkExternalId
   :: forall row. ProviderKeyed row
@@ -1883,15 +1919,15 @@ fromResult :: RosterSlotE Result -> RosterSlotRow
 
 addSlotT :: RosterSlotRow -> Tx.Transaction ()
   ! INSERT ... ON CONFLICT (league_team_id, player_id) DO UPDATE SET slot
-  ? no test references
+  ? tested by: IntegrationTest.RosterSlotRepoSpec.spec, IntegrationTest.LineupSlotRepoSpec.spec, IntegrationTest.ScoreSpec.spec, IntegrationTest.SmokeSpec.spec
 
 getSlotsForTeamT :: DbLeagueTeamId -> Tx.Transaction [RosterSlotRow]
   ! WHERE league_team_id; ORDER BY slot, player_id
-  ? no test references
+  ? tested by: IntegrationTest.RosterSlotRepoSpec.spec, IntegrationTest.LineupSlotRepoSpec.spec
 
 removeSlotT :: DbLeagueTeamId -> DbPlayerId -> Tx.Transaction ()
   ! DELETE WHERE league_team_id AND player_id
-  ? no test references
+  ? tested by: IntegrationTest.RosterSlotRepoSpec.spec, IntegrationTest.LineupSlotRepoSpec.spec, IntegrationTest.SmokeSpec.spec
 
 removePlayerFromTeamT :: DbLeagueTeamId -> DbPlayerId -> Tx.Transaction ()
   ! alias for removeSlotT
@@ -1899,16 +1935,16 @@ removePlayerFromTeamT :: DbLeagueTeamId -> DbPlayerId -> Tx.Transaction ()
 
 clearTeamRosterT :: DbLeagueTeamId -> Tx.Transaction ()
   ! DELETE WHERE league_team_id
-  ? no test references
+  ? tested by: IntegrationTest.RosterSlotRepoSpec.spec
 
 replaceTeamRosterT :: DbLeagueTeamId -> [RosterSlotRow] -> Tx.Transaction ()
   ! transaction-internal sequence: clearTeamRosterT then mapM_ addSlotT
   ! entirely within the caller's transaction
-  ? no test references
+  ? tested by: IntegrationTest.RosterSlotRepoSpec.spec
 
 countBySlotT :: DbLeagueTeamId -> Text -> Tx.Transaction Int64
   ! COUNT(*) WHERE league_team_id AND slot
-  ? no test references
+  ? tested by: IntegrationTest.RosterSlotRepoSpec.spec
 
 getSlotsForTeam :: Pool -> DbLeagueTeamId -> IO (Either DBError [RosterSlotRow])
   ! Pool-flavored wrapper
@@ -1985,7 +2021,20 @@ data TeamRow = TeamRow
   }
   deriving stock (Show, Eq)
 
+data LoadedTeamRow = LoadedTeamRow
+  { ltrId                 :: !DbTeamId
+  , ltrName               :: !Text
+  , ltrAbbreviation       :: !Text
+  , ltrLocationName       :: !Text
+  , ltrLastSyncedProvider :: !(Maybe ProviderName)
+  , ltrLastSyncedAt       :: !(Maybe UTCTime)
+  }
+  deriving stock (Show, Eq)
+
 instance ProviderKeyed TeamRow where
+
+teamRowToLoaded :: DbTeamId -> TeamRow -> LoadedTeamRow
+  ? no test references
 
 teamSchema :: TableSchema (Team Name)
   ! table 'team' with surrogate id, name, abbreviation, location_name (city), and last-synced metadata
@@ -1996,7 +2045,7 @@ teamExternalIdSchema :: TableSchema (ExternalIdE DbTeamId Name)
   ! same shape as player_external_id: (team_id, provider, external_id, fetched_at)
   ? no test references
 
-fromResult :: Team Result -> TeamRow
+fromResult :: Team Result -> LoadedTeamRow
   ! private; rel8 Result -> public TeamRow
   ? no test references
 
@@ -2005,27 +2054,27 @@ teamRowToExpr :: TeamRow -> Team Expr
 
 insertTeamT :: TeamRow -> Tx.Transaction DbTeamId
   ! INSERT ... RETURNING id; Abort on conflict
-  ? no test references
+  ? tested by: IntegrationTest.TeamRepoSpec.spec, IntegrationTest.PlayerRepoSpec.spec, IntegrationTest.GameRepoSpec.spec, IntegrationTest.BoxscoreEntryRepoSpec.spec, IntegrationTest.ScoreSpec.spec, IntegrationTest.SmokeSpec.spec, IntegrationTest.Fixtures.addTeamT
 
 updateTeamT :: DbTeamId -> TeamRow -> Tx.Transaction ()
   ! WHERE id = tid; updates everything except id
   ? no test references
 
-getByIdT :: DbTeamId -> Tx.Transaction (Maybe TeamRow)
+getByIdT :: DbTeamId -> Tx.Transaction (Maybe LoadedTeamRow)
   ! single-row select via WHERE id
-  ? no test references
+  ? tested by: IntegrationTest.TeamRepoSpec.spec, IntegrationTest.PlayerRepoSpec.spec, IntegrationTest.GameRepoSpec.spec, IntegrationTest.LeagueTeamRepoSpec.spec, IntegrationTest.LeagueConfigRepoSpec.spec, IntegrationTest.SyncPlayersSpec.lookupTeamRow, IntegrationTest.SyncPlayersSpec.lookupPlayerRow
 
-getAllT :: Tx.Transaction [TeamRow]
+getAllT :: Tx.Transaction [LoadedTeamRow]
   ! ORDER BY name; no pagination; 30 MLB teams
   ? no test references
 
 linkExternalIdT :: DbTeamId -> ProviderName -> Text -> Tx.Transaction ()
   ! INSERT ... ON CONFLICT DO NOTHING into team_external_id
-  ? no test references
+  ? tested by: IntegrationTest.TeamRepoSpec.spec, IntegrationTest.GameRepoSpec.spec
 
 lookupByExternalIdT :: ProviderName -> Text -> Tx.Transaction (Maybe DbTeamId)
   ! SELECT team_id WHERE provider AND external_id
-  ? no test references
+  ? tested by: IntegrationTest.TeamRepoSpec.spec, IntegrationTest.GameRepoSpec.spec, IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.spec, IntegrationTest.SyncPlayersSpec.lookupTeamRow, IntegrationTest.SyncPlayersSpec.lookupPlayerRow, IntegrationTest.SmokeSpec.requirePlayer
 
 getExternalIdT :: DbTeamId -> ProviderName -> Tx.Transaction (Maybe Text)
   ! reverse lookup; (DbTeamId, ProviderName) -> Maybe Text
@@ -2033,7 +2082,7 @@ getExternalIdT :: DbTeamId -> ProviderName -> Tx.Transaction (Maybe Text)
 
 upsertByExternalIdT :: ProviderName -> Text -> TeamRow -> Tx.Transaction DbTeamId
   ! lookup-then-update or insert-and-link
-  ? no test references
+  ? tested by: IntegrationTest.TeamRepoSpec.spec, IntegrationTest.PlayerRepoSpec.spec, IntegrationTest.GameRepoSpec.spec
 
 insertTeam :: Pool -> TeamRow -> IO (Either DBError DbTeamId)
   ! Pool-flavored wrapper
@@ -2043,11 +2092,11 @@ updateTeam :: Pool -> DbTeamId -> TeamRow -> IO (Either DBError ())
   ! Pool-flavored wrapper
   ? no test references
 
-getById :: Pool -> DbTeamId -> IO (Either DBError (Maybe TeamRow))
+getById :: Pool -> DbTeamId -> IO (Either DBError (Maybe LoadedTeamRow))
   ! Pool-flavored single-team read
   ? no test references
 
-getAll :: Pool -> IO (Either DBError [TeamRow])
+getAll :: Pool -> IO (Either DBError [LoadedTeamRow])
   ! Pool-flavored full table read
   ? no test references
 
@@ -2123,8 +2172,8 @@ renderDraftOrderStrategy :: DraftOrderStrategy -> Text
 generateDraftOrder
   :: DraftOrderStrategy
   -> Int                       -- ^ total picks across the entire draft
-  -> [FantasyTeamId]           -- ^ teams in initial order
-  -> [(FantasyTeamId, DraftPickNumber)]
+  -> [a]                       -- ^ teams in initial order
+  -> [(a, DraftPickNumber)]
   ! intent: Produce the full pick-by-pick order as (team, pickNumber)
   ! empty teams returns []
   ! rounds = totalPicks `div` length teams; trailing partial round is truncated
@@ -2900,31 +2949,67 @@ data SomeDraftStateG = forall v.
 instance Show SomeDraftStateG where
 
 initialMachineState :: SomeDraftStateG
+  ! SomeDraftStateG SWaitingToStartV WaitingToStartG; the existential-wrapped starting state for every draft
   ? no test references
 
 draftStateVertex :: SomeDraftStateG -> DraftVertex
+  ! extracts the runtime DraftVertex tag from a SomeDraftStateG without unwrapping the GADT payload
+  ! useful for the auto-draft loop which needs to know 'are we in Drafting?' as a value-level predicate
   ? no test references
 
 toSomeDraftStateG :: DraftStateG v -> SomeDraftStateG
+  ! DraftStateG v -> SomeDraftStateG; trivially wraps an indexed state under its singleton
   ? no test references
 
 fromDraftState :: DraftState -> SomeDraftStateG
+  ! DraftState -> SomeDraftStateG; bridges from the unindexed sum (Pelotero.Draft) into the indexed GADT shape
+  ! constructs the appropriate singleton tag per constructor
   ? tested by: Pelotero.Draft.MachineSpec.spec, Pelotero.DraftSpec.runMachine, Pelotero.Draft.MachineSpec.runMachine
 
 toDraftState :: DraftStateG v -> DraftState
+  ! DraftStateG v -> DraftState; the inverse of fromDraftState modulo vertex index erasure
   ? tested by: Pelotero.Draft.MachineSpec.spec, Pelotero.DraftSpec.runMachine, Pelotero.Draft.MachineSpec.runMachine
 
 draftAction
   :: DraftStateG v
   -> DraftCommand
   -> ActionResult Identity DraftTopology DraftStateG v (Either DraftError [DraftEvent])
+  ! intent: Per-vertex transition: given a state indexed by vertex v and a DraftCommand, return an ActionResult under DraftTopology with either an event list or a DraftError plus the next (vertex-indexed) state
+  ! Pure inside Identity; same inputs -> same outputs.
+  ! Rejection cases (NotYourTurn, PlayerAlreadyDrafted, DraftAlreadyComplete, DraftNotStarted, EmptyDraftPlan, DraftAlreadyStarted) emit Left and stay on the same vertex via the topology's self-loops.
+  ! MakePick on the final dcRemaining entry transitions to CompleteV emitting [PickRecorded entry, DraftCompleted summary].
+  ! EndDraft from Drafting transitions to CompleteV emitting [DraftCompleted summary] with whatever picks have been made so far; useful for early commissioner-driven termination.
+  ! An empty DraftPlan (dpOrder == []) returns Left EmptyDraftPlan rather than transitioning to a degenerate Complete state.
   ? no test references
 
 runDraftCommand
   :: SomeDraftStateG
   -> DraftCommand
   -> (Either DraftError [DraftEvent], SomeDraftStateG)
+  ! SomeDraftStateG -> DraftCommand -> (Either DraftError [DraftEvent], SomeDraftStateG)
+  ! the existential-erasing wrapper around draftAction; consumed by Pelotero.Draft.Run.applyAndPersist
+  ! runs the ActionResult under Identity to extract the pure value pair
   ? tested by: Pelotero.Draft.MachineSpec.spec, Pelotero.DraftSpec.runMachine, Pelotero.Draft.MachineSpec.runMachine
+
+%decision CremTopologyForCompileTimeLegalTransitions
+  what:    DraftTopology is declared as a crem Topology with explicit allowed transitions per vertex (WaitingToStartV -> {self, DraftingV}; DraftingV -> {self, CompleteV}; CompleteV -> {self}); draftAction is checked at compile time against the topology, so an illegal transition is a type error rather than a runtime branch
+  why:     An invariant like 'you cannot go from Complete back to Drafting' wants to be enforced by the compiler, not by a runtime guard that future refactors might quietly remove. The self-edges on every vertex are deliberate: rejection cases (NotYourTurn, PlayerAlreadyDrafted, DraftAlreadyComplete) return the same vertex they entered with, so the topology must permit self-loops. Cost: the GADT DraftStateG plus the singletons machinery (SDraftVertex via singletons-th) is a chunk of type-level apparatus, and DraftAction's return type is verbose. Acceptable because the alternative (a flat DraftState sum + a runtime 'is this legal?' check inside applyCommand) is what we had before and is exactly what we're moving away from.
+  affects: draftAction
+
+%decision ExistentialWrapperForCallerErgonomics
+  what:    SomeDraftStateG hides the vertex index so callers can hold draft state without threading the singleton type through their signatures; runDraftCommand is the consumer-facing wrapper that takes a SomeDraftStateG and a command and returns the next SomeDraftStateG plus the result
+  why:     Pelotero.Draft.Run.applyAndPersist sees state as an opaque value, not as a vertex-indexed thing; the persistence loop doesn't care which vertex it's at except via the runtime tag (draftStateVertex). Hiding the index also keeps the public API expressible without type-level Haskell at every call site; downstream code reads as plain Haskell. fromDraftState / toDraftState exist as the bridge to and from the unindexed Pelotero.Draft.DraftState; useful when the caller has constructed state from raw data (e.g. recovery from DB) or wants to render state as the simpler sum type.
+  affects: runDraftCommand, toSomeDraftStateG, fromDraftState, toDraftState
+
+%decision LastPickEmitsTwoEvents
+  what:    draftAction on MakePick for the last remaining pick emits both PickRecorded and DraftCompleted in that order; EndDraft from Drafting emits only DraftCompleted
+  why:     The handler in Pelotero.Draft.Run persists both events in order: insert the DraftPick row first, then log the completion. The league_config status update is the orchestrator's job, not the state-machine handler's, per Pelotero.Draft.Run's StatusUpdateNotInScope decision. Crash between events leaves the pick recorded with the in-memory machine state still consistent: the next run sees an empty dcRemaining and re-runs draftAction to get DraftCompleted again; idempotent on the in-memory side. DB-level idempotency on partial-draft retries is documented separately under NoCrashRecovery. Flipping the order would leave a 'completed' log line with the last pick missing from draft_pick: a worse partial state for anyone reading logs.
+  affects: draftAction
+
+%decision PicksMadeListSnocAppend
+  what:    DraftContext.dcPicksMade is appended to in pick order (oldest first) using snoc; total cost is O(n^2) across a full draft
+  why:     n is small: at most ~300 picks for a 25-team / 12-round league. 300^2 = 90,000 cons cells; not a perf concern. Oldest-first ordering means the DraftSummary doesn't need a final reverse step, and the audit trail reads naturally in chronological order without calling reverse on every read. If a much larger draft format appears (50-team dynasty with 30 rounds = 1500 picks), revisit; until then the simpler shape wins.
+  affects: draftAction
 
 
 === BEGIN Pelotero/Draft/Run.hs ===
@@ -2940,32 +3025,54 @@ runDraftCommand
 %uses Effectful
 %uses qualified Katip as K
 %uses Pelotero.DB.DraftPick
+%uses Pelotero.DB.LeagueConfig
+%uses Pelotero.DB.LeagueTeam
+%uses Pelotero.DB.Player
 %uses Pelotero.DB.PlayerRanking
+%uses Pelotero.Domain.Draft
 %uses Pelotero.Domain.Id
+%uses Pelotero.Domain.Roster
 %uses Pelotero.Draft
 %uses Pelotero.Draft.Machine
 %uses Pelotero.Effects.Clock
 %uses qualified Pelotero.Effects.Clock as Clock
 %uses Pelotero.Effects.DraftPick
 %uses qualified Pelotero.Effects.DraftPick as DP
+%uses Pelotero.Effects.LeagueConfig
+%uses qualified Pelotero.Effects.LeagueConfig as LC
+%uses Pelotero.Effects.LeagueTeam
+%uses qualified Pelotero.Effects.LeagueTeam as LT
 %uses Pelotero.Effects.Logging
 %uses qualified Pelotero.Effects.Logging as Logging
 %uses Pelotero.Effects.PlayerRanking
 %uses qualified Pelotero.Effects.PlayerRanking as PR
+%uses Pelotero.Effects.Players
+%uses qualified Pelotero.Effects.Players as Players
 
 data AutoDraftError
-  = AutoDraftRejected    !DraftError
+  = AutoDraftRejected      !DraftError
     -- ^ State machine rejected a command issued by the loop itself —
     --   indicates a bug in this module, not a user-facing problem.
-  | AutoDraftNoCandidate !DbLeagueTeamId
+  | AutoDraftNoCandidate   !DbLeagueTeamId
     -- ^ Team's ranking is empty AND no player remains in the
     --   available pool. Genuine end-of-draft if it happens before
     --   the pick order runs out.
-  | AutoDraftStuck       !DraftVertex
+  | AutoDraftStuck         !DraftVertex
     -- ^ Loop saw the state machine in an unexpected vertex
     --   (e.g. 'WaitingToStartV' after StartDraft was supposed to
     --   succeed). Should be unreachable; included as a defensive
     --   catch.
+  | AutoDraftConfigMissing !DbLeagueConfigId
+    -- ^ 'runAutoDraftForLeague' was called for a league id that
+    --   doesn't exist in 'league_config'. Either a stale CLI argument
+    --   or a logic bug in the orchestrator.
+  | AutoDraftNoTeams       !DbLeagueConfigId
+    -- ^ 'runAutoDraftForLeague' found the league config but no rows
+    --   in 'league_team' for it. Drafts with zero teams are not a
+    --   degenerate case to silently complete; they're a setup error.
+  | AutoDraftBadStrategy   !T.Text
+    -- ^ 'llcDraftStrategy' didn't parse via 'parseDraftOrderStrategy'.
+    --   Carries the offending Text so operators can grep for it.
   deriving stock (Show, Eq)
 
 applyAndPersist
@@ -3022,6 +3129,19 @@ autoPickCommand
   ! Falls back to Set.lookupMin (dcAvailable ctx) if the ranked-and-available list is empty; logs WarningS on fallback.
   ! Returns Left (AutoDraftNoCandidate team) only if dcAvailable is empty AND rankings are exhausted.
   ? no test references
+
+runAutoDraftForLeague
+  :: ( DraftPick     :> es
+     , PlayerRanking :> es
+     , Clock         :> es
+     , Logging       :> es
+     , LeagueConfig  :> es
+     , LeagueTeam    :> es
+     , Players       :> es
+     )
+  => DbLeagueConfigId
+  -> Eff es (Either AutoDraftError DraftSummary)
+  ? tested by: IntegrationTest.DraftRunSpec.spec
 
 tshow :: Show a => a -> T.Text
   ? no test references
@@ -3133,24 +3253,14 @@ isPlayerAvailable :: DbPlayerId -> DraftState -> Bool
   ? tested by: Pelotero.DraftSpec.spec
 
 %decision PureLogicNoEffects
-  what:    Pelotero.Draft is the pure transition logic for the draft state machine; no effect dependencies, all transitions return Either DraftError (DraftState, [DraftEvent])
-  why:     Phase D.1a separates the transition logic from the persistence layer so the state machine is testable with hedgehog without any DB or in-memory effect runner. Pelotero.Draft.Run (Phase D.1c) is the effectful handler that wraps applyCommand with PlayerRanking / DraftPick / Players / Logging / Clock; that is where commands actually get persisted. Pelotero.Domain.Draft remains the upstream-id-keyed pre-compute layer (order generation from a strategy + team list); this module is DB-id-keyed because the state machine talks to the persistence layer.
-  affects: applyCommand
+  what:    Pelotero.Draft is the pure data layer for the draft state machine: the DraftState ADT, the DraftCommand / DraftEvent / DraftError sums, the DraftContext / DraftPickEntry / DraftSummary records, plus a handful of total query helpers (currentPicker, picksRemaining, isPlayerAvailable). No effect dependencies.
+  why:     Phase D.1a separated the transition logic from the persistence layer so the state machine is testable with hedgehog without any DB or in-memory effect runner. The transition logic itself lives in Pelotero.Draft.Machine as draftAction (and the existential-erasing wrapper runDraftCommand); the effectful handler in Pelotero.Draft.Run (Phase D.1c) wraps runDraftCommand with PlayerRanking / DraftPick / Players / Logging / Clock; that is where commands actually get persisted. Pelotero.Domain.Draft remains the upstream-id-keyed pre-compute layer (order generation from a strategy + team list); this module is DB-id-keyed because the state machine talks to the persistence layer.
+  affects: 
 
 %decision AutoPickIsNotACommand
   what:    DraftCommand has only StartDraft, MakePick, EndDraft; auto-picking is a wrapper at the effect layer (D.1c) that consults PlayerRanking, intersects with dcAvailable, and issues MakePick with the chosen player
-  why:     Keeps the pure logic with one place-a-player path rather than two; the strategy logic for which player gets picked stays separate from the how of recording it. Means the state machine itself doesn't take a ranking source as input — the ranking lookup happens before MakePick is constructed. If a future strategy variant emerges (round-specific overrides, drop-and-replace), it lives at the effect layer alongside the existing auto-pick wrapper, not as a new state-machine command.
-  affects: DraftCommand, applyCommand
-
-%decision LastPickEmitsTwoEvents
-  what:    MakePick on the last remaining pick emits both PickRecorded and DraftCompleted in that order; EndDraft from Drafting emits only DraftCompleted
-  why:     The handler in Pelotero.Draft.Run persists both events in order: insert the DraftPick row first, then log the completion. The league_config status update is the orchestrator's job, not the state-machine handler's, per Pelotero.Draft.Run's StatusUpdateNotInScope decision. Crash between events leaves the pick recorded with the in-memory machine state still consistent — the next run sees an empty dcRemaining and re-runs applyCommand to get DraftCompleted again; idempotent on the in-memory side. DB-level idempotency on partial-draft retries is documented separately under NoCrashRecovery. Flipping the order would leave a 'completed' log line with the last pick missing from draft_pick — a worse partial state for anyone reading logs.
-  affects: applyCommand
-
-%decision PicksMadeListSnocAppend
-  what:    DraftContext.dcPicksMade is appended to in pick order (oldest first) using snoc; total cost is O(n²) across a full draft
-  why:     n is small — at most ~300 picks for a 25-team / 12-round league. 300² = 90,000 cons cells; not a perf concern. Oldest-first ordering means the DraftSummary doesn't need a final reverse step, and the audit trail reads naturally in chronological order without calling reverse on every read. If a much larger draft format appears (50-team dynasty with 30 rounds = 1500 picks), revisit; until then the simpler shape wins.
-  affects: applyCommand
+  why:     Keeps the pure logic with one place-a-player path rather than two; the strategy logic for which player gets picked stays separate from the how of recording it. Means the state machine itself doesn't take a ranking source as input: the ranking lookup happens before MakePick is constructed. If a future strategy variant emerges (round-specific overrides, drop-and-replace), it lives at the effect layer alongside the existing auto-pick wrapper, not as a new state-machine command.
+  affects: 
 
 
 === BEGIN Pelotero/Effects/BoxscoreEntry.hs ===
@@ -3220,7 +3330,7 @@ runBoxscoreEntryDB
   => E.Eff (BoxscoreEntry : es) a
   -> E.Eff es a
   ! Database-backed interpreter; requires Error DBError
-  ? no test references
+  ? tested by: IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.spec, IntegrationTest.ScoreSpec.spec, IntegrationTest.SmokeSpec.runStack
 
 runBoxscoreEntryNever
   :: E.Eff (BoxscoreEntry : es) a
@@ -3257,7 +3367,7 @@ runClockIO :: IOE E.:> es => E.Eff (Clock : es) a -> E.Eff es a
 runClockFixed :: UTCTime -> E.Eff (Clock : es) a -> E.Eff es a
   ! fixed-time interpreter; every call returns the same UTCTime
   ! useful for deterministic tests
-  ? tested by: Pelotero.Sync.PlayersSpec.spec, Pelotero.Sync.ScheduleSpec.spec, Pelotero.Sync.PlayersSpec.runRosters, Pelotero.Sync.ScheduleSpec.runSchedule
+  ? tested by: Pelotero.Sync.PlayersSpec.spec, Pelotero.Sync.ScheduleSpec.spec, IntegrationTest.SyncPlayersSpec.spec, IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.spec, Pelotero.Sync.PlayersSpec.runRosters, Pelotero.Sync.ScheduleSpec.runSchedule, IntegrationTest.DraftRunSpec.runStack, IntegrationTest.SmokeSpec.runStack
 
 %decision FixedTimeForTests
   what:    runClockFixed is the test interpreter; every now call returns the same fixed UTCTime
@@ -3287,7 +3397,7 @@ runTx :: Database :> es => Tx.Transaction a -> Eff es a
   ! the only public operation; takes a Tx.Transaction a and returns Eff es a
   ! each call is one independent transaction; no nesting, no batching
   ! writes commit on success; on Tx error, throwError @DBError is invoked rather than throwing IO
-  ? no test references
+  ? tested by: IntegrationTest.SyncPlayersSpec.spec, IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.spec, IntegrationTest.ScoreSpec.spec, IntegrationTest.DraftRunSpec.spec, IntegrationTest.SmokeSpec.spec, IntegrationTest.SyncPlayersSpec.lookupTeamRow, IntegrationTest.SyncPlayersSpec.lookupPlayerRow, IntegrationTest.SmokeSpec.requirePlayer
 
 runDatabasePool
   :: ( IOE :> es
@@ -3302,7 +3412,7 @@ runDatabasePool
   ! no longer throws userError; DBError flows through the effect system
   ! callers compose with `runErrorNoCallStack @DBError` at whatever boundary they want to handle errors
   ! the rationale shift from throw-IO to typed-Error is captured in DbErrorAsTypedCoEffect
-  ? no test references
+  ? tested by: IntegrationTest.SyncPlayersSpec.spec, IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.spec, IntegrationTest.ScoreSpec.spec, IntegrationTest.DraftRunSpec.runStack, IntegrationTest.SmokeSpec.runStack
 
 %decision OneOperationOneTransaction
   what:    Database has a single operation, runTx, which acquires a connection and runs the transaction in isolation
@@ -3359,7 +3469,7 @@ runDraftPickDB
   -> E.Eff es a
   ! Database-backed interpreter; requires Error DBError
   ! no in-memory interpreter — draft picks are append-only and the in-memory equivalent would be a list
-  ? no test references
+  ? tested by: IntegrationTest.DraftRunSpec.runStack
 
 
 === BEGIN Pelotero/Effects/FetchLog.hs ===
@@ -3402,7 +3512,7 @@ runFetchLogDB
   -> E.Eff es a
   ! Database-backed interpreter; delegates to Pelotero.DB.FetchLog
   ! requires Error DBError in the effect stack (post Phase A.3)
-  ? no test references
+  ? tested by: IntegrationTest.SyncPlayersSpec.spec, IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.spec, IntegrationTest.SmokeSpec.runStack
 
 runFetchLogInMemory
   :: IOE E.:> es
@@ -3441,14 +3551,14 @@ data Games :: Effect where
   UpsertGameByExternalId :: ProviderName -> Text -> GameRow -> Games m DbGameId
   LookupGameByExternalId :: ProviderName -> Text -> Games m (Maybe DbGameId)
   GetGameExternalId      :: DbGameId -> ProviderName -> Games m (Maybe Text)
-  GetGameById            :: DbGameId -> Games m (Maybe GameRow)
-  GetGamesByDate         :: Day -> Games m [GameRow]
-  GetGamesByDateRange    :: Day -> Day -> Games m [GameRow]
+  GetGameById            :: DbGameId -> Games m (Maybe LoadedGameRow)
+  GetGamesByDate         :: Day -> Games m [LoadedGameRow]
+  GetGamesByDateRange    :: Day -> Day -> Games m [LoadedGameRow]
 
 data GameStore = GameStore
   { gameExternalIdToDb :: !(Map.Map (ProviderName, Text) DbGameId)
   , gameDbToExternalId :: !(Map.Map (DbGameId, ProviderName) Text)
-  , gameRowsByDb       :: !(Map.Map DbGameId GameRow)
+  , gameLoadedByDb     :: !(Map.Map DbGameId LoadedGameRow)
   , gameNextId         :: !Int
   }
 
@@ -3465,20 +3575,20 @@ lookupGameByExternalId
 getGameExternalId
   :: Games E.:> es => DbGameId -> ProviderName -> E.Eff es (Maybe Text)
   ! Games send-only; reverse lookup
-  ? no test references
+  ? tested by: IntegrationTest.SmokeSpec.collectGameIds
 
-getGameById :: Games E.:> es => DbGameId -> E.Eff es (Maybe GameRow)
+getGameById :: Games E.:> es => DbGameId -> E.Eff es (Maybe LoadedGameRow)
   ! Games send-only
   ? no test references
 
-getGamesByDate :: Games E.:> es => Day -> E.Eff es [GameRow]
+getGamesByDate :: Games E.:> es => Day -> E.Eff es [LoadedGameRow]
   ! Games send-only; per-date listing
   ? no test references
 
-getGamesByDateRange :: Games E.:> es => Day -> Day -> E.Eff es [GameRow]
+getGamesByDateRange :: Games E.:> es => Day -> Day -> E.Eff es [LoadedGameRow]
   ! Games send-only; range listing inclusive on both ends
-  ! consumed by Pelotero.Score.collectGameIds to enumerate the games in the scoring period
-  ? no test references
+  ! consumed by Pelotero.Lineup.Snapshot.snapshotLineupsForDate and Pelotero.Sync.Boxscores.syncBoxscoresForDateRange; Score uses the date-range box and snapshot queries directly rather than enumerating game ids
+  ? tested by: IntegrationTest.SmokeSpec.collectGameIds
 
 runGamesDB
   :: Database E.:> es
@@ -3486,7 +3596,7 @@ runGamesDB
   -> E.Eff es a
   ! Database-backed interpreter; delegates to Pelotero.DB.Game
   ! requires Error DBError
-  ? no test references
+  ? tested by: IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.spec, IntegrationTest.ScoreSpec.spec, IntegrationTest.SmokeSpec.runStack
 
 emptyGameStore :: GameStore
   ! private; three empty Maps + nextId=1
@@ -3567,7 +3677,7 @@ runLeagueConfigDB
   -> Eff es a
   ! Database-backed interpreter; delegates to Pelotero.DB.LeagueConfig
   ! requires Error DBError post Phase A.3
-  ? no test references
+  ? tested by: IntegrationTest.ScoreSpec.spec, IntegrationTest.DraftRunSpec.runStack, IntegrationTest.SmokeSpec.runStack
 
 
 === BEGIN Pelotero/Effects/LeagueTeam.hs ===
@@ -3625,7 +3735,7 @@ runLeagueTeamDB
   => E.Eff (LeagueTeam : es) a
   -> E.Eff es a
   ! Database-backed interpreter; requires Error DBError
-  ? no test references
+  ? tested by: IntegrationTest.ScoreSpec.spec, IntegrationTest.DraftRunSpec.runStack, IntegrationTest.SmokeSpec.runStack
 
 
 === BEGIN Pelotero/Effects/LineupSlot.hs ===
@@ -3679,7 +3789,7 @@ runLineupSlotDB
   => E.Eff (LineupSlot : es) a
   -> E.Eff es a
   ! Database-backed interpreter; requires Error DBError
-  ? no test references
+  ? tested by: IntegrationTest.ScoreSpec.spec, IntegrationTest.SmokeSpec.runStack
 
 
 === BEGIN Pelotero/Effects/LineupSnapshot.hs ===
@@ -3717,7 +3827,7 @@ getSnapshotForTeamGame
   :: LineupSnapshot :> es
   => DbLeagueTeamId -> DbGameId -> Eff es [LineupSnapshotRow]
   ! LineupSnapshot send-only; (DbLeagueTeamId, DbGameId) -> [LineupSnapshotRow]
-  ! consumed by Pelotero.Score.scoreTeamForGame
+  ! consumed by Pelotero.Lineup.Snapshot.snapshotLineupsForTeam
   ? no test references
 
 snapshotExistsForTeamGame
@@ -3736,6 +3846,8 @@ getSnapshotsForGame
 getSnapshotsForDateRange
   :: LineupSnapshot :> es
   => Day -> Day -> Eff es [LineupSnapshotRow]
+  ! LineupSnapshot send-only; (Day, Day) -> [LineupSnapshotRow]
+  ! consumed by Pelotero.Score.scoreOneTeam (Phase C.2): single query replaces the per-game getSnapshotForTeamGame loop
   ? no test references
 
 runLineupSnapshotDB
@@ -3744,7 +3856,7 @@ runLineupSnapshotDB
   -> Eff es a
   ! Database-backed interpreter; delegates to Pelotero.DB.LineupSnapshot
   ! requires Error DBError
-  ? no test references
+  ? tested by: IntegrationTest.ScoreSpec.spec, IntegrationTest.SmokeSpec.runStack
 
 %decision NewEffectForPhaseB3
   what:    LineupSnapshot is a separate effect from LineupSlot; the two have different lifecycles and different consumers
@@ -3853,7 +3965,7 @@ runLoggingDiscard
   ! intent: Test interpreter that silently drops every log; pure (no effects on the inner stack)
   ! default for tests that don't care about logging output
   ! leaves the rest of the effect stack untouched so callers don't have to thread IOE just to silence logs
-  ? tested by: Pelotero.Sync.PlayersSpec.spec, Pelotero.Sync.ScheduleSpec.spec, Pelotero.Sync.PlayersSpec.runRosters, Pelotero.Sync.ScheduleSpec.runSchedule, Pelotero.Sync.BoxscoresSpec.runStack
+  ? tested by: Pelotero.Sync.PlayersSpec.spec, Pelotero.Sync.ScheduleSpec.spec, IntegrationTest.SyncPlayersSpec.spec, IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.spec, IntegrationTest.ScoreSpec.spec, Pelotero.Sync.PlayersSpec.runRosters, Pelotero.Sync.ScheduleSpec.runSchedule, IntegrationTest.DraftRunSpec.runStack, Pelotero.Sync.BoxscoresSpec.runStack, IntegrationTest.SmokeSpec.runStack
 
 %decision KatipPatternLiftedFromCheeblr
   what:    Logging effect uses the Katip pattern: logFM, logItem, addNamespace, addContext; production interpreter writes structured JSON to stdout
@@ -3916,13 +4028,13 @@ fetchRosters
   :: MLBClient E.:> es
   => Int -> E.Eff es (Either String FetchedRosters)
   ! MLBClient send-only API for rosters
-  ? no test references
+  ? tested by: IntegrationTest.SyncPlayersSpec.spec, IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.fetchRostersOrFail, IntegrationTest.SmokeSpec.syncRostersOrFail
 
 fetchSchedule
   :: MLBClient E.:> es
   => String -> String -> E.Eff es (Either String FetchedSchedule)
   ! MLBClient send-only API for schedule
-  ? no test references
+  ? tested by: IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.fetchScheduleOrFail, IntegrationTest.SmokeSpec.syncScheduleOrFail
 
 fetchBoxscoreRaw
   :: MLBClient E.:> es
@@ -3941,7 +4053,7 @@ runMLBClientHTTP
 
 defaultFixture :: FilePath -> MLBFixture
   ! constructs an MLBFixture with empty fixtureBoxscores
-  ? no test references
+  ? tested by: IntegrationTest.SyncPlayersSpec.spec, IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.spec, IntegrationTest.SmokeSpec.runStack
 
 runMLBClientFixture
   :: IOE E.:> es
@@ -3950,7 +4062,7 @@ runMLBClientFixture
   -> E.Eff es a
   ! intent: Test interpreter; reads fixture files from disk and runs them through the same Convert pipeline as production
   ! effects: IOE
-  ? no test references
+  ? tested by: IntegrationTest.SyncPlayersSpec.spec, IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.spec, IntegrationTest.SmokeSpec.runStack
 
 %decision TwoInterpretersHttpAndFixture
   what:    MLBClient has runMLBClientHTTP (production) and runMLBClientFixture (offline tests reading JSON files from disk)
@@ -4001,7 +4113,7 @@ replaceRankings
   :: PlayerRanking E.:> es
   => DbLeagueTeamId -> [PlayerRankingRow] -> E.Eff es ()
   ! PlayerRanking send-only
-  ? no test references
+  ? tested by: IntegrationTest.DraftRunSpec.spec
 
 clearRankings :: PlayerRanking E.:> es => DbLeagueTeamId -> E.Eff es ()
   ! PlayerRanking send-only
@@ -4018,7 +4130,7 @@ runPlayerRankingDB
   => E.Eff (PlayerRanking : es) a
   -> E.Eff es a
   ! Database-backed interpreter; requires Error DBError
-  ? no test references
+  ? tested by: IntegrationTest.DraftRunSpec.runStack
 
 
 === BEGIN Pelotero/Effects/Players.hs ===
@@ -4043,12 +4155,12 @@ runPlayerRankingDB
 data Players :: Effect where
   UpsertPlayerByExternalId :: ProviderName -> Text -> PlayerRow -> Players m DbPlayerId
   LookupPlayerByExternalId :: ProviderName -> Text -> Players m (Maybe DbPlayerId)
-  GetPlayerById            :: DbPlayerId -> Players m (Maybe PlayerRow)
-  GetActivePlayers         :: Players m [PlayerRow]
+  GetPlayerById            :: DbPlayerId -> Players m (Maybe LoadedPlayerRow)
+  GetActivePlayers         :: Players m [LoadedPlayerRow]
 
 data PlayerStore = PlayerStore
   { externalIdToDb :: !(Map.Map (ProviderName, Text) DbPlayerId)
-  , rowsByDb       :: !(Map.Map DbPlayerId PlayerRow)
+  , loadedByDb     :: !(Map.Map DbPlayerId LoadedPlayerRow)
   , nextId         :: !Int
   }
 
@@ -4064,11 +4176,11 @@ lookupPlayerByExternalId
   ! Players send-only; (provider, externalId) -> Maybe DbPlayerId
   ? no test references
 
-getPlayerById :: Players E.:> es => DbPlayerId -> E.Eff es (Maybe PlayerRow)
+getPlayerById :: Players E.:> es => DbPlayerId -> E.Eff es (Maybe LoadedPlayerRow)
   ! Players send-only; DbPlayerId -> Maybe PlayerRow
   ? tested by: Pelotero.Effects.PlayersSpec.spec
 
-getActivePlayers :: Players E.:> es => E.Eff es [PlayerRow]
+getActivePlayers :: Players E.:> es => E.Eff es [LoadedPlayerRow]
   ! Players send-only; all players where active=True
   ? tested by: Pelotero.Effects.PlayersSpec.spec
 
@@ -4078,7 +4190,7 @@ runPlayersDB
   -> E.Eff es a
   ! Database-backed interpreter; delegates to Pelotero.DB.Player
   ! requires Error DBError post Phase A.3
-  ? no test references
+  ? tested by: IntegrationTest.SyncPlayersSpec.spec, IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.spec, IntegrationTest.DraftRunSpec.runStack, IntegrationTest.SmokeSpec.runStack
 
 emptyStore :: PlayerStore
   ! private; PlayerStore Map.empty Map.empty 1
@@ -4184,12 +4296,12 @@ runRosterSlotDB
 data Teams :: Effect where
   UpsertTeamByExternalId :: ProviderName -> Text -> TeamRow -> Teams m DbTeamId
   LookupTeamByExternalId :: ProviderName -> Text -> Teams m (Maybe DbTeamId)
-  GetTeamById            :: DbTeamId -> Teams m (Maybe TeamRow)
-  GetAllTeams            :: Teams m [TeamRow]
+  GetTeamById            :: DbTeamId -> Teams m (Maybe LoadedTeamRow)
+  GetAllTeams            :: Teams m [LoadedTeamRow]
 
 data TeamStore = TeamStore
   { teamExternalIdToDb :: !(Map.Map (ProviderName, Text) DbTeamId)
-  , teamRowsByDb       :: !(Map.Map DbTeamId TeamRow)
+  , teamLoadedByDb     :: !(Map.Map DbTeamId LoadedTeamRow)
   , teamNextId         :: !Int
   }
 
@@ -4203,11 +4315,11 @@ lookupTeamByExternalId
   ! Teams send-only
   ? no test references
 
-getTeamById :: Teams E.:> es => DbTeamId -> E.Eff es (Maybe TeamRow)
+getTeamById :: Teams E.:> es => DbTeamId -> E.Eff es (Maybe LoadedTeamRow)
   ! Teams send-only
   ? no test references
 
-getAllTeams :: Teams E.:> es => E.Eff es [TeamRow]
+getAllTeams :: Teams E.:> es => E.Eff es [LoadedTeamRow]
   ! Teams send-only
   ? no test references
 
@@ -4217,7 +4329,7 @@ runTeamsDB
   -> E.Eff es a
   ! Database-backed interpreter; delegates to Pelotero.DB.Team
   ! requires Error DBError post Phase A.3
-  ? no test references
+  ? tested by: IntegrationTest.SyncPlayersSpec.spec, IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.spec, IntegrationTest.SmokeSpec.runStack
 
 emptyTeamStore :: TeamStore
   ! private; TeamStore Map.empty Map.empty 1
@@ -4243,13 +4355,17 @@ runTeamsInMemory
 
 %ext FlexibleContexts, OverloadedStrings, TypeOperators
 
+%uses Data.Time.Calendar
 %uses qualified Data.Text as T
 %uses Effectful
+%uses Pelotero.DB.Game
 %uses qualified Pelotero.DB.LeagueConfig as DBLC
 %uses qualified Pelotero.DB.LeagueTeam as DBLT
 %uses qualified Pelotero.DB.LineupSlot as DBLS
 %uses qualified Pelotero.DB.LineupSnapshot as DBSnap
 %uses Pelotero.Domain.Id
+%uses qualified Pelotero.Effects.Games as Games
+%uses Pelotero.Effects.Games
 %uses qualified Pelotero.Effects.LeagueConfig as LC
 %uses Pelotero.Effects.LeagueConfig
 %uses qualified Pelotero.Effects.LeagueTeam as LT
@@ -4294,7 +4410,7 @@ snapshotLineupsForTeam
   ! first calls LSnap.snapshotExistsForTeamGame; if True, returns TeamAlreadyHasSnapshot without touching lineup_slot
   ! if False, reads the team's lineup via LS.getSlotsForTeam, projects each slot row to a LineupSnapshotRow tagged with the game id, and writes via LSnap.writeSnapshots
   ! logs an InfoS event with team/game/row count on the success path
-  ? no test references
+  ? tested by: IntegrationTest.ScoreSpec.spec, IntegrationTest.SmokeSpec.spec
 
 snapshotLineupsForGame
   :: ( LeagueConfig   :> es
@@ -4311,6 +4427,18 @@ snapshotLineupsForGame
   ! for each active league, fetches league teams via LT.getForLeague and snapshots each via snapshotLineupsForTeam
   ! aggregates per-team results into a SnapshotResult and logs an InfoS summary
   ? no test references
+
+snapshotLineupsForDate
+  :: ( Games          :> es
+     , LeagueConfig   :> es
+     , LeagueTeam     :> es
+     , LineupSlot     :> es
+     , LineupSnapshot :> es
+     , Logging        :> es
+     )
+  => Day
+  -> Eff es SnapshotResult
+  ? tested by: IntegrationTest.SmokeSpec.spec
 
 snapshotLeagueTeams
   :: ( LeagueTeam     :> es
@@ -4559,7 +4687,7 @@ fetchRosters :: Int -> IO (Either String FetchedRosters)
   ! warnings from convertPlayers are surfaced in frWarnings; team conversion does not produce warnings
   ! frPayloadSha is over the concatenation of raw response bodies
   > consumed by: Pelotero.Effects.MLBClient.runMLBClientHTTP (production interpreter)
-  ? no test references
+  ? tested by: IntegrationTest.SyncPlayersSpec.spec, IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.fetchRostersOrFail, IntegrationTest.SmokeSpec.syncRostersOrFail
 
 wireToDomainTeam :: WT.WireTeam -> DTeam.Team
   ! private; converts WireTeam to DTeam.Team
@@ -4573,7 +4701,7 @@ fetchSchedule :: String -> String -> IO (Either String FetchedSchedule)
   ! single HTTP call; parses through Pelotero.MLB.Wire.Schedule then converts via Convert.convertSchedule
   ! warnings are passed through as fsWarnings
   ! returns Left on HTTP error or parse failure
-  ? no test references
+  ? tested by: IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.fetchScheduleOrFail, IntegrationTest.SmokeSpec.syncScheduleOrFail
 
 fetchBoxscoreRaw :: Int -> IO (Either String BS.ByteString)
   ! returns the raw response body as ByteString without parsing
@@ -4981,7 +5109,7 @@ externalIdToPlayerId :: Text -> Maybe PlayerId
 
 externalIdToGameId :: Text -> Maybe GameId
   ! mirror of externalIdToTeamId
-  ? tested by: Pelotero.Provider.ExternalIdSpec.spec, Pelotero.Provider.ExternalIdSpec.prop_gameIdRoundtrip, Pelotero.Provider.ExternalIdSpec.prop_trailingFails, Pelotero.Provider.ExternalIdSpec.prop_leadingWhitespaceFails
+  ? tested by: Pelotero.Provider.ExternalIdSpec.spec, Pelotero.Provider.ExternalIdSpec.prop_gameIdRoundtrip, Pelotero.Provider.ExternalIdSpec.prop_trailingFails, Pelotero.Provider.ExternalIdSpec.prop_leadingWhitespaceFails, IntegrationTest.SmokeSpec.collectGameIds
 
 parseIntStrict :: Text -> Maybe Int
   ? no test references
@@ -5058,7 +5186,7 @@ rowToPitchingStats :: PitchingRow -> PitchingStats
   ? tested by: Pelotero.ScoreSpec.spec
 
 sumBattingPoints :: BattingMultipliers -> [BattingRow] -> Points
-  ! sumPoints over (scoreBatting m . rowToBattingStats) — a fold; empty list yields zeroPoints
+  ! sumPoints over (scoreBatting m . rowToBattingStats): a fold; empty list yields zeroPoints
   ? tested by: Pelotero.ScoreSpec.spec
 
 sumPitchingPoints :: PitchingMultipliers -> [PitchingRow] -> Points
@@ -5085,12 +5213,12 @@ scoreLeague
   => DbLeagueConfigId
   -> Eff es (Maybe LeagueScore)
   ! intent: Score every team in a league across the league's configured scoring period using snapshotted lineups
-  ! effects: LeagueConfig, LeagueTeam, LineupSnapshot, Games, BoxscoreEntry
+  ! effects: LeagueConfig, LeagueTeam, LineupSnapshot, BoxscoreEntry
   ! returns Nothing if the league config row is absent
   ! empty lineups produce zero-point TeamScores rather than being dropped
-  ! uses LineupSnapshot.getSnapshotForTeamGame, NOT LineupSlot.getSlotsForTeam — see decision ScoringReadsFromLineupSnapshots
+  ! uses LineupSnapshot.getSnapshotsForDateRange (grouped in-memory by game_id), NOT LineupSlot.getSlotsForTeam: see decision ScoringReadsFromLineupSnapshots
   ! deterministic across re-runs: same (league, period) inputs always yield the same scores
-  ? no test references
+  ? tested by: IntegrationTest.ScoreSpec.spec, IntegrationTest.SmokeSpec.spec
 
 scoreTeam
   :: ( LeagueConfig   :> es
@@ -5112,9 +5240,9 @@ buildPlayerMaps
   -> Eff es ( Map.Map DbPlayerId [BattingRow]
             , Map.Map DbPlayerId [PitchingRow]
             )
-  ! takes [DbGameId] (the games in the period); the caller (collectGameIds) gets these from Games.getGamesByDateRange
-  ! issues one Box.getBattingForGame and one Box.getPitchingForGame per game id; bucks results into Map DbPlayerId [BattingRow] and Map DbPlayerId [PitchingRow] via Map.fromListWith (++)
-  ! exactly N+N database round trips for an N-game period; collapsing this into a single date-range query is planned C.2 work
+  ! takes (startDay, endDay) and issues exactly two date-range queries (Box.getBattingForDateRange and Box.getPitchingForDateRange)
+  ! buckets results into Map DbPlayerId [BattingRow] and Map DbPlayerId [PitchingRow] via Map.fromListWith (++)
+  ! exactly 2 database round trips per scoring invocation, independent of period length (post Phase C.2)
   ? no test references
 
 scoreOneTeam
@@ -5124,8 +5252,8 @@ scoreOneTeam
   -> [LineupSnapshotRow]
   -> LoadedLeagueTeam
   -> TeamScore
-  ! per-game inner loop: for each game id, fetch the team's lineup snapshot for that game via LineupSnapshot.getSnapshotForTeamGame, score that game's stats, then aggregate per-player scores across games via Map.fromListWith mergePlayerScores
-  ! internal helper; not exported; signature subject to change
+  ! internal helper; not exported. Per-team aggregation: load all snapshot rows for the period via LSnap.getSnapshotsForDateRange, group them by game_id with Map.fromListWith, then for each (gameId, [playerIds]) pair call scoreOnePlayerForGame and aggregate per-player scores across games via Map.fromListWith mergePlayerScores
+  ! signature subject to change
   ? no test references
 
 scoreOnePlayerForGame
@@ -5135,7 +5263,7 @@ scoreOnePlayerForGame
   -> DbGameId
   -> DbPlayerId
   -> PlayerScore
-  ! internal; given a player and a game id, filter the player's period rows to only that game's, then call scorePlayerPure
+  ! internal; given a player and a game id, filter the player's period-wide row buckets to only that game's rows, then call scorePlayerPure
   ! a player on the snapshot with no boxscore activity for that game gets zero points (filter yields empty lists)
   ? no test references
 
@@ -5145,12 +5273,12 @@ mergePlayerScores :: PlayerScore -> PlayerScore -> PlayerScore
 
 %decision PureKernelSplitFromEffects
   what:    scorePlayerPure / sumBattingPoints / sumPitchingPoints / rowToBattingStats / rowToPitchingStats are pure and exported separately from the effectful scoreLeague / scoreTeam
-  why:     The pure kernel is the part hedgehog tests can hit without spinning up Postgres. Splitting them lets us unit-test 'given these rows, the score is X' without an in-memory effect runner — just a record literal and a function call. The pure functions deliberately take and return DB row types (BattingRow / PitchingRow), not domain types, because the round-trip BattingRow -> BattingStats -> Points loses no information; storing-then-loading and direct-scoring agree by construction.
+  why:     The pure kernel is the part hedgehog tests can hit without spinning up Postgres. Splitting them lets us unit-test 'given these rows, the score is X' without an in-memory effect runner: just a record literal and a function call. The pure functions deliberately take and return DB row types (BattingRow / PitchingRow), not domain types, because the round-trip BattingRow -> BattingStats -> Points loses no information; storing-then-loading and direct-scoring agree by construction.
   affects: scorePlayerPure, sumBattingPoints, sumPitchingPoints, rowToBattingStats, rowToPitchingStats
 
 %decision MissingLeagueReturnsNothing
   what:    scoreLeague and scoreTeam both return Maybe; Nothing means the league config (or the team) wasn't in the DB
-  why:     Distinguishes 'this league doesn't exist' from 'this league has zero teams' (Just LeagueScore { lscTeams = [] }). An empty lineup still produces a TeamScore with zero points — dropping such teams would be a presentation choice the caller should make. Doesn't validate that the team belongs to the league in scoreTeam — caller's responsibility to check.
+  why:     Distinguishes 'this league doesn't exist' from 'this league has zero teams' (Just LeagueScore { lscTeams = [] }). An empty lineup still produces a TeamScore with zero points: dropping such teams would be a presentation choice the caller should make. Doesn't validate that the team belongs to the league in scoreTeam: caller's responsibility to check.
   affects: scoreLeague, scoreTeam
 
 %decision PitOutsIsCanonicalNoTextRoundTrip
@@ -5169,8 +5297,8 @@ mergePlayerScores :: PlayerScore -> PlayerScore -> PlayerScore
   affects: buildPlayerMaps
 
 %decision ScoringReadsFromLineupSnapshots
-  what:    scoreOneTeam reads from LineupSnapshot.getSnapshotForTeamGame keyed by (league_team_id, game_id), NOT from the team's current lineup_slot rows
-  why:     Phase B.3 fixed the correctness bug where scoring used the current lineup against historical games. Real fantasy leagues lock lineups daily; mid-period lineup edits used to retroactively change prior days' scores. The scoring loop is now per-game (which it should always have been): for each game in the period, read the snapshot for that team for that game, score that game's stats against that snapshot, sum. Re-running scoring at any point gives the same answer for the same (league, period, team) triple. This is the invariant owners were checking against and losing trust over.
+  what:    scoreOneTeam reads from LineupSnapshot.getSnapshotsForDateRange (grouped in-memory by game_id), NOT from the team's current lineup_slot rows
+  why:     Phase B.3 fixed the correctness bug where scoring used the current lineup against historical games. Real fantasy leagues lock lineups daily; mid-period lineup edits used to retroactively change prior days' scores. The scoring loop is now per-game (which it should always have been): for each game in the period, read the snapshot for that team for that game, score that game's stats against that snapshot, sum. Re-running scoring at any point gives the same answer for the same (league, period, team) triple. This is the invariant owners were checking against and losing trust over. Implementation note (post Phase C.2): the snapshot fetch is also a single date-range query (LSnap.getSnapshotsForDateRange) grouped in-memory by game_id via Map.fromListWith, rather than N per-game fetches.
   affects: scoreOneTeam, scoreTeam
 
 
@@ -5187,12 +5315,15 @@ mergePlayerScores :: PlayerScore -> PlayerScore -> PlayerScore
 %uses qualified Data.ByteString as BS
 %uses qualified Data.ByteString.Base16 as B16
 %uses Data.Int
+%uses Data.Maybe
 %uses qualified Data.Text as T
 %uses qualified Data.Text.Encoding as TE
+%uses Data.Time.Calendar
 %uses Effectful
 %uses Katip
 %uses Pelotero.DB.BoxscoreEntry
 %uses Pelotero.DB.FetchLog
+%uses Pelotero.DB.Game
 %uses Pelotero.DB.Provider
 %uses Pelotero.Domain.Id
 %uses qualified Pelotero.Domain.Stats as DStats
@@ -5212,8 +5343,15 @@ mergePlayerScores :: PlayerScore -> PlayerScore -> PlayerScore
 %uses qualified Pelotero.MLB.Convert as Convert
 %uses Pelotero.Provider.ExternalId
 
+data BoxscoreUpsertCounts = BoxscoreUpsertCounts
+  { bucBatting        :: !Int
+  , bucPitching       :: !Int
+  , bucPlayersSkipped :: !Int
+  }
+  deriving stock (Show, Eq)
+
 data BoxscoreOutcome
-  = BoxUpserted !Int !Int ![Convert.ConvertWarning]
+  = BoxUpserted !BoxscoreUpsertCounts ![Convert.ConvertWarning]
   | BoxUnchanged
   deriving stock (Show, Eq)
 
@@ -5221,9 +5359,12 @@ data BoxscoreSyncResult = BoxscoreSyncResult
   { boxGamesSeen        :: !Int
   , boxGamesProcessed   :: !Int
   , boxGamesUnchanged   :: !Int
-  , boxGamesSkipped     :: !Int
   , boxBattingUpserted  :: !Int
   , boxPitchingUpserted :: !Int
+  , boxPlayersSkipped   :: !Int
+    -- ^ Total boxscore entries dropped because the player was not in
+    --   the local DB. Symmetric to 'boxConvertWarnings' but for a
+    --   different category (sync ordering, not wire data quality).
   , boxErrors           :: ![BoxscoreSyncError]
   , boxConvertWarnings  :: ![Convert.ConvertWarning]
   }
@@ -5234,6 +5375,9 @@ data BoxscoreSyncError
   | FetchFailed  !GameId !String
   | ParseFailed  !GameId !String
   deriving stock (Show, Eq)
+
+emptyUpsertCounts :: BoxscoreUpsertCounts
+  ? no test references
 
 emptyResult :: BoxscoreSyncResult
   ? no test references
@@ -5259,7 +5403,22 @@ syncBoxscores
   ! accumulates per-game results into a BoxscoreSyncResult so partial failures don't abort the batch
   ! boxConvertWarnings is concatenated across all successfully-processed games (now includes any WireFieldDiscrepancy warnings from convertPitching); SHA-skipped games contribute no warnings
   ! boxGamesSeen == boxGamesProcessed + boxGamesUnchanged + length boxErrors as an identity (modulo any future per-game skip categories tracked by boxGamesSkipped)
-  ? tested by: Pelotero.Sync.BoxscoresSpec.spec
+  ? tested by: Pelotero.Sync.BoxscoresSpec.spec, IntegrationTest.SyncBoxscoresSpec.spec, IntegrationTest.SmokeSpec.spec
+
+syncBoxscoresForDateRange
+  :: ( BoxscoreEntry :> es
+     , Games         :> es
+     , Players       :> es
+     , Teams         :> es
+     , MLBClient     :> es
+     , FetchLog      :> es
+     , Logging       :> es
+     )
+  => ProviderName
+  -> Day
+  -> Day
+  -> Eff es BoxscoreSyncResult
+  ? no test references
 
 syncOne
   :: ( BoxscoreEntry :> es
@@ -5289,7 +5448,7 @@ upsertEntries
   => ProviderName
   -> DbGameId
   -> [Convert.BoxscoreEntry]
-  -> Eff es (Int, Int)
+  -> Eff es BoxscoreUpsertCounts
   ! fold over [BoxscoreEntry] producing (battingCount, pitchingCount)
   ! missing player -> skip entry (counts unchanged); missing team -> degrade team_id to NULL
   ! boxBatting Nothing -> no batting row written; boxPitching Nothing -> no pitching row written
@@ -5421,7 +5580,7 @@ syncRosters
   ! SHA short-circuit (Phase C.1): if payloadSha matches the most recent fetchLogRow.fetchLogPayloadSha256 for this (provider, 'active-rosters', scope), returns a zero-row SyncResult and emits exactly one InfoS log line. Both counts being zero is the canonical 'we skipped' signal — distinguishable from 'first call with empty inputs' by the syncFetchSha256 echoing the input
   ! the fetch-log INSERT is the last step in the non-skip path; reordering it before the upserts would let a crash at the wrong moment silently mask a partial-state on the next run
   > consumed by: CLI sync command (process startup or scheduled run)
-  ? tested by: Pelotero.Sync.PlayersSpec.spec, Pelotero.Sync.PlayersSpec.runRosters
+  ? tested by: Pelotero.Sync.PlayersSpec.spec, IntegrationTest.SyncPlayersSpec.spec, IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.spec, Pelotero.Sync.PlayersSpec.runRosters, IntegrationTest.SmokeSpec.syncRostersOrFail
 
 upsertAllTeams
   :: Teams :> es
@@ -5539,7 +5698,7 @@ syncSchedule
   ! iteration order is the input list order
   ! SHA short-circuit (Phase C.1): if payloadSha matches the most recent fetchLogRow.fetchLogPayloadSha256 for this (provider, 'schedule', scope), returns a zero-row ScheduleSyncResult and emits exactly one InfoS log line. Both schedGamesUpserted and schedGamesSkipped are zero
   ! the fetch-log INSERT is the last step in the non-skip path, mirroring syncRosters; this is load-bearing for partial-failure recovery
-  ? tested by: Pelotero.Sync.ScheduleSpec.spec, Pelotero.Sync.ScheduleSpec.runSchedule
+  ? tested by: Pelotero.Sync.ScheduleSpec.spec, IntegrationTest.SyncScheduleSpec.spec, IntegrationTest.SyncBoxscoresSpec.spec, Pelotero.Sync.ScheduleSpec.runSchedule, IntegrationTest.SmokeSpec.syncScheduleOrFail
 
 upsertOneGame
   :: (Games :> es, Teams :> es)

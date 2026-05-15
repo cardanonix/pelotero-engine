@@ -152,59 +152,29 @@
       "decisions": [
         {
           "name": "PureLogicNoEffects",
-          "what": "Pelotero.Draft is the pure transition logic for the draft state machine; no effect dependencies, all transitions return Either DraftError (DraftState, [DraftEvent])",
+          "what": "Pelotero.Draft is the pure data layer for the draft state machine: the DraftState ADT, the DraftCommand / DraftEvent / DraftError sums, the DraftContext / DraftPickEntry / DraftSummary records, plus a handful of total query helpers (currentPicker, picksRemaining, isPlayerAvailable). No effect dependencies.",
           "why": [
-            "Phase D.1a separates the transition logic from the persistence layer so the state machine is testable with hedgehog without any DB or in-memory effect runner.",
-            "Pelotero.Draft.Run (Phase D.1c) is the effectful handler that wraps applyCommand with PlayerRanking / DraftPick / Players / Logging / Clock; that is where commands actually get persisted.",
+            "Phase D.1a separated the transition logic from the persistence layer so the state machine is testable with hedgehog without any DB or in-memory effect runner.",
+            "The transition logic itself lives in Pelotero.Draft.Machine as draftAction (and the existential-erasing wrapper runDraftCommand); the effectful handler in Pelotero.Draft.Run (Phase D.1c) wraps runDraftCommand with PlayerRanking / DraftPick / Players / Logging / Clock; that is where commands actually get persisted.",
             "Pelotero.Domain.Draft remains the upstream-id-keyed pre-compute layer (order generation from a strategy + team list); this module is DB-id-keyed because the state machine talks to the persistence layer."
           ],
-          "affects": ["applyCommand"]
+          "affects": []
         },
         {
           "name": "AutoPickIsNotACommand",
           "what": "DraftCommand has only StartDraft, MakePick, EndDraft; auto-picking is a wrapper at the effect layer (D.1c) that consults PlayerRanking, intersects with dcAvailable, and issues MakePick with the chosen player",
           "why": [
             "Keeps the pure logic with one place-a-player path rather than two; the strategy logic for which player gets picked stays separate from the how of recording it.",
-            "Means the state machine itself doesn't take a ranking source as input — the ranking lookup happens before MakePick is constructed.",
+            "Means the state machine itself doesn't take a ranking source as input: the ranking lookup happens before MakePick is constructed.",
             "If a future strategy variant emerges (round-specific overrides, drop-and-replace), it lives at the effect layer alongside the existing auto-pick wrapper, not as a new state-machine command."
           ],
-          "affects": ["DraftCommand", "applyCommand"]
-        },
-        {
-          "name": "LastPickEmitsTwoEvents",
-          "what": "MakePick on the last remaining pick emits both PickRecorded and DraftCompleted in that order; EndDraft from Drafting emits only DraftCompleted",
-          "why": [
-            "The handler in Pelotero.Draft.Run persists both events in order: insert the DraftPick row first, then log the completion. The league_config status update is the orchestrator's job, not the state-machine handler's, per Pelotero.Draft.Run's StatusUpdateNotInScope decision.",
-            "Crash between events leaves the pick recorded with the in-memory machine state still consistent — the next run sees an empty dcRemaining and re-runs applyCommand to get DraftCompleted again; idempotent on the in-memory side. DB-level idempotency on partial-draft retries is documented separately under NoCrashRecovery.",
-            "Flipping the order would leave a 'completed' log line with the last pick missing from draft_pick — a worse partial state for anyone reading logs."
-          ],
-          "affects": ["applyCommand"]
-        },
-        {
-          "name": "PicksMadeListSnocAppend",
-          "what": "DraftContext.dcPicksMade is appended to in pick order (oldest first) using snoc; total cost is O(n²) across a full draft",
-          "why": [
-            "n is small — at most ~300 picks for a 25-team / 12-round league. 300² = 90,000 cons cells; not a perf concern.",
-            "Oldest-first ordering means the DraftSummary doesn't need a final reverse step, and the audit trail reads naturally in chronological order without calling reverse on every read.",
-            "If a much larger draft format appears (50-team dynasty with 30 rounds = 1500 picks), revisit; until then the simpler shape wins."
-          ],
-          "affects": ["applyCommand"]
+          "affects": []
         }
       ],
       "invariants": {
         "initialState": [
           "WaitingToStart; the empty start of any draft"
         ],
-        "applyCommand": {
-          "intent": "Single transition function: given a command and a state, return the next state plus events to persist, or the reason the command was refused.",
-          "notes": [
-            "Pure: same inputs -> same outputs.",
-            "Errors short-circuit without changing state.",
-            "MakePick on the last pick emits PickRecorded then DraftCompleted, in that order, and transitions to Complete.",
-            "EndDraft from Drafting transitions to Complete with the picks made so far; useful for early commissioner-driven termination.",
-            "An empty DraftPlan (dpOrder == []) returns EmptyDraftPlan rather than transitioning to a degenerate Complete state."
-          ]
-        },
         "currentPicker": [
           "Whose pick is up? Nothing if the draft hasn't started or has finished.",
           "Used by Pelotero.Draft.Run's auto-pick wrapper (D.1c) to identify which team's ranking to consult."
@@ -217,6 +187,84 @@
         ]
       }
     },
+    "Pelotero.Draft.Machine": {
+      "decisions": [
+        {
+          "name": "CremTopologyForCompileTimeLegalTransitions",
+          "what": "DraftTopology is declared as a crem Topology with explicit allowed transitions per vertex (WaitingToStartV -> {self, DraftingV}; DraftingV -> {self, CompleteV}; CompleteV -> {self}); draftAction is checked at compile time against the topology, so an illegal transition is a type error rather than a runtime branch",
+          "why": [
+            "An invariant like 'you cannot go from Complete back to Drafting' wants to be enforced by the compiler, not by a runtime guard that future refactors might quietly remove.",
+            "The self-edges on every vertex are deliberate: rejection cases (NotYourTurn, PlayerAlreadyDrafted, DraftAlreadyComplete) return the same vertex they entered with, so the topology must permit self-loops.",
+            "Cost: the GADT DraftStateG plus the singletons machinery (SDraftVertex via singletons-th) is a chunk of type-level apparatus, and DraftAction's return type is verbose. Acceptable because the alternative (a flat DraftState sum + a runtime 'is this legal?' check inside applyCommand) is what we had before and is exactly what we're moving away from."
+          ],
+          "affects": ["draftAction"]
+        },
+        {
+          "name": "ExistentialWrapperForCallerErgonomics",
+          "what": "SomeDraftStateG hides the vertex index so callers can hold draft state without threading the singleton type through their signatures; runDraftCommand is the consumer-facing wrapper that takes a SomeDraftStateG and a command and returns the next SomeDraftStateG plus the result",
+          "why": [
+            "Pelotero.Draft.Run.applyAndPersist sees state as an opaque value, not as a vertex-indexed thing; the persistence loop doesn't care which vertex it's at except via the runtime tag (draftStateVertex).",
+            "Hiding the index also keeps the public API expressible without type-level Haskell at every call site; downstream code reads as plain Haskell.",
+            "fromDraftState / toDraftState exist as the bridge to and from the unindexed Pelotero.Draft.DraftState; useful when the caller has constructed state from raw data (e.g. recovery from DB) or wants to render state as the simpler sum type."
+          ],
+          "affects": ["runDraftCommand", "toSomeDraftStateG", "fromDraftState", "toDraftState"]
+        },
+        {
+          "name": "LastPickEmitsTwoEvents",
+          "what": "draftAction on MakePick for the last remaining pick emits both PickRecorded and DraftCompleted in that order; EndDraft from Drafting emits only DraftCompleted",
+          "why": [
+            "The handler in Pelotero.Draft.Run persists both events in order: insert the DraftPick row first, then log the completion. The league_config status update is the orchestrator's job, not the state-machine handler's, per Pelotero.Draft.Run's StatusUpdateNotInScope decision.",
+            "Crash between events leaves the pick recorded with the in-memory machine state still consistent: the next run sees an empty dcRemaining and re-runs draftAction to get DraftCompleted again; idempotent on the in-memory side. DB-level idempotency on partial-draft retries is documented separately under NoCrashRecovery.",
+            "Flipping the order would leave a 'completed' log line with the last pick missing from draft_pick: a worse partial state for anyone reading logs."
+          ],
+          "affects": ["draftAction"]
+        },
+        {
+          "name": "PicksMadeListSnocAppend",
+          "what": "DraftContext.dcPicksMade is appended to in pick order (oldest first) using snoc; total cost is O(n^2) across a full draft",
+          "why": [
+            "n is small: at most ~300 picks for a 25-team / 12-round league. 300^2 = 90,000 cons cells; not a perf concern.",
+            "Oldest-first ordering means the DraftSummary doesn't need a final reverse step, and the audit trail reads naturally in chronological order without calling reverse on every read.",
+            "If a much larger draft format appears (50-team dynasty with 30 rounds = 1500 picks), revisit; until then the simpler shape wins."
+          ],
+          "affects": ["draftAction"]
+        }
+      ],
+      "invariants": {
+        "initialMachineState": [
+          "SomeDraftStateG SWaitingToStartV WaitingToStartG; the existential-wrapped starting state for every draft"
+        ],
+        "draftStateVertex": [
+          "extracts the runtime DraftVertex tag from a SomeDraftStateG without unwrapping the GADT payload",
+          "useful for the auto-draft loop which needs to know 'are we in Drafting?' as a value-level predicate"
+        ],
+        "fromDraftState": [
+          "DraftState -> SomeDraftStateG; bridges from the unindexed sum (Pelotero.Draft) into the indexed GADT shape",
+          "constructs the appropriate singleton tag per constructor"
+        ],
+        "toDraftState": [
+          "DraftStateG v -> DraftState; the inverse of fromDraftState modulo vertex index erasure"
+        ],
+        "toSomeDraftStateG": [
+          "DraftStateG v -> SomeDraftStateG; trivially wraps an indexed state under its singleton"
+        ],
+        "draftAction": {
+          "intent": "Per-vertex transition: given a state indexed by vertex v and a DraftCommand, return an ActionResult under DraftTopology with either an event list or a DraftError plus the next (vertex-indexed) state",
+          "notes": [
+            "Pure inside Identity; same inputs -> same outputs.",
+            "Rejection cases (NotYourTurn, PlayerAlreadyDrafted, DraftAlreadyComplete, DraftNotStarted, EmptyDraftPlan, DraftAlreadyStarted) emit Left and stay on the same vertex via the topology's self-loops.",
+            "MakePick on the final dcRemaining entry transitions to CompleteV emitting [PickRecorded entry, DraftCompleted summary].",
+            "EndDraft from Drafting transitions to CompleteV emitting [DraftCompleted summary] with whatever picks have been made so far; useful for early commissioner-driven termination.",
+            "An empty DraftPlan (dpOrder == []) returns Left EmptyDraftPlan rather than transitioning to a degenerate Complete state."
+          ]
+        },
+        "runDraftCommand": [
+          "SomeDraftStateG -> DraftCommand -> (Either DraftError [DraftEvent], SomeDraftStateG)",
+          "the existential-erasing wrapper around draftAction; consumed by Pelotero.Draft.Run.applyAndPersist",
+          "runs the ActionResult under Identity to extract the pure value pair"
+        ]
+      }
+    },
     "Pelotero.Score": {
       "decisions": [
         {
@@ -224,7 +272,7 @@
           "what": "scorePlayerPure / sumBattingPoints / sumPitchingPoints / rowToBattingStats / rowToPitchingStats are pure and exported separately from the effectful scoreLeague / scoreTeam",
           "why": [
             "The pure kernel is the part hedgehog tests can hit without spinning up Postgres.",
-            "Splitting them lets us unit-test 'given these rows, the score is X' without an in-memory effect runner — just a record literal and a function call.",
+            "Splitting them lets us unit-test 'given these rows, the score is X' without an in-memory effect runner: just a record literal and a function call.",
             "The pure functions deliberately take and return DB row types (BattingRow / PitchingRow), not domain types, because the round-trip BattingRow -> BattingStats -> Points loses no information; storing-then-loading and direct-scoring agree by construction."
           ],
           "affects": ["scorePlayerPure", "sumBattingPoints", "sumPitchingPoints", "rowToBattingStats", "rowToPitchingStats"]
@@ -234,8 +282,8 @@
           "what": "scoreLeague and scoreTeam both return Maybe; Nothing means the league config (or the team) wasn't in the DB",
           "why": [
             "Distinguishes 'this league doesn't exist' from 'this league has zero teams' (Just LeagueScore { lscTeams = [] }).",
-            "An empty lineup still produces a TeamScore with zero points — dropping such teams would be a presentation choice the caller should make.",
-            "Doesn't validate that the team belongs to the league in scoreTeam — caller's responsibility to check."
+            "An empty lineup still produces a TeamScore with zero points: dropping such teams would be a presentation choice the caller should make.",
+            "Doesn't validate that the team belongs to the league in scoreTeam: caller's responsibility to check."
           ],
           "affects": ["scoreLeague", "scoreTeam"]
         },
@@ -271,11 +319,12 @@
         },
         {
           "name": "ScoringReadsFromLineupSnapshots",
-          "what": "scoreOneTeam reads from LineupSnapshot.getSnapshotForTeamGame keyed by (league_team_id, game_id), NOT from the team's current lineup_slot rows",
+          "what": "scoreOneTeam reads from LineupSnapshot.getSnapshotsForDateRange (grouped in-memory by game_id), NOT from the team's current lineup_slot rows",
           "why": [
             "Phase B.3 fixed the correctness bug where scoring used the current lineup against historical games. Real fantasy leagues lock lineups daily; mid-period lineup edits used to retroactively change prior days' scores.",
             "The scoring loop is now per-game (which it should always have been): for each game in the period, read the snapshot for that team for that game, score that game's stats against that snapshot, sum.",
-            "Re-running scoring at any point gives the same answer for the same (league, period, team) triple. This is the invariant owners were checking against and losing trust over."
+            "Re-running scoring at any point gives the same answer for the same (league, period, team) triple. This is the invariant owners were checking against and losing trust over.",
+            "Implementation note (post Phase C.2): the snapshot fetch is also a single date-range query (LSnap.getSnapshotsForDateRange) grouped in-memory by game_id via Map.fromListWith, rather than N per-game fetches."
           ],
           "affects": ["scoreOneTeam", "scoreTeam"]
         }
@@ -289,7 +338,7 @@
           "pitOuts is preserved straight from the row; no Text reconstruction (post Phase B.1)"
         ],
         "sumBattingPoints": [
-          "sumPoints over (scoreBatting m . rowToBattingStats) — a fold; empty list yields zeroPoints"
+          "sumPoints over (scoreBatting m . rowToBattingStats): a fold; empty list yields zeroPoints"
         ],
         "sumPitchingPoints": [
           "mirror of sumBattingPoints for pitching"
@@ -301,11 +350,11 @@
         ],
         "scoreLeague": {
           "intent": "Score every team in a league across the league's configured scoring period using snapshotted lineups",
-          "effects": ["LeagueConfig", "LeagueTeam", "LineupSnapshot", "Games", "BoxscoreEntry"],
+          "effects": ["LeagueConfig", "LeagueTeam", "LineupSnapshot", "BoxscoreEntry"],
           "notes": [
             "returns Nothing if the league config row is absent",
             "empty lineups produce zero-point TeamScores rather than being dropped",
-            "uses LineupSnapshot.getSnapshotForTeamGame, NOT LineupSlot.getSlotsForTeam — see decision ScoringReadsFromLineupSnapshots",
+            "uses LineupSnapshot.getSnapshotsForDateRange (grouped in-memory by game_id), NOT LineupSlot.getSlotsForTeam: see decision ScoringReadsFromLineupSnapshots",
             "deterministic across re-runs: same (league, period) inputs always yield the same scores"
           ]
         },
@@ -315,27 +364,20 @@
           "does NOT validate that the team belongs to the league"
         ],
         "buildPlayerMaps": [
-          "takes [DbGameId] (the games in the period); the caller (collectGameIds) gets these from Games.getGamesByDateRange",
-          "issues one Box.getBattingForGame and one Box.getPitchingForGame per game id; bucks results into Map DbPlayerId [BattingRow] and Map DbPlayerId [PitchingRow] via Map.fromListWith (++)",
-          "exactly N+N database round trips for an N-game period; collapsing this into a single date-range query is planned C.2 work"
+          "takes (startDay, endDay) and issues exactly two date-range queries (Box.getBattingForDateRange and Box.getPitchingForDateRange)",
+          "buckets results into Map DbPlayerId [BattingRow] and Map DbPlayerId [PitchingRow] via Map.fromListWith (++)",
+          "exactly 2 database round trips per scoring invocation, independent of period length (post Phase C.2)"
         ],
         "scoreOneTeam": [
-          "per-game inner loop: for each game id, fetch the team's lineup snapshot for that game via LineupSnapshot.getSnapshotForTeamGame, score that game's stats, then aggregate per-player scores across games via Map.fromListWith mergePlayerScores",
-          "internal helper; not exported; signature subject to change"
-        ],
-        "scoreTeamForGame": [
-          "internal; for a (team, game) pair: read the snapshot rows, look up each player's batting/pitching for that specific game, score with scorePlayerPure",
-          "filter step inside scoreOnePlayerForGame discards rows from other games in the period maps"
+          "internal helper; not exported. Per-team aggregation: load all snapshot rows for the period via LSnap.getSnapshotsForDateRange, group them by game_id with Map.fromListWith, then for each (gameId, [playerIds]) pair call scoreOnePlayerForGame and aggregate per-player scores across games via Map.fromListWith mergePlayerScores",
+          "signature subject to change"
         ],
         "scoreOnePlayerForGame": [
-          "internal; given a player and a game id, filter the player's period rows to only that game's, then call scorePlayerPure",
+          "internal; given a player and a game id, filter the player's period-wide row buckets to only that game's rows, then call scorePlayerPure",
           "a player on the snapshot with no boxscore activity for that game gets zero points (filter yields empty lists)"
         ],
         "mergePlayerScores": [
           "internal; pointwise addition of two PlayerScores, used when aggregating per-game scores for the same player across multiple games"
-        ],
-        "collectGameIds": [
-          "internal helper; calls Games.getGamesByDateRange and mapMaybes the gameRowId field"
         ]
       }
     },
@@ -1296,24 +1338,22 @@
           "what": "JsonbBattingMultipliers and JsonbPitchingMultipliers are private to this module and used only inside JsonbScoring's ToJSON / FromJSON",
           "why": [
             "Each sub-record gets its own field-by-field encoding, mirroring the original split per type at the Domain layer.",
-            "Keeps the LeagueScoring wrapper instance short and locally readable — the inner records' encoding lives next to the inner records' wrappers.",
+            "Keeps the LeagueScoring wrapper instance short and locally readable: the inner records' encoding lives next to the inner records' wrappers.",
             "Not exported because nothing outside JsonB needs to talk about the multipliers in JSONB form independently."
           ],
           "affects": []
+        },
+        {
+          "name": "WrapperContentRationale",
+          "what": "JsonbScoring, JsonbRosterLimits, and JsonbLineupLimits are public newtypes around LeagueScoring, RosterLimits, and LineupLimits respectively; their DBType instances are derived via JSONBEncoded and the on-the-wire JSON is byte-equivalent to the pre-A.4 instances",
+          "why": [
+            "These three wrappers exist for one job: carry the Aeson instances at the DB boundary without leaking Aeson into Domain.",
+            "On-the-wire JSON parity with pre-A.4 is load-bearing; any existing league_config row in the database is read back through these wrappers without a migration.",
+            "Captured as a decision rather than per-newtype invariants because chase resolves top-level value bindings, not newtype constructors; the documentation belongs at module level."
+          ],
+          "affects": []
         }
-      ],
-      "invariants": {
-        "JsonbScoring": [
-          "newtype around LeagueScoring; (un)wrap at the rel8 Column boundary in Pelotero.DB.LeagueConfig",
-          "DBType derived via JSONBEncoded — same on-the-wire JSON as the pre-A.4 LeagueScoring instance"
-        ],
-        "JsonbRosterLimits": [
-          "newtype around RosterLimits; same on-the-wire JSON as pre-A.4"
-        ],
-        "JsonbLineupLimits": [
-          "newtype around LineupLimits; same on-the-wire JSON as pre-A.4"
-        ]
-      }
+      ]
     },
     "Pelotero.DB.Rel8Instances": {
       "decisions": [
@@ -1496,7 +1536,7 @@
         "getByDateRangeT": [
           "WHERE game_date BETWEEN startDay AND endDay (inclusive both ends)",
           "ORDER BY game_date ASC, id ASC for stable cross-day display",
-          "consumed by Pelotero.Score.collectGameIds"
+          "consumed by Pelotero.Effects.Games.getGamesByDateRange and indirectly by Pelotero.Score.buildPlayerMaps via the date-range box queries"
         ],
         "getByDateRange": ["Pool-flavored wrapper; inclusive on both ends"],
         "fromResult": ["private; rel8 Result -> public GameRow"],
@@ -1768,7 +1808,7 @@
         ],
         "getSnapshotForTeamGameT": [
           "WHERE league_team_id AND game_id; no SQL-level ordering",
-          "consumed by Pelotero.Score.scoreTeamForGame (the canonical scoring read)"
+          "consumed by Pelotero.Lineup.Snapshot.snapshotLineupsForTeam for the 'is this snapshot already locked in?' guard; Pelotero.Score reads via the date-range variant (getSnapshotsForDateRangeT) and groups in-memory"
         ],
         "snapshotExistsForTeamGameT": [
           "SELECT ... LIMIT 1; returns True iff at least one row exists for the (team, game) pair",
@@ -2169,7 +2209,7 @@
         "getGamesByDate": ["Games send-only; per-date listing"],
         "getGamesByDateRange": [
           "Games send-only; range listing inclusive on both ends",
-          "consumed by Pelotero.Score.collectGameIds to enumerate the games in the scoring period"
+          "consumed by Pelotero.Lineup.Snapshot.snapshotLineupsForDate and Pelotero.Sync.Boxscores.syncBoxscoresForDateRange; Score uses the date-range box and snapshot queries directly rather than enumerating game ids"
         ],
         "runGamesDB": [
           "Database-backed interpreter; delegates to Pelotero.DB.Game",
@@ -2247,9 +2287,13 @@
       ],
       "invariants": {
         "writeSnapshots": ["LineupSnapshot send-only; writes a list of LineupSnapshotRow with ON CONFLICT DO NOTHING; returns ()"],
+        "getSnapshotsForDateRange": [
+          "LineupSnapshot send-only; (Day, Day) -> [LineupSnapshotRow]",
+          "consumed by Pelotero.Score.scoreOneTeam (Phase C.2): single query replaces the per-game getSnapshotForTeamGame loop"
+        ],
         "getSnapshotForTeamGame": [
           "LineupSnapshot send-only; (DbLeagueTeamId, DbGameId) -> [LineupSnapshotRow]",
-          "consumed by Pelotero.Score.scoreTeamForGame"
+          "consumed by Pelotero.Lineup.Snapshot.snapshotLineupsForTeam"
         ],
         "snapshotExistsForTeamGame": [
           "LineupSnapshot send-only; (DbLeagueTeamId, DbGameId) -> Bool",
