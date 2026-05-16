@@ -71,4 +71,4 @@ script/concat_archive/archive/
 script/concat_archive/.hashes/
 script/manifest.json
 script/manifest.json.*
-test/fixtures/*
+/test/fixtures/boxscore-*.json

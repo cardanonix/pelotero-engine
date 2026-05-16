@@ -3,6 +3,7 @@ module Pelotero.MLB.ConvertSpec (spec) where
 
 import Data.Aeson (FromJSON, eitherDecodeStrict)
 import qualified Data.ByteString as BS
+import System.Directory (doesFileExist)
 import Test.Hspec
   ( Spec
   , describe
@@ -71,7 +72,14 @@ spec = do
 
 decodeFixture :: FromJSON a => FilePath -> IO a
 decodeFixture path = do
-  bs <- BS.readFile path
-  case eitherDecodeStrict bs of
-    Right v  -> pure v
-    Left err -> error ("fixture " <> path <> ": " <> err)
+  exists <- doesFileExist path
+  if not exists
+    then error $ unlines
+      [ "fixture not found: " <> path
+      , "Run `nix develop --command fetch-fixtures` to download MLB fixtures."
+      ]
+    else do
+      bs <- BS.readFile path
+      case eitherDecodeStrict bs of
+        Right v  -> pure v
+        Left err -> error ("fixture " <> path <> ": " <> err)

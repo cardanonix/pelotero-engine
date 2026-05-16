@@ -66,6 +66,16 @@ jobs:
             ${{ runner.os }}-nix-${{ hashFiles('flake.lock') }}
             ${{ runner.os }}-nix-
 
+      - name: Cache MLB fixtures
+        id: mlb-fixtures
+        uses: actions/cache@v4
+        with:
+          path: test/fixtures/boxscore-*.json
+          key: mlb-fixtures-${{ hashFiles('app/FetchFixtures.hs') }}
+
+      - name: Fetch MLB fixtures
+        if: steps.mlb-fixtures.outputs.cache-hit != 'true'
+        run: nix develop --command fetch-fixtures
+
       - name: Run unit + property tests
-        run: |
-          nix develop --command cabal test pelotero-test
+        run: nix develop --command cabal test pelotero-test

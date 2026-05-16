@@ -5,10 +5,6 @@ let
   dbPort   = toString config.database.port;
   dataDir  = config.dataDir;
 
-  # db-start: start postgres, optionally restoring from the most recent backup
-  # in BACKUP_DIR if one exists. Auto-restore-on-start IS the current behavior;
-  # operators relying on it should make sure pe-stop ran cleanly last time, or
-  # post-crash starts will roll back to the most recent backup.
   db-start = pkgs.writeShellScriptBin "db-start" ''
     set -euo pipefail
 
@@ -42,6 +38,19 @@ let
     echo "Database stopped."
   '';
 
+  fetch-rosters = pkgs.writeShellScriptBin "fetch-rosters" ''
+    set -euo pipefail
+    SEASON="''${1:-2025}"
+    echo "Fetching rosters for season $SEASON..."
+    cabal run fetch-rosters -- "$SEASON"
+  '';
+
+  fetch-fixtures = pkgs.writeShellScriptBin "fetch-fixtures" ''
+    set -euo pipefail
+    echo "Fetching MLB Stats API fixtures via pelotero-fetch-fixtures..."
+    cabal run pelotero-fetch-fixtures
+  '';
+
   dev = pkgs.writeShellScriptBin "pe-dev" ''
     set -euo pipefail
 
@@ -65,27 +74,14 @@ let
     echo ""
     echo "Database ready at: postgresql://$(whoami)@localhost:$PGPORT/${config.database.name}"
     echo ""
-    echo "Common commands:"
-    echo "  cabal run pelotero -- db check"
-    echo "      Apply pending migrations"
-    echo "  cabal run pelotero -- sync rosters --season 2025"
-    echo "      Sync teams + active rosters for a season"
-    echo "  cabal run pelotero -- sync schedule --from 2025-04-01 --to 2025-04-07"
-    echo "      Sync the game schedule for a date range"
-    echo "  cabal run pelotero -- sync boxscores --from 2025-04-01 --to 2025-04-07"
-    echo "      Sync boxscores for games in a date range"
-    echo "  cabal run pelotero -- snapshot lineups --on-date 2025-04-01"
-    echo "      Snapshot every active league's lineups for the day's games"
-    echo "  cabal run pelotero -- score --league-id 1"
-    echo "      Score a league over its configured scoring period"
-    echo "  cabal run pelotero -- draft run --league-id 1"
-    echo "      Run the auto-draft loop for a league"
-    echo ""
-    echo "  ./tui                  Interactive menu (build/run/test/db)"
-    echo "  pg-connect             psql into ${config.database.name}"
-    echo "  pg-stats               Database statistics"
-    echo "  pg-backup              Backup database"
-    echo "  pg-stop                Stop PostgreSQL"
+    echo "Available commands:"
+    echo "  cabal build                     Build everything"
+    echo "  cabal run fetch-rosters -- 2025 Fetch MLB rosters"
+    echo "  fetch-fixtures                  Fetch test boxscore fixtures"
+    echo "  pg-connect                      psql into ${config.database.name}"
+    echo "  pg-stats                        Database statistics"
+    echo "  pg-backup                       Backup database"
+    echo "  pg-stop                         Stop PostgreSQL"
     echo ""
   '';
 
@@ -128,5 +124,5 @@ let
   '';
 
 in {
-  inherit db-start db-stop dev deploy stop;
+  inherit db-start db-stop fetch-rosters fetch-fixtures dev deploy stop;
 }

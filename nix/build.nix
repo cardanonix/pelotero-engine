@@ -106,6 +106,8 @@ let
 
             deployModule.db-start
             deployModule.db-stop
+            deployModule.fetch-rosters
+            deployModule.fetch-fixtures
             deployModule.dev
             deployModule.deploy
             deployModule.stop
