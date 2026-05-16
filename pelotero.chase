@@ -1,5 +1,5 @@
 %bundle chase v1
-%generated 2026-05-15T21:45:24Z
+%generated 2026-05-16T00:37:19Z
 %roots /home/bismuth/git/pelotero-engine/lib/
 %files 62 ok, 0 failed
 
@@ -2738,7 +2738,7 @@ scorePitching :: PitchingMultipliers -> PitchingStats -> Points
   ! outs read directly from pitOuts (post Phase B.1); no parseInningsPitched step
   ! qualityStarts is 1 if outs >= 18 (6 innings) AND earnedRuns <= 3, else 0
   ! innings-pitched contribution uses Rational (outs/3) for exactness
-  ? tested by: Pelotero.Domain.ScoringSpec.spec
+  ? tested by: Pelotero.Domain.ScoringSpec.spec, Pelotero.MLB.HistoricalBoxscoreSpec.spec
 
 rationalPts :: Int -> Points
   ! private; Int -> Points via toRational
@@ -4581,7 +4581,7 @@ convertBoxscore :: GameId -> WB.WireBoxscore -> ([ConvertWarning], [BoxscoreEntr
   ! returns ([WireFieldDiscrepancy], entries); the only warnings produced here come from convertPitching
   ! concatenates away-side then home-side entries; team identification on each entry uses wbpParentTeamId from the wire
   ! the GameId comes from the caller
-  ? tested by: Pelotero.MLB.ConvertSpec.spec
+  ? tested by: Pelotero.MLB.HistoricalBoxscoreSpec.spec, Pelotero.MLB.ConvertSpec.spec, Pelotero.MLB.HistoricalBoxscoreSpec.withPitching
 
 boxsideEntries :: GameId -> WB.WireBoxTeam -> ([ConvertWarning], [BoxscoreEntry])
   ! iterates Map.elems of the players map; the wire keys ('ID660271') are discarded

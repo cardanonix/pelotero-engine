@@ -173,6 +173,7 @@ test-suite pelotero-test
     Pelotero.Sync.ScheduleSpec
     Pelotero.Sync.BoxscoresSpec
     Pelotero.Draft.MachineSpec
+    Pelotero.MLB.HistoricalBoxscoreSpec
   build-depends:    base
                   , pelotero-engine
                   , aeson
