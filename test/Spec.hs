@@ -11,6 +11,7 @@ import qualified Pelotero.Draft.MachineSpec            as DraftMachine
 import qualified Pelotero.DraftSpec                    as Draft
 import qualified Pelotero.Effects.PlayersSpec          as PlayersEff
 import qualified Pelotero.MLB.ConvertSpec              as Convert
+import qualified Pelotero.MLB.ConvertWarningsSpec      as ConvertWarnings
 import qualified Pelotero.MLB.HistoricalBoxscoreSpec   as HistoricalBoxscore
 import qualified Pelotero.Provider.ExternalIdSpec      as ExternalId
 import qualified Pelotero.ScoreSpec                    as Score
@@ -29,6 +30,7 @@ main = hspec $ do
   ExternalId.spec
 
   Convert.spec
+  ConvertWarnings.spec
   HistoricalBoxscore.spec
 
   Draft.spec

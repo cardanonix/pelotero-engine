@@ -1,5 +1,5 @@
 %bundle chase v1
-%generated 2026-05-16T00:37:19Z
+%generated 2026-05-16T00:53:46Z
 %roots /home/bismuth/git/pelotero-engine/lib/
 %files 62 ok, 0 failed
 
@@ -4581,7 +4581,7 @@ convertBoxscore :: GameId -> WB.WireBoxscore -> ([ConvertWarning], [BoxscoreEntr
   ! returns ([WireFieldDiscrepancy], entries); the only warnings produced here come from convertPitching
   ! concatenates away-side then home-side entries; team identification on each entry uses wbpParentTeamId from the wire
   ! the GameId comes from the caller
-  ? tested by: Pelotero.MLB.HistoricalBoxscoreSpec.spec, Pelotero.MLB.ConvertSpec.spec, Pelotero.MLB.HistoricalBoxscoreSpec.withPitching
+  ? tested by: Pelotero.MLB.ConvertWarningsSpec.spec, Pelotero.MLB.HistoricalBoxscoreSpec.spec, Pelotero.MLB.ConvertSpec.spec, Pelotero.MLB.ConvertWarningsSpec.runWarnings, Pelotero.MLB.HistoricalBoxscoreSpec.withPitching
 
 boxsideEntries :: GameId -> WB.WireBoxTeam -> ([ConvertWarning], [BoxscoreEntry])
   ! iterates Map.elems of the players map; the wire keys ('ID660271') are discarded
