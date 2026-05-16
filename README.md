@@ -61,13 +61,6 @@ After that, every subsequent shell entry is just `nix develop`. The shell hook d
 - `pe-stop` : backup, stop DB, kill tmux session
 - `./tui` : project TUI (build, run, test, DB shortcuts); see below
 
-**Code context (for LLM-assisted workflows):**
-
-- `generate-manifest` : scan source into `script/manifest.json`
-- `compile-manifest` : bundle source files for review
-- `llm-context` : diff-aware context bundle from a git ref
-- `manifest-tui` : interactive front-end for the above
-
 ## Building and running
 
 The repo ships a small TUI wrapper:
