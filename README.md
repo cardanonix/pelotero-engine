@@ -1,6 +1,6 @@
 # ⚾ Pelotero Engine ⚾
 
-[![Haskell CI using Nix Flake](https://github.com/cardanonix/pelotero-engine/actions/workflows/haskell.yml/badge.svg)](https://github.com/cardanonix/pelotero-engine/actions/workflows/haskell.yml)
+[![Haskell CI with Nix Flake](https://github.com/cardanonix/pelotero-engine/actions/workflows/haskell.yml/badge.svg)](https://github.com/cardanonix/pelotero-engine/actions/workflows/haskell.yml)
 
 Pelotero is a fantasy baseball engine. It ingests data from the MLB Stats API, persists it in PostgreSQL, snapshots league lineups per game, scores teams against a league's scoring rules, and runs auto-drafts. The codebase is a single Haskell binary (`pelotero`) with an `effectful`-based effect layer over `rel8`/`hasql`, Katip structured logging, and a `crem`-typed draft state machine. Licensed under the GNU AGPLv3 or later.
 
