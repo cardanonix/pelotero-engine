@@ -7,7 +7,10 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: '0 0 * * 0'  # weekly to keep the cache warm
+    - cron: '0 0 * * 0'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
