@@ -1,7 +1,7 @@
 module Pelotero.Draft.MachineSpec (spec) where
 
 import           Data.Foldable               (for_)
-import           Data.List                   (nub)
+import           Data.List                   (find, nub)
 import qualified Data.Map.Strict             as Map
 import           Data.Maybe                  (isJust)
 import           Hedgehog
@@ -234,17 +234,21 @@ applyPicks n st
   | otherwise = case st of
       D.Drafting ctx -> case D.dcRemaining ctx of
         []            -> pure st
-        (team, _) : _ ->
-          case filter (fits ctx team) (Map.keys (D.dcPool ctx)) of
-            []         -> Gen.discard
-            candidates -> do
-              player <- Gen.element candidates
+        (team, _) : _ -> do
+          -- Shuffle the players who fit, then take the first the machine
+          -- accepts. That is a uniform choice among accepted picks, and it
+          -- runs the completability check on one or two players per step
+          -- rather than on the whole pool.
+          fitting <- Gen.shuffle (filter (fits ctx team) (Map.keys (D.dcPool ctx)))
+          case find (isJust . D.acceptedSlot ctx team) fitting of
+            Nothing     -> Gen.discard
+            Just player ->
               case runMachine st (D.MakePick team player) of
                 Right (st', _) -> applyPicks (n - 1) st'
                 Left _         -> Gen.discard
       _ -> pure st
   where
-    fits ctx team player = isJust (D.acceptedSlot ctx team player)
+    fits ctx team player = isJust (D.slotForPick ctx team player)
 
 startedFrom :: D.DraftPlan -> Gen D.DraftState
 startedFrom plan = case runMachine D.WaitingToStart (D.StartDraft plan) of
