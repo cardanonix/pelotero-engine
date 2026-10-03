@@ -19,6 +19,7 @@ import qualified IntegrationTest.SyncPlayersSpec         as SyncPlayersSpec
 import qualified IntegrationTest.SyncScheduleSpec        as SyncScheduleSpec
 import qualified IntegrationTest.TeamRepoSpec            as TeamRepoSpec
 import qualified IntegrationTest.DraftRunSpec            as DraftRunSpec
+import qualified IntegrationTest.SimulateSpec            as SimulateSpec
 
 
 import           IntegrationTest.Setup                   (withTestPool)
@@ -42,3 +43,4 @@ main = hspec $ aroundAll withTestPool $ do
   ScoreSpec.spec
   SmokeSpec.spec
   DraftRunSpec.spec
+  SimulateSpec.spec

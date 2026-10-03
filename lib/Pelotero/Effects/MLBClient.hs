@@ -96,6 +96,16 @@ data MLBFixture = MLBFixture
     --   players-<season>.json
     --   schedule-<startDate>-<endDate>.json
     --   boxscore-<gamePk>.json
+  , fixtureTeams     :: !(Map Int FilePath)
+    -- ^ Optional per-season overrides for the teams file. When a season
+    --   is not in this map, FetchRosters reads
+    --   <fixturesDir>/teams-<season>.json.
+  , fixturePlayers   :: !(Map Int FilePath)
+    -- ^ Optional per-season overrides for the players file. When a
+    --   season is not in this map, FetchRosters reads
+    --   <fixturesDir>/players-<season>.json. Lets one spec draft from a
+    --   full-season pool while other specs keep a small pool with exact
+    --   counts.
   , fixtureBoxscores :: !(Map Int FilePath)
     -- ^ Optional per-game overrides for boxscore lookups. When a gamePk
     --   is not in this map, FetchBoxscoreRaw falls back to
@@ -103,7 +113,12 @@ data MLBFixture = MLBFixture
   }
 
 defaultFixture :: FilePath -> MLBFixture
-defaultFixture dir = MLBFixture { fixturesDir = dir, fixtureBoxscores = Map.empty }
+defaultFixture dir = MLBFixture
+  { fixturesDir      = dir
+  , fixtureTeams     = Map.empty
+  , fixturePlayers   = Map.empty
+  , fixtureBoxscores = Map.empty
+  }
 
 runMLBClientFixture
   :: IOE E.:> es
@@ -112,8 +127,10 @@ runMLBClientFixture
   -> E.Eff es a
 runMLBClientFixture fix = interpret_ $ \case
   FetchRosters season -> E.liftIO $ do
-    let teamsPath   = fixturesDir fix </> ("teams-"   <> show season <> ".json")
-        playersPath = fixturesDir fix </> ("players-" <> show season <> ".json")
+    let defaultTeams   = fixturesDir fix </> ("teams-"   <> show season <> ".json")
+        defaultPlayers = fixturesDir fix </> ("players-" <> show season <> ".json")
+        teamsPath      = Map.findWithDefault defaultTeams   season (fixtureTeams fix)
+        playersPath    = Map.findWithDefault defaultPlayers season (fixturePlayers fix)
     teamsBytes   <- safeRead teamsPath
     playersBytes <- safeRead playersPath
     case (teamsBytes, playersBytes) of

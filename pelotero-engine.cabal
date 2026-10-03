@@ -47,9 +47,13 @@ library
     Pelotero.Score
     Pelotero.App
     Pelotero.Draft
+    Pelotero.Matchup
+    Pelotero.Simulate
+    Pelotero.League.Setup
     -- Providers
     Pelotero.Provider.ExternalId
     -- Draft
+    Pelotero.Draft.Feasibility
     Pelotero.Draft.Machine
     Pelotero.Draft.Run
     -- Domain
@@ -60,6 +64,7 @@ library
     Pelotero.Domain.Team
     Pelotero.Domain.Game
     Pelotero.Domain.Roster
+    Pelotero.Domain.Eligibility
     Pelotero.Domain.Scoring
     Pelotero.Domain.Draft
     Pelotero.Domain.League
@@ -107,6 +112,7 @@ library
     Pelotero.Effects.DraftPick
     Pelotero.Effects.Logging
     Pelotero.Effects.LineupSnapshot
+    Pelotero.Effects.Random
     -- Sync (provider-agnostic)
     Pelotero.Sync.Players
     Pelotero.Sync.Schedule
@@ -140,6 +146,7 @@ library
                   , rel8               >= 1.7   && < 1.8
                   , katip
                   , crem
+                  , random             >= 1.2   && < 1.4
                   , singletons
                   , singletons-base
   ghc-options:      -O2
@@ -151,7 +158,9 @@ executable pelotero
   build-depends:    base
                   , pelotero-engine
                   , effectful            >= 2.5   && < 3
+                  , containers
                   , optparse-applicative >= 0.17  && < 0.20
+                  , random               >= 1.2   && < 1.4
                   , text
                   , time
   ghc-options:      -O2 -threaded
@@ -176,6 +185,11 @@ test-suite pelotero-test
     Pelotero.Sync.ScheduleSpec
     Pelotero.Sync.BoxscoresSpec
     Pelotero.Draft.MachineSpec
+    Pelotero.Draft.RunSpec
+    Pelotero.Domain.EligibilitySpec
+    Pelotero.Effects.RandomSpec
+    Pelotero.League.SetupSpec
+    Pelotero.MatchupSpec
   build-depends:    base
                   , pelotero-engine
                   , aeson
@@ -209,6 +223,7 @@ test-suite pelotero-integration-test
     IntegrationTest.PlayerRankingRepoSpec
     IntegrationTest.DraftPickRepoSpec
     IntegrationTest.DraftRunSpec
+    IntegrationTest.SimulateSpec
     IntegrationTest.SyncPlayersSpec
     IntegrationTest.SyncScheduleSpec
     IntegrationTest.SyncBoxscoresSpec

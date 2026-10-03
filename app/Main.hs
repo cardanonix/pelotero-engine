@@ -16,6 +16,8 @@
 --   pelotero snapshot lineups --on-date DATE
 --   pelotero score           --league-id ID
 --   pelotero draft run       --league-id ID
+--   pelotero simulate        --season YEAR --from DATE --to DATE
+--                            [--teams N] [--seed N] [--league-id TEXT]
 --
 -- All subcommands except @db check@ share the same harness: load the DB
 -- config from env, acquire a pool, run pending migrations, open a Katip
@@ -24,6 +26,10 @@ module Main (main) where
 
 import           Control.Exception              (bracket)
 import           Control.Monad                  (forM_)
+import           Data.List                      (sortOn)
+import qualified Data.Map.Strict                as Map
+import           Data.Maybe                     (fromMaybe)
+import           Data.Ord                       (Down (..))
 import           Data.Foldable                  (traverse_)
 import qualified Data.Text                      as T
 import qualified Data.Text.IO                   as TIO
@@ -38,6 +44,7 @@ import           Options.Applicative
 
 import           System.Exit                    (exitFailure, exitSuccess)
 import           System.IO                      (hPutStrLn, stderr)
+import           System.Random                  (randomIO)
 
 import           Effectful                      (Eff)
 import qualified Effectful                      as E
@@ -48,7 +55,13 @@ import           Pelotero.DB.Pool               (renderDBError)
 import           Pelotero.DB.Provider           (ProviderName (..))
 
 import           Pelotero.App                   (AppEffects, runApp)
-import           Pelotero.Domain.Id             (DbLeagueConfigId (..))
+import           Pelotero.DB.LeagueTeam         (LoadedLeagueTeam (..))
+import           Pelotero.DB.Player             (LoadedPlayerRow (..))
+import           Pelotero.Domain.Id
+                     ( DbLeagueConfigId (..)
+                     , DbLeagueTeamId
+                     , DbPlayerId
+                     )
 import qualified Pelotero.Domain.Scoring        as Scoring
 import qualified Pelotero.Draft                 as Draft
 import qualified Pelotero.Draft.Run             as DraftRun
@@ -60,13 +73,23 @@ import           Pelotero.Effects.Logging
                      , withStdoutLogEnv
                      )
 import qualified Pelotero.Effects.MLBClient     as MLB
+import qualified Pelotero.Effects.Players       as Players
+import           Pelotero.Effects.Random        (runRandomSeeded)
 import qualified Pelotero.Lineup.Snapshot       as Snapshot
+import           Pelotero.Matchup
+                     ( Matchup
+                     , Outcome (..)
+                     , matchupAway
+                     , matchupHome
+                     , matchupOutcome
+                     )
 import qualified Pelotero.MLB.Convert           as Convert
 import           Pelotero.MLB.Fetch
                      ( FetchedRosters (..)
                      , FetchedSchedule (..)
                      )
 import qualified Pelotero.Score                 as Score
+import qualified Pelotero.Simulate              as Sim
 import qualified Pelotero.Sync.Boxscores        as Box
 import qualified Pelotero.Sync.Players          as SyncPlayers
 import qualified Pelotero.Sync.Schedule         as SyncSchedule
@@ -83,6 +106,16 @@ data Command
   | CmdSnapshotLineups SnapshotLineupsOpts
   | CmdScore           IdOpts
   | CmdDraftRun        IdOpts
+  | CmdSimulate        SimulateOpts
+  deriving stock (Show)
+
+data SimulateOpts = SimulateOpts
+  { smSeason   :: !Int
+  , smRange    :: !DateRangeOpts
+  , smTeams    :: !Int
+  , smSeed     :: !(Maybe Int)
+  , smLeagueId :: !(Maybe T.Text)
+  }
   deriving stock (Show)
 
 newtype SyncRostersOpts = SyncRostersOpts { sroSeason :: Int }
@@ -116,6 +149,9 @@ dispatch = \case
   CmdSnapshotLineups opts -> runWithApp "snapshot-lineups" (workSnapshotLineups opts)
   CmdScore opts           -> runWithApp "score"            (workScore opts)
   CmdDraftRun opts        -> runWithApp "draft-run"        (workDraftRun opts)
+  CmdSimulate opts        -> do
+    seed <- maybe randomIO pure (smSeed opts)
+    runWithApp "simulate" (workSimulate seed opts)
 
 -- ---------------------------------------------------------------------
 -- Setup harness
@@ -296,6 +332,108 @@ workDraftRun (IdOpts lcid) = addNamespace (Namespace ["draft"]) $ do
                  <> tshow (length (Draft.dsPicks summary)) <> " picks"
 
 -- ---------------------------------------------------------------------
+-- simulate
+-- ---------------------------------------------------------------------
+
+-- | Run the whole workflow on a new random league and print the result.
+-- The seed is always logged, so any run can be repeated exactly with
+-- @--seed@ (and a fresh @--league-id@, since league ids are unique).
+workSimulate :: Int -> SimulateOpts -> Eff AppEffects ()
+workSimulate seed opts = do
+  let DateRangeOpts fromDate toDate = smRange opts
+      leagueId = fromMaybe ("sim-" <> tshow seed) (smLeagueId opts)
+      cfg      = Sim.SimConfig
+        { Sim.scLeagueId  = leagueId
+        , Sim.scSeason    = smSeason opts
+        , Sim.scFrom      = fromDate
+        , Sim.scTo        = toDate
+        , Sim.scTeamCount = smTeams opts
+        }
+  logFM InfoS $ "simulation seed " <> tshow seed <> ", league id " <> leagueId
+  result <- runRandomSeeded seed (Sim.runSimulation cfg)
+  case result of
+    Left err -> do
+      logFM ErrorS $ "simulation failed: " <> tshow err
+      E.liftIO exitFailure
+    Right report -> do
+      names <- playerNames report
+      E.liftIO (traverse_ TIO.putStrLn (renderReport seed leagueId names report))
+
+-- | Display names for every player who appears in the report's scores.
+playerNames :: Sim.SimReport -> Eff AppEffects (Map.Map DbPlayerId T.Text)
+playerNames report = do
+  let pids = [ Score.psPlayer ps
+             | ts <- Score.lscTeams (Sim.srScore report)
+             , ps <- Score.tsPlayers ts
+             ]
+  rows <- traverse Players.getPlayerById pids
+  pure $ Map.fromList
+    [ (lprId row, lprFirstName row <> " " <> lprLastName row)
+    | Just row <- rows
+    ]
+
+renderReport
+  :: Int
+  -> T.Text
+  -> Map.Map DbPlayerId T.Text
+  -> Sim.SimReport
+  -> [T.Text]
+renderReport seed leagueId names report = concat
+  [ [ ""
+    , "Simulation " <> leagueId <> " (seed " <> tshow seed <> ")"
+    , "  draftable pool:  " <> tshow (Sim.srPoolSize report) <> " players"
+    , "  draft picks:     " <> tshow (length (Draft.dsPicks (Sim.srDraft report)))
+    , "  lineup rows:     " <> tshow (Sim.srLineupRows report)
+    , "  games in window: " <> tshow (Sim.srGames report)
+    , "  boxscores:       "
+        <> tshow (Box.boxGamesProcessed (Sim.srBoxscores report)) <> " processed, "
+        <> tshow (Box.boxGamesUnchanged (Sim.srBoxscores report)) <> " unchanged, "
+        <> tshow (length (Box.boxErrors (Sim.srBoxscores report))) <> " errors"
+    ]
+  , concatMap renderMatchup (zip [1 :: Int ..] (Sim.srMatchups report))
+  , case Sim.srBye report of
+      Nothing -> []
+      Just ts -> "" : ("Bye: " <> teamName (Score.tsTeam ts)) : renderTeam ts
+  ]
+  where
+    teamNames :: Map.Map DbLeagueTeamId T.Text
+    teamNames = Map.fromList [(lltId t, lltName t) | t <- Sim.srTeams report]
+
+    teamName tid = Map.findWithDefault (tshow tid) tid teamNames
+
+    renderMatchup :: (Int, Matchup) -> [T.Text]
+    renderMatchup (n, m) =
+      let home = matchupHome m
+          away = matchupAway m
+          verdict = case matchupOutcome m of
+            HomeWins -> teamName (Score.tsTeam home) <> " win"
+            AwayWins -> teamName (Score.tsTeam away) <> " win"
+            Tied     -> "tie"
+      in concat
+           [ [ ""
+             , "Matchup " <> tshow n <> ": "
+                 <> teamName (Score.tsTeam home) <> " "
+                 <> renderPoints (Score.tsTotalPoints home)
+                 <> " vs "
+                 <> teamName (Score.tsTeam away) <> " "
+                 <> renderPoints (Score.tsTotalPoints away)
+                 <> " (" <> verdict <> ")"
+             ]
+           , renderTeam home
+           , renderTeam away
+           ]
+
+    renderTeam :: Score.TeamScore -> [T.Text]
+    renderTeam ts =
+      ("  " <> teamName (Score.tsTeam ts) <> ": " <> renderPoints (Score.tsTotalPoints ts))
+      : [ "    " <> T.justifyLeft 28 ' ' (playerName (Score.psPlayer ps))
+            <> T.justifyRight 8 ' ' (renderPoints (Score.psTotalPoints ps))
+        | ps <- sortOn (Down . Score.psTotalPoints) (Score.tsPlayers ts)
+        ]
+
+    playerName pid = Map.findWithDefault (tshow pid) pid names
+
+-- ---------------------------------------------------------------------
 -- optparse-applicative
 -- ---------------------------------------------------------------------
 
@@ -313,6 +451,8 @@ commandP = hsubparser
  <> command "snapshot" (info snapshotP (progDesc "Lineup snapshot operations"))
  <> command "score"    (info scoreP    (progDesc "Score a league"))
  <> command "draft"    (info draftP    (progDesc "Draft operations"))
+ <> command "simulate" (info simulateP
+      (progDesc "Create a random league, auto-draft it, and score it end to end"))
   )
 
 dbP :: Parser Command
@@ -350,6 +490,32 @@ draftP = hsubparser
       (info (CmdDraftRun <$> idOpts)
             (progDesc "Run the auto-draft loop for a league"))
   )
+
+simulateP :: Parser Command
+simulateP = fmap CmdSimulate $ SimulateOpts
+  <$> option auto
+        ( long "season"
+       <> metavar "YEAR"
+       <> help "Season whose rosters form the player pool (e.g. 2026)"
+        )
+  <*> dateRangeOpts
+  <*> option auto
+        ( long "teams"
+       <> metavar "N"
+       <> value 2
+       <> showDefault
+       <> help "Number of fantasy teams"
+        )
+  <*> optional (option auto
+        ( long "seed"
+       <> metavar "N"
+       <> help "Random seed; omit for a fresh one (it is logged)"
+        ))
+  <*> optional (T.pack <$> strOption
+        ( long "league-id"
+       <> metavar "TEXT"
+       <> help "Unique league id; defaults to sim-<seed>"
+        ))
 
 syncRostersOpts :: Parser SyncRostersOpts
 syncRostersOpts = SyncRostersOpts

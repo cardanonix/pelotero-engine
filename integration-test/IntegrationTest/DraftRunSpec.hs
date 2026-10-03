@@ -21,10 +21,12 @@
 -- tests in 'Pelotero.Draft.MachineSpec' cover the state machine in
 -- isolation; this test covers config lookup, strategy parsing, team
 -- enumeration, player enumeration, plan construction, the auto-pick
--- loop, and pick persistence as a single integrated chain.
+-- loop, pick persistence, roster persistence, and the refusal of a
+-- second run as a single integrated chain.
 module IntegrationTest.DraftRunSpec (spec) where
 
 import qualified Data.Map.Strict                 as Map
+import           Data.Text                       (Text)
 import           Data.Time
                      ( UTCTime (..)
                      , fromGregorian
@@ -41,7 +43,9 @@ import qualified Pelotero.DB.LeagueTeam          as LT
 import qualified Pelotero.DB.Player              as P
 import           Pelotero.DB.DraftPick           (DraftPickRow (..))
 import           Pelotero.DB.LeagueConfig        (LeagueConfigRow (..))
+import           Pelotero.DB.Player              (PlayerRow (..))
 import           Pelotero.DB.PlayerRanking       (PlayerRankingRow (..))
+import           Pelotero.DB.RosterSlot          (RosterSlotRow (..))
 import           Pelotero.DB.Pool                (DBError, Pool)
 import           Pelotero.Domain.Id              (DraftPickNumber (..))
 import           Pelotero.Domain.Roster          (RosterLimits (..), RosterSlot (..))
@@ -49,7 +53,10 @@ import           Pelotero.Draft
                      ( DraftPickEntry (..)
                      , DraftSummary (..)
                      )
-import           Pelotero.Draft.Run              (runAutoDraftForLeague)
+import           Pelotero.Draft.Run
+                     ( AutoDraftError (..)
+                     , runAutoDraftForLeague
+                     )
 
 import           Pelotero.Effects.Clock          (Clock, runClockFixed)
 import           Pelotero.Effects.Database       (Database, runDatabasePool, runTx)
@@ -60,6 +67,7 @@ import           Pelotero.Effects.Logging        (Logging, runLoggingDiscard)
 import qualified Pelotero.Effects.PlayerRanking  as PR
 import           Pelotero.Effects.PlayerRanking  (PlayerRanking, runPlayerRankingDB)
 import           Pelotero.Effects.Players        (Players, runPlayersDB)
+import qualified Pelotero.Effects.RosterSlot     as RS
 
 import           IntegrationTest.Fixtures
                      ( mkLeagueConfigRow
@@ -85,12 +93,12 @@ spec = describe "Pelotero.Draft.Run.runAutoDraftForLeague" $
       ltid1 <- runTx $ LT.insertLeagueTeamT (mkLeagueTeamRow lcid "draft-t1")
       ltid2 <- runTx $ LT.insertLeagueTeamT (mkLeagueTeamRow lcid "draft-t2")
 
-      -- Seed 4 active players. mkPlayerRow defaults playerRowActive=True
-      -- so they all show up in Players.getActivePlayers.
-      pidA <- runTx (P.insertPlayerT (mkPlayerRow "draft-a"))
-      pidB <- runTx (P.insertPlayerT (mkPlayerRow "draft-b"))
-      pidC <- runTx (P.insertPlayerT (mkPlayerRow "draft-c"))
-      pidD <- runTx (P.insertPlayerT (mkPlayerRow "draft-d"))
+      -- Seed 4 active designated hitters. A player needs a position to be
+      -- draftable, and a DH fits the utility slots this league uses.
+      pidA <- runTx (P.insertPlayerT (hitter "draft-a"))
+      pidB <- runTx (P.insertPlayerT (hitter "draft-b"))
+      pidC <- runTx (P.insertPlayerT (hitter "draft-c"))
+      pidD <- runTx (P.insertPlayerT (hitter "draft-d"))
 
       -- Seed per-team rankings. rank_slot is 1-indexed (DB check
       -- constraint requires rank_slot > 0) and ASC = preferred-first.
@@ -111,11 +119,15 @@ spec = describe "Pelotero.Draft.Run.runAutoDraftForLeague" $
 
       result         <- runAutoDraftForLeague lcid
       persistedPicks <- runTx (DPRepo.getPicksForLeagueT lcid)
+      roster1        <- RS.getSlotsForTeam ltid1
+      roster2        <- RS.getSlotsForTeam ltid2
+      rerun          <- runAutoDraftForLeague lcid
 
-      pure (lcid, ltid1, ltid2, pidA, pidB, pidC, pidD, result, persistedPicks)
+      pure ( lcid, ltid1, ltid2, pidA, pidB, pidC, pidD
+           , result, persistedPicks, roster1, roster2, rerun )
 
-    let (lcid, ltid1, ltid2, pidA, pidB, pidC, pidD, result, persistedPicks)
-          = seeded
+    let ( lcid, ltid1, ltid2, pidA, pidB, pidC, pidD
+          , result, persistedPicks, roster1, roster2, rerun ) = seeded
 
     summary <- case result of
       Right s -> pure s
@@ -148,12 +160,30 @@ spec = describe "Pelotero.Draft.Run.runAutoDraftForLeague" $
     map dpPlayerId     persistedPicks    `shouldBe` [pidA, pidB, pidC, pidD]
     map dpLeagueConfigId persistedPicks  `shouldBe` replicate 4 lcid
 
+    -- Every pick was placed in the utility slot the limits provide.
+    map dpeSlot (dsPicks summary) `shouldBe` replicate 4 SlotUtility
+
+    -- Each pick also produced a roster_slot row for the picking team.
+    -- getSlotsForTeam orders by slot then player id.
+    roster1 `shouldBe`
+      [ RosterSlotRow ltid1 "utility" pidA
+      , RosterSlotRow ltid1 "utility" pidD
+      ]
+    roster2 `shouldBe`
+      [ RosterSlotRow ltid2 "utility" pidB
+      , RosterSlotRow ltid2 "utility" pidC
+      ]
+
+    -- A second run on the same league is refused before any write.
+    rerun `shouldBe` Left (AutoDraftAlreadyHasPicks lcid 4)
+
 -- ---------------------------------------------------------------------
 -- Effect stack
 -- ---------------------------------------------------------------------
 
 type DraftStack =
   '[ DraftPick
+   , RS.RosterSlot
    , PlayerRanking
    , Players
    , LeagueConfig
@@ -177,6 +207,7 @@ runStack pool =
   . runLeagueConfigDB
   . runPlayersDB
   . runPlayerRankingDB
+  . RS.runRosterSlotDB
   . runDraftPickDB
 
 fixedTime :: UTCTime
@@ -203,3 +234,8 @@ testRosterLimits :: RosterLimits
 testRosterLimits = RosterLimits $ Map.fromList
   [ (SlotUtility, 2)
   ]
+
+-- | An active player whose position (DH) makes him draftable into a
+-- utility slot.
+hitter :: Text -> PlayerRow
+hitter tag = (mkPlayerRow tag) { playerRowPosition = Just "DH" }

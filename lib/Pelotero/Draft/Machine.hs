@@ -13,16 +13,15 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-star-is-type #-}
 
--- | The crem state machine wrapping 'Pelotero.Draft'\'s pure
--- transition logic. Adds a vertex-tagged GADT state, a typed
--- topology declaration, and a runtime existential — the pattern
--- lifted from cheeblr's @State.TransactionMachine@.
+-- | The crem state machine over the data in 'Pelotero.Draft'. Adds a
+-- vertex-tagged GADT state, a typed topology declaration, and a runtime
+-- existential, the pattern lifted from cheeblr's @State.TransactionMachine@.
 --
 -- Three vertices, two edges of forward progress:
 --
 -- > WaitingToStart --(StartDraft)--> Drafting --(MakePick last | EndDraft)--> Complete
 --
--- Self-loops on every vertex are deliberate — they're how a rejected
+-- Self-loops on every vertex are deliberate: they are how a rejected
 -- command stays put without violating the topology.
 module Pelotero.Draft.Machine
   ( -- * Vertex kind and singletons
@@ -49,7 +48,7 @@ import           Crem.Render.RenderableVertices (RenderableVertices (..))
 import           Crem.Topology                  (Topology (..))
 import           Data.Functor.Identity          (Identity, runIdentity)
 import           Data.List                      (nub)
-import qualified Data.Set                       as Set
+import qualified Data.Map.Strict                as Map
 import           Data.Singletons.Base.TH
 
 import           Pelotero.Draft
@@ -61,6 +60,11 @@ import           Pelotero.Draft
                      , DraftPlan (..)
                      , DraftState (..)
                      , DraftSummary (..)
+                     , applyPick
+                     , isCompletable
+                     , slotForPick
+                     , startContext
+                     , validatePlan
                      )
 
 -- ---------------------------------------------------------------------
@@ -171,31 +175,30 @@ toDraftState = \case
 -- rejected command (state stays put); 'Right' carries the events the
 -- handler should persist, in order.
 --
--- The transition logic is reimplemented per-vertex rather than going
--- through 'Pelotero.Draft.applyCommand' so each branch can name the
--- specific result vertex; D.1d will add a property test asserting
--- the two functions agree on every (state, command) pair.
+-- Roster rules are enforced here, not by the caller. 'StartDraft'
+-- refuses a plan that 'validatePlan' rejects, including one the pool
+-- cannot complete. 'MakePick' places the player with 'slotForPick' and
+-- refuses the pick when the team has no open slot for that player's
+-- position, so every 'PickRecorded' event names a slot the roster limits
+-- allow. It also refuses a pick that fits but leaves the remaining picks
+-- impossible to place ('PickStrandsDraft'), so every 'DraftingG' state
+-- can still be completed and the team on the clock always has a pick
+-- that 'Pelotero.Draft.acceptedSlot' accepts.
 draftAction
   :: DraftStateG v
   -> DraftCommand
   -> ActionResult Identity DraftTopology DraftStateG v (Either DraftError [DraftEvent])
 
 -- WaitingToStart: only StartDraft makes progress.
-draftAction WaitingToStartG (StartDraft plan)
-  | null (dpOrder plan) =
-      pureResult (Left EmptyDraftPlan) WaitingToStartG
-  | otherwise =
+draftAction WaitingToStartG (StartDraft plan) =
+  case validatePlan plan of
+    Just err ->
+      pureResult (Left err) WaitingToStartG
+    Nothing ->
       let teams = nub (map fst (dpOrder plan))
-          ctx   = DraftContext
-            { dcLeague    = dpLeague plan
-            , dcOrder     = dpOrder plan
-            , dcRemaining = dpOrder plan
-            , dcAvailable = dpAvailable plan
-            , dcPicksMade = []
-            }
       in pureResult
            (Right [DraftStarted (dpLeague plan) teams])
-           (DraftingG ctx)
+           (DraftingG (startContext plan))
 draftAction WaitingToStartG (MakePick _ _) =
   pureResult (Left DraftNotStarted) WaitingToStartG
 draftAction WaitingToStartG EndDraft =
@@ -214,32 +217,36 @@ draftAction (DraftingG ctx) (MakePick team player) =
           pureResult
             (Left (NotYourTurn expectedTeam team))
             (DraftingG ctx)
-      | not (Set.member player (dcAvailable ctx)) ->
+      | not (Map.member player (dcPool ctx)) ->
           let err = if any ((player ==) . dpePlayer) (dcPicksMade ctx)
                      then PlayerAlreadyDrafted player
                      else PlayerNotInPool player
           in pureResult (Left err) (DraftingG ctx)
       | otherwise ->
-          let entry  = DraftPickEntry pickNum team player
-              picks' = dcPicksMade ctx ++ [entry]
-              ctx'   = ctx
-                { dcRemaining = rest
-                , dcAvailable = Set.delete player (dcAvailable ctx)
-                , dcPicksMade = picks'
-                }
-          in case rest of
-               [] ->
-                 let summary = DraftSummary
-                       { dsLeague = dcLeague ctx
-                       , dsPicks  = picks'
-                       }
-                 in pureResult
-                      (Right [PickRecorded entry, DraftCompleted summary])
-                      (CompleteG summary)
-               _ ->
-                 pureResult
-                   (Right [PickRecorded entry])
-                   (DraftingG ctx')
+          case slotForPick ctx team player of
+            Nothing ->
+              pureResult (Left (NoOpenSlot team player)) (DraftingG ctx)
+            Just slot ->
+              let entry = DraftPickEntry pickNum team player slot
+                  ctx'  = applyPick entry ctx
+              in if not (isCompletable ctx')
+                   then
+                     pureResult
+                       (Left (PickStrandsDraft team player))
+                       (DraftingG ctx)
+                   else case rest of
+                     [] ->
+                       let summary = DraftSummary
+                             { dsLeague = dcLeague ctx
+                             , dsPicks  = dcPicksMade ctx'
+                             }
+                       in pureResult
+                            (Right [PickRecorded entry, DraftCompleted summary])
+                            (CompleteG summary)
+                     _ ->
+                       pureResult
+                         (Right [PickRecorded entry])
+                         (DraftingG ctx')
 draftAction (DraftingG ctx) EndDraft =
   let summary = DraftSummary
         { dsLeague = dcLeague ctx
@@ -272,4 +279,3 @@ runDraftCommand (SomeDraftStateG _ st) cmd =
     ActionResult m ->
       let (out, nextSt) = runIdentity m
       in (out, toSomeDraftStateG nextSt)
-
