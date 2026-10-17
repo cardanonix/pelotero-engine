@@ -1,0 +1,12 @@
+# Documentation and notes lag the code, so answers come from the code alone.
+docs/
+notes/
+*.md
+# Annotation dumps from the Chase tooling.
+lib/new-annotations.json
+# Recorded API responses used as test input.
+fixtures/
+# Batches and manifests from the concat tooling.
+script/
+# Encrypted secrets; the content check catches them too.
+secrets/
