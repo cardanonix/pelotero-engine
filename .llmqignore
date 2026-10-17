@@ -2,7 +2,10 @@
 docs/
 notes/
 *.md
-# Annotation dumps from the Chase tooling.
+# Old chase runs and the annotation dumps. llmq-ingest sends fresh bundles
+# to their own folder, and the annotations are already in them.
+*.chase
+annotation.json
 lib/new-annotations.json
 # Recorded API responses used as test input.
 fixtures/
