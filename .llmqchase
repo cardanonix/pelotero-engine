@@ -1,0 +1,5 @@
+{
+  "runs": [
+    { "src": "lib", "tests": ["test", "integration-test"], "annotations": "pelotero-annotations.json" }
+  ]
+}
