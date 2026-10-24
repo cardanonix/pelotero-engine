@@ -15,6 +15,7 @@ import qualified Pelotero.Effects.PlayersSpec     as PlayersEff
 import qualified Pelotero.Effects.RandomSpec      as RandomEff
 import qualified Pelotero.League.SetupSpec        as LeagueSetup
 import qualified Pelotero.MatchupSpec             as Matchup
+import qualified Pelotero.ProbeSpec               as Probe
 import qualified Pelotero.MLB.ConvertSpec         as Convert
 import qualified Pelotero.Provider.ExternalIdSpec as ExternalId
 import qualified Pelotero.ScoreSpec               as Score
@@ -24,6 +25,7 @@ import qualified Pelotero.Sync.ScheduleSpec       as SyncSchedule
 
 main :: IO ()
 main = hspec $ do
+  Probe.spec
   Position.spec
   Roster.spec
   Scoring.spec

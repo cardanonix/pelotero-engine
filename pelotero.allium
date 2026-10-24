@@ -1,0 +1,443 @@
+-- allium: 3
+-- pelotero.allium
+--
+-- Distilled from pelotero-engine, branch v2 (bcf2546, 2026-10-17).
+--
+-- Scope
+--   Includes: league setup, rankings, the draft, roster and lineup
+--             limits, lineup snapshots, per-game scoring, matchups.
+--   Excludes: the stats-provider wire format, persistence, logging,
+--             the CLI, the simulation harness.
+--
+-- How to read this file
+--   Rules describe what the system SHOULD do. Where the code does
+--   something else, the rule carries an `@guidance` line beginning
+--   "CODE:" that says what v2 actually does, and the matching issue is
+--   an open question at the bottom. Invariants marked VIOLATED are
+--   ones v2 can be driven to break; probe test ids (P1..P6) refer to
+--   test/Pelotero/ProbeSpec.hs.
+
+----------------------------------------------------------------------
+-- External entities
+----------------------------------------------------------------------
+
+external entity MlbPlayer {
+    name: String
+    positions: Set<Position>
+    two_way: Boolean
+}
+
+external entity MlbGame {
+    scheduled_day: Day
+    first_pitch: Timestamp
+    status: scheduled | in_progress | final | postponed | suspended
+}
+
+external entity BattingLine {
+    player: MlbPlayer
+    game: MlbGame
+    hits: Integer
+    doubles: Integer
+    triples: Integer
+    home_runs: Integer
+    runs: Integer
+    rbi: Integer
+    walks: Integer
+    hit_by_pitch: Integer
+    stolen_bases: Integer
+    caught_stealing: Integer
+    strike_outs: Integer
+
+    singles: hits - doubles - triples - home_runs
+
+    invariant ExtraBaseHitsWithinHits {
+        doubles + triples + home_runs <= hits
+    }
+}
+
+external entity PitchingLine {
+    player: MlbPlayer
+    game: MlbGame
+    started: Boolean
+    outs: Integer
+    earned_runs: Integer
+    wins: Integer
+    losses: Integer
+    saves: Integer
+    strike_outs: Integer
+    walks: Integer
+    hits_allowed: Integer
+    hit_batsmen: Integer
+    complete_games: Integer
+    shutouts: Integer
+}
+
+----------------------------------------------------------------------
+-- Enumerations
+----------------------------------------------------------------------
+
+enum Position { catcher | first_base | second_base | third_base | shortstop
+              | outfield | designated_hitter | pitcher | two_way }
+
+enum Slot { catcher | first_base | second_base | third_base | shortstop
+          | outfield | utility | starting_pitcher | relief_pitcher }
+
+enum DraftOrderStrategy { serpentine | experimental_snake }
+
+----------------------------------------------------------------------
+-- Entities
+----------------------------------------------------------------------
+
+entity League {
+    name: String
+    commissioner: String
+    status: draft | active | finished
+    roster_limits: Map<Slot, Integer>
+    lineup_limits: Map<Slot, Integer>
+    draft_strategy: DraftOrderStrategy
+    scoring_first_day: Day
+    scoring_last_day: Day
+
+    teams: FantasyTeam with league = this
+    draft: Draft with league = this
+
+    roster_size: sum(roster_limits)
+    total_picks: roster_size * teams.count
+
+    transitions status {
+        draft -> active
+        active -> finished
+        terminal: finished
+    }
+
+    invariant AtLeastTwoTeams { teams.count >= 2 }
+    invariant PeriodNotInverted { scoring_first_day <= scoring_last_day }
+    invariant LineupWithinRoster {
+        all_slots().all(s => lineup_limits[s] <= roster_limits[s])
+    }
+    invariant LimitsNonNegative {
+        all_slots().all(s => roster_limits[s] >= 0 and lineup_limits[s] >= 0)
+    }
+}
+
+entity FantasyTeam {
+    league: League
+    key: String
+    name: String
+    owner: String
+
+    ranking: List<MlbPlayer>
+    roster: RosterEntry with team = this
+    lineup: LineupEntry with team = this
+    snapshots: LineupSnapshot with team = this
+
+    invariant RankingHasNoRepeats { ranking.unique.count = ranking.count }
+}
+
+entity RosterEntry {
+    team: FantasyTeam
+    slot: Slot
+    player: MlbPlayer
+
+    invariant PlayerFitsSlot { eligible(player, slot) }
+}
+
+entity LineupEntry {
+    team: FantasyTeam
+    slot: Slot
+    player: MlbPlayer
+
+    invariant LineupDrawnFromRoster {
+        team.roster.any(r => r.player = player and r.slot = slot)
+    }
+}
+
+entity Draft {
+    league: League
+    status: waiting | drafting | complete
+    picks: Pick with draft = this
+    order: List<FantasyTeam>
+
+    next_pick_number: picks.count + 1
+
+    transitions status {
+        waiting -> drafting
+        drafting -> complete
+        terminal: complete
+    }
+}
+
+entity Pick {
+    draft: Draft
+    number: Integer
+    team: FantasyTeam
+    player: MlbPlayer
+    slot: Slot
+}
+
+entity LineupSnapshot {
+    team: FantasyTeam
+    game: MlbGame
+    taken_at: Timestamp
+    entries: Set<LineupEntry>
+}
+
+entity Matchup {
+    home: FantasyTeam
+    away: FantasyTeam
+    outcome: home_wins | away_wins | tied
+}
+
+----------------------------------------------------------------------
+-- Config
+----------------------------------------------------------------------
+
+config {
+    quality_start_min_outs: Integer = 18
+    quality_start_max_earned_runs: Integer = 3
+    minimum_teams: Integer = 2
+}
+
+----------------------------------------------------------------------
+-- Rules: league setup
+----------------------------------------------------------------------
+
+rule CreateLeague {
+    when: CommissionerCreatesLeague(name, commissioner, limits, strategy, period, teams)
+    requires: not exists League where name = name
+    requires: teams.count >= config.minimum_teams
+    requires: teams_have_unique_keys(teams)
+    ensures: League.created(name: name, commissioner: commissioner, status: draft)
+    @guidance "CODE: matches. Negative lineup limits are not rejected (only
+               negative roster limits are), and a lineup limit is only
+               compared with the roster limit when the roster limit is >= 0."
+}
+
+rule ReplaceRanking {
+    when: OwnerSubmitsRanking(team, players)
+    requires: team.league.status = draft
+    requires: team.league.draft.status = waiting
+    ensures: team.ranking = first_occurrences(players)
+    @guidance "CODE: dedupes correctly but checks neither league status nor
+               draft status, so a ranking can be replaced mid-draft or after
+               the league is active."
+}
+
+rule ActivateLeague {
+    when: CommissionerActivates(league)
+    requires: league.status = draft
+    requires: league.draft.status = complete
+    requires: league.teams.all(t => roster_full(t))
+    requires: league.teams.all(t => t.lineup.count > 0)
+    ensures: league.status = active
+    @guidance "CODE: only checks status = draft. A league can go active with
+               no draft run, empty rosters and empty lineups."
+}
+
+----------------------------------------------------------------------
+-- Rules: the draft
+----------------------------------------------------------------------
+
+rule StartDraft {
+    when: CommissionerStartsDraft(draft)
+    requires: draft.status = waiting
+    requires: draft.picks.count = 0
+    requires: feasible(draft.league)
+    ensures: draft.status = drafting
+    ensures: draft.order = draft_order(draft.league.draft_strategy,
+                                       draft.league.total_picks,
+                                       draft.league.teams)
+}
+
+rule MakePick {
+    when: TeamPicks(draft, team, player, slot)
+    requires: draft.status = drafting
+    requires: draft.order[draft.next_pick_number] = team
+    requires: not exists Pick where draft = draft and player = player
+    requires: eligible(player, slot)
+    requires: team.roster.count(r => r.slot = slot) < team.league.roster_limits[slot]
+    requires: still_feasible_after(draft, team, player, slot)
+    ensures: Pick.created(draft: draft, number: draft.next_pick_number,
+                          team: team, player: player, slot: slot)
+    ensures: RosterEntry.created(team: team, slot: slot, player: player)
+}
+
+rule DraftCompletes {
+    when: pick: Pick.created
+    requires: pick.draft.picks.count = pick.draft.league.total_picks
+    ensures: pick.draft.status = complete
+}
+
+rule EndDraftEarly {
+    when: CommissionerEndsDraft(draft)
+    requires: draft.status = drafting
+    ensures: draft.status = complete
+    @guidance "CODE: accepted with any number of picks made. The module header
+               says a completed draft always satisfies roster limits; an early
+               end leaves rosters short and ActivateLeague does not notice."
+}
+
+rule AutoDraft {
+    when: CommissionerRunsAutoDraft(draft)
+    requires: draft.status in {waiting, drafting}
+    ensures: picks follow each team's ranking, skipping players already
+             taken or with no open eligible slot; a team whose ranking is
+             exhausted gets best_available(draft, team)
+    @guidance "CODE: refuses a league that already has any pick, so an
+               interrupted run cannot be resumed. Exhausted rankings fall back
+               to the lowest internal id among acceptable players, which is
+               arbitrary, not best available."
+}
+
+----------------------------------------------------------------------
+-- Rules: lineups and snapshots
+----------------------------------------------------------------------
+
+rule SetLineupFromRoster {
+    when: OwnerSetsLineup(team)
+    requires: team.league.status in {draft, active}
+    ensures: team.lineup = first_n_per_slot(team.roster, team.league.lineup_limits)
+    @guidance "CODE: the only way to set a lineup. Takes roster order, not a
+               choice by the owner; there is no way to bench a player."
+}
+
+rule SnapshotLineup {
+    when: game: MlbGame.first_pitch <= now
+    for team in active_teams_with_players_in(game):
+    requires: not exists LineupSnapshot where team = team and game = game
+    requires: game.status = scheduled
+    ensures: LineupSnapshot.created(team: team, game: game,
+                                    taken_at: now, entries: team.lineup)
+    @guidance "CODE: an operator runs `snapshot lineups --on-date D`, which
+               snapshots every active team for every game on D at whatever
+               time it is run. Nothing compares the time with first pitch, so
+               running it after games start (or finish) records a lineup chosen
+               with results in view. Every team is snapshotted for every game,
+               whether or not any of its players is in that game."
+}
+
+invariant SnapshotIsWriteOnce {
+    -- VIOLATED: existence is tested by "any snapshot row for (team, game)".
+    -- A team with an empty lineup writes zero rows, so the next run sees no
+    -- snapshot and writes the then-current lineup.
+    LineupSnapshot.all(s => count(LineupSnapshot where team = s.team and game = s.game) = 1)
+}
+
+----------------------------------------------------------------------
+-- Rules: scoring
+----------------------------------------------------------------------
+
+rule ScoreBattingLine {
+    when: line: BattingLine.created
+    requires: line.doubles + line.triples + line.home_runs <= line.hits
+    ensures: batting_points(line) =
+             m.single * line.singles + m.double * line.doubles
+           + m.triple * line.triples + m.home_run * line.home_runs
+           + m.rbi * line.rbi + m.run * line.runs + m.walk * line.walks
+           + m.stolen_base * line.stolen_bases + m.hit_by_pitch * line.hit_by_pitch
+           + m.strike_out * line.strike_outs + m.caught_stealing * line.caught_stealing
+    @guidance "CODE: no requires; singles are floored at 0, so an inconsistent
+               line scores its extra-base hits and loses nothing (P2)."
+}
+
+rule ScorePitchingLine {
+    when: line: PitchingLine.created
+    let quality_start =
+        line.started
+        and line.outs >= config.quality_start_min_outs
+        and line.earned_runs <= config.quality_start_max_earned_runs
+    ensures: pitching_points(line) includes m.quality_start if quality_start
+             and m.inning_pitched * line.outs / 3
+    @guidance "CODE: quality start ignores `started` (P1). A reliever with 6+
+               scoreless innings, or a pitcher with a multi-game stat row,
+               earns it."
+}
+
+rule TeamGameScore {
+    when: snapshot: LineupSnapshot.created
+    ensures: game_points(snapshot) =
+             sum over e in snapshot.entries of
+             points(lines_of(e.player, snapshot.game))
+             where snapshot.game.scheduled_day within
+                   [snapshot.team.league.scoring_first_day,
+                    snapshot.team.league.scoring_last_day]
+             and snapshot.game.status = final
+    @guidance "CODE: boxscore rows are upserted without checking game status,
+               and scoring reads whatever is stored. A score taken during a
+               game is partial and is not marked as such."
+}
+
+rule DecideMatchup {
+    when: ScoringPeriodEnds(league)
+    requires: league.status = active
+    ensures: matchups = pair_by_schedule(league.teams)
+    ensures: each matchup's outcome is decided by comparing team totals
+    @guidance "CODE: teams are paired in the order the database returns them;
+               there is no schedule entity, so pairings depend on row order."
+}
+
+----------------------------------------------------------------------
+-- Invariants
+----------------------------------------------------------------------
+
+invariant CompleteDraftFillsRosters {
+    -- VIOLATED by EndDraftEarly.
+    Draft.all(d => d.status != complete or
+        d.league.teams.all(t => roster_full(t)))
+}
+
+invariant DraftOrderCoversEveryPick {
+    -- VIOLATED: generateDraftOrder truncates the trailing partial round and
+    -- returns no picks when total_picks < teams.count (P3, P4). With
+    -- total_picks = roster_size * teams.count this never bites today; it does
+    -- the moment roster sizes vary by team or a draft is resumed.
+    League.all(l => draft_order(l.draft_strategy, l.total_picks, l.teams).count
+                    = l.total_picks)
+}
+
+invariant DraftOrderFairOverCycle {
+    -- VIOLATED for odd team counts under experimental_snake (P5): with three
+    -- teams over four rounds the in-round positions sum to 9, 6, 9
+    -- (pick numbers 27, 24, 27).
+    League.all(l => l.draft_strategy != experimental_snake or
+                    pick_number_sums_equal_per_cycle(l))
+}
+
+invariant RosterEntriesFitSlots {
+    -- VIOLATED in practice: the feed reports every pitcher as `pitcher`, so
+    -- relievers are eligible for starting_pitcher and starters for
+    -- relief_pitcher. validateRoster checks counts and duplicates only.
+    RosterEntry.all(r => eligible(r.player, r.slot))
+}
+
+invariant TwoWayPlayersDraftable {
+    -- VIOLATED: players whose only position is two_way are dropped from the
+    -- draftable pool.
+    MlbPlayer.all(p => not p.two_way or draftable(p))
+}
+
+----------------------------------------------------------------------
+-- Deferred
+----------------------------------------------------------------------
+
+deferred eligible(player, slot)
+deferred feasible(league)
+deferred best_available(draft, team)
+
+----------------------------------------------------------------------
+-- Open questions
+----------------------------------------------------------------------
+
+open question "Should a quality start require started = true? The code awards it to relievers (P1)."
+open question "Should an inconsistent batting line be rejected at sync, or scored? The code floors singles and keeps the extra-base points (P2)."
+open question "When should a snapshot be taken: at first pitch per game, or once per day before the first game? The code takes it whenever the operator runs it, with no time check."
+open question "Is an empty lineup a valid snapshot? If yes it needs a marker row, otherwise SnapshotIsWriteOnce fails."
+open question "Must every pick in a completed draft exist? EndDraft makes 'complete' mean 'stopped'."
+open question "Should ActivateLeague require a complete draft and set lineups?"
+open question "How are starters and relievers told apart, given the feed says only 'pitcher'?"
+open question "Are two-way players meant to be undraftable?"
+open question "Should experimental_snake be fair for odd team counts, or be restricted to even ones (P5)?"
+open question "Who decides matchups: a schedule, or row order?"
+open question "Should scores count only final games? Postponed and suspended games move dates; snapshots are keyed by game, but scoring filters by the game's current date."
+open question "Can owners change rankings once the draft has started?"
+open question "Should an interrupted auto-draft resume from the picks already made?"

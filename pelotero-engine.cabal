@@ -190,6 +190,7 @@ test-suite pelotero-test
     Pelotero.Effects.RandomSpec
     Pelotero.League.SetupSpec
     Pelotero.MatchupSpec
+    Pelotero.ProbeSpec
   build-depends:    base
                   , pelotero-engine
                   , aeson
