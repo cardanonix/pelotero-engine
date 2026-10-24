@@ -2,8 +2,9 @@
 docs/
 notes/
 *.md
-# Old chase runs and the annotation files. llmq-ingest sends fresh bundles
-# to their own folder, and the annotations are already in them.
+# Chase runs and annotation files left outside .inference. Ingest makes
+# fresh bundles in every run, the annotations are already in them, and
+# .inference itself is not walked apart from its *.allium specifications.
 *.chase
 *-annotations.json
 lib/new-annotations.json
