@@ -1,5 +1,5 @@
 {
   "runs": [
-    { "src": "lib", "tests": ["test", "integration-test"], "annotations": "pelotero-annotations.json" }
+    { "src": "lib", "tests": ["test", "integration-test"], "annotations": ".inference/pelotero-annotations.json" }
   ]
 }
